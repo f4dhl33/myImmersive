@@ -6,7 +6,30 @@
     <title>WebXR PdP Builder - Animation Timeline & Speed Inspector</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { overflow: hidden; background-color: #1a1a1a; color: white; display: flex; height: 100vh; width: 100vw; }
+        body { overflow: hidden; background-color: #1a1a1a; color: white; display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+
+        #main-row { display: flex; flex: 1 1 auto; min-height: 0; width: 100%; }
+
+        /* PANEL BAWAH — Panel Interaksi (Trigger/Tindakan) */
+        #bottom-panel {
+            flex: 0 0 260px;
+            width: 100%;
+            background: #252526;
+            border-top: 1px solid #3c3c3c;
+            display: flex;
+            gap: 15px;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        #bottom-panel-col-left {
+            flex: 1 1 55%;
+            min-width: 320px;
+        }
+        #bottom-panel-col-right {
+            flex: 1 1 45%;
+            min-width: 260px;
+        }
+        #bottom-panel h3 { margin-bottom: 10px; }
 
         /* PANEL KIRI & KANAN */
         #left-panel, #right-panel {
@@ -32,10 +55,16 @@
         /* SEMBUNYIKAN PANEL DALAM MOD PRATONTON */
         body.preview-mode #left-panel,
         body.preview-mode #right-panel,
+        body.preview-mode #bottom-panel,
         body.preview-mode .bg-picker-group,
         body.preview-mode #anim-modal {
             display: none !important;
         }
+
+        /* TRANSFORM TEPAT (Position/Rotation/Scale) */
+        .transform-numeric-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+        .transform-axis-label { width: 34px; font-size: 10px; color: #ffcc00; font-weight: bold; flex-shrink: 0; }
+        .transform-numeric-row input { flex: 1; width: auto; min-width: 0; margin-bottom: 0; padding: 5px; font-size: 11px; }
 
         /* CANVAS TENGAH */
         #canvas-container {
@@ -462,6 +491,7 @@
         </div>
     </div>
 
+    <div id="main-row">
     <!-- PANEL KIRI -->
     <div id="left-panel">
         <h3>🎬 Scene Projek</h3>
@@ -575,8 +605,8 @@
 
     <!-- PANEL KANAN -->
     <div id="right-panel">
-        <h3>2. Panel Interaksi</h3>
-        
+        <h3>2. Transform Objek</h3>
+
         <div class="section-box">
             <label for="selected-object-name">Objek Dipilih:</label>
             <input type="text" id="selected-object-name" value="Tiada Objek Dipilih" readonly class="input-readonly">
@@ -616,116 +646,146 @@
                 <button id="btn-space-world" class="btn-mode">Global (World)</button>
             </div>
 
+            <label style="margin-top: 10px;">📐 Transform Tepat:</label>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Pos</span>
+                <input type="number" id="input-pos-x" step="0.01" placeholder="X">
+                <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
+                <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Rot°</span>
+                <input type="number" id="input-rot-x" step="1" placeholder="X">
+                <input type="number" id="input-rot-y" step="1" placeholder="Y">
+                <input type="number" id="input-rot-z" step="1" placeholder="Z">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Skala</span>
+                <input type="number" id="input-scale-x" step="0.01" placeholder="X">
+                <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
+                <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
+            </div>
+
             <label style="margin-top: 10px;">Reset Berasingan:</label>
             <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Kedudukan (Position)</button>
             <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Putaran (Rotation)</button>
             <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Skala (Scale)</button>
             <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Keseluruhan Objek</button>
         </div>
+    </div>
+    </div> <!-- /#main-row -->
 
-        <div class="section-box">
-            <label for="select-trigger">Pemicu (Trigger Event):</label>
-            <select id="select-trigger">
-                <option value="onClick">Pengguna Klik Objek (On Click)</option>
-                <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
-                <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
-            </select>
-
-            <div id="watch-obj-container" class="display-none">
-                <label for="select-watch-objects">Pilih Objek Yang Dipantau (Boleh Diambil):</label>
-                <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
-                <select id="select-watch-objects" multiple size="4"></select>
-            </div>
-
-            <label for="select-action">Tindakan (Action Effect):</label>
-            <select id="select-action">
-                <option value="popInfo">Paparkan Teks / Informasi</option>
-                <option value="toggleModelAnim">Mula / Henti Animasi Model (Play/Pause Animasi)</option>
-                <option value="stepMove">Pergerakan Langkah / Shift (Step Move)</option>
-                <option value="toggleTargetVisibility">Sembunyi / Tunjuk Objek (Toggle Visibility)</option>
-                <option value="playSound">Mainkan Audio / Bunyi</option>
-                <option value="changeColor">Tukar Warna Material</option>
-                <option value="rotateAnim">Putaran Objek Manual (Simple Spin)</option>
-                <option value="changeScene">🎬 Tukar ke Scene Lain (Change Scene)</option>
-            </select>
-
-            <!-- PILIHAN MULTI-TARGET OBJEK -->
-            <div id="target-obj-container" class="display-none">
-                <label for="select-target-objects">Pilih Objek Sasaran Tindakan:</label>
-                <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
-                <select id="select-target-objects" multiple size="4"></select>
-            </div>
-
-            <!-- KAWALAN ANIMASI LANJUTAN -->
-            <div id="anim-mode-container" class="display-none">
-                <button type="button" id="btn-open-anim-modal" class="btn-secondary" style="background:#007acc; font-weight:bold; margin-bottom:10px;">🎬 Buka Pemotong Masa Animasi</button>
-                
-                <label for="select-anim-mode">Mod Mainan Animasi:</label>
-                <select id="select-anim-mode">
-                    <option value="once">Sekali Sahaja (Play Once & Stop)</option>
-                    <option value="toggleReverse">Klik 1: Buka / Klik 2: Tutup (Toggle Reverse)</option>
-                    <option value="loop">Berulang (Loop)</option>
+    <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), letak di bawah viewport -->
+    <div id="bottom-panel">
+        <div id="bottom-panel-col-left">
+            <h3>3. Panel Interaksi</h3>
+            <div class="section-box">
+                <label for="select-trigger">Pemicu (Trigger Event):</label>
+                <select id="select-trigger">
+                    <option value="onClick">Pengguna Klik Objek (On Click)</option>
+                    <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
+                    <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
                 </select>
 
-                <label for="select-anim-dir">Arah Animasi Permulaan:</label>
-                <select id="select-anim-dir">
-                    <option value="forward">Ke Hadapan (Forward)</option>
-                    <option value="reverse">Berpatah Balik (Reverse)</option>
-                    <option value="pingpong">Ping-Pong (Mula ↔ Akhir)</option>
-                </select>
-
-                <label>Julat Masa Animasi (Saat):</label>
-                <div class="input-inline-group">
-                    <input type="number" id="input-anim-starttime" step="0.1" min="0" value="0" placeholder="Mula (0s)">
-                    <input type="number" id="input-anim-endtime" step="0.1" min="0" value="0" placeholder="Tamat (0=Full)">
-                </div>
-            </div>
-
-            <!-- KAWALAN PERGERAKAN LANGKAH (STEP MOVE / SHIFT) -->
-            <div id="step-move-container" class="display-none">
-                <label>Unit Pergerakan Langkah (Offset X, Y, Z):</label>
-                <div class="input-inline-group">
-                    <input type="number" id="input-step-x" step="0.5" value="0" placeholder="X">
-                    <input type="number" id="input-step-y" step="0.5" value="0" placeholder="Y">
-                    <input type="number" id="input-step-z" step="0.5" value="2" placeholder="Z">
+                <div id="watch-obj-container" class="display-none">
+                    <label for="select-watch-objects">Pilih Objek Yang Dipantau (Boleh Diambil):</label>
+                    <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                    <select id="select-watch-objects" multiple size="4"></select>
                 </div>
 
-                <label for="select-step-mode" style="margin-top: 5px;">Mod Langkah:</label>
-                <select id="select-step-mode">
-                    <option value="accumulate">Bergerak Ke Depan Berterusan (+Step)</option>
-                    <option value="toggle">Klik 1: Ke Depan / Klik 2: Kembali Asal</option>
+                <label for="select-action">Tindakan (Action Effect):</label>
+                <select id="select-action">
+                    <option value="popInfo">Paparkan Teks / Informasi</option>
+                    <option value="toggleModelAnim">Mula / Henti Animasi Model (Play/Pause Animasi)</option>
+                    <option value="stepMove">Pergerakan Langkah / Shift (Step Move)</option>
+                    <option value="toggleTargetVisibility">Sembunyi / Tunjuk Objek (Toggle Visibility)</option>
+                    <option value="playSound">Mainkan Audio / Bunyi</option>
+                    <option value="changeColor">Tukar Warna Material</option>
+                    <option value="rotateAnim">Putaran Objek Manual (Simple Spin)</option>
+                    <option value="changeScene">🎬 Tukar ke Scene Lain (Change Scene)</option>
                 </select>
-            </div>
 
-            <div id="audio-select-container" class="display-none">
-                <label for="select-audio-file">Pilih Fail Audio:</label>
-                <select id="select-audio-file">
-                    <option value="">-- Tiada Fail Audio Muat Naik --</option>
-                </select>
-            </div>
+                <!-- PILIHAN MULTI-TARGET OBJEK -->
+                <div id="target-obj-container" class="display-none">
+                    <label for="select-target-objects">Pilih Objek Sasaran Tindakan:</label>
+                    <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                    <select id="select-target-objects" multiple size="4"></select>
+                </div>
 
-            <div id="scene-select-container" class="display-none">
-                <label for="select-target-scene">Pilih Scene Sasaran:</label>
-                <select id="select-target-scene"></select>
-                <span class="hint-text">Objek ini bila diklik/hover akan "teleport" pengguna ke scene lain.</span>
-            </div>
+                <!-- KAWALAN ANIMASI LANJUTAN -->
+                <div id="anim-mode-container" class="display-none">
+                    <button type="button" id="btn-open-anim-modal" class="btn-secondary" style="background:#007acc; font-weight:bold; margin-bottom:10px;">🎬 Buka Pemotong Masa Animasi</button>
 
-            <div id="note-input-container">
-                <label for="input-note-title">Tajuk Mesej:</label>
-                <input type="text" id="input-note-title" placeholder="Contoh: Enjin Utama">
-                <label for="input-note">Kandungan Mesej / Informasi:</label>
-                <input type="text" id="input-note" placeholder="Contoh: Komponen Enjin Utama v2.0">
-            </div>
+                    <label for="select-anim-mode">Mod Mainan Animasi:</label>
+                    <select id="select-anim-mode">
+                        <option value="once">Sekali Sahaja (Play Once & Stop)</option>
+                        <option value="toggleReverse">Klik 1: Buka / Klik 2: Tutup (Toggle Reverse)</option>
+                        <option value="loop">Berulang (Loop)</option>
+                    </select>
 
-            <button type="button" id="btn-save-interaction" class="btn-save-interaction">+ Tambah Tindakan Ke Senarai</button>
+                    <label for="select-anim-dir">Arah Animasi Permulaan:</label>
+                    <select id="select-anim-dir">
+                        <option value="forward">Ke Hadapan (Forward)</option>
+                        <option value="reverse">Berpatah Balik (Reverse)</option>
+                        <option value="pingpong">Ping-Pong (Mula ↔ Akhir)</option>
+                    </select>
+
+                    <label>Julat Masa Animasi (Saat):</label>
+                    <div class="input-inline-group">
+                        <input type="number" id="input-anim-starttime" step="0.1" min="0" value="0" placeholder="Mula (0s)">
+                        <input type="number" id="input-anim-endtime" step="0.1" min="0" value="0" placeholder="Tamat (0=Full)">
+                    </div>
+                </div>
+
+                <!-- KAWALAN PERGERAKAN LANGKAH (STEP MOVE / SHIFT) -->
+                <div id="step-move-container" class="display-none">
+                    <label>Unit Pergerakan Langkah (Offset X, Y, Z):</label>
+                    <div class="input-inline-group">
+                        <input type="number" id="input-step-x" step="0.5" value="0" placeholder="X">
+                        <input type="number" id="input-step-y" step="0.5" value="0" placeholder="Y">
+                        <input type="number" id="input-step-z" step="0.5" value="2" placeholder="Z">
+                    </div>
+
+                    <label for="select-step-mode" style="margin-top: 5px;">Mod Langkah:</label>
+                    <select id="select-step-mode">
+                        <option value="accumulate">Bergerak Ke Depan Berterusan (+Step)</option>
+                        <option value="toggle">Klik 1: Ke Depan / Klik 2: Kembali Asal</option>
+                    </select>
+                </div>
+
+                <div id="audio-select-container" class="display-none">
+                    <label for="select-audio-file">Pilih Fail Audio:</label>
+                    <select id="select-audio-file">
+                        <option value="">-- Tiada Fail Audio Muat Naik --</option>
+                    </select>
+                </div>
+
+                <div id="scene-select-container" class="display-none">
+                    <label for="select-target-scene">Pilih Scene Sasaran:</label>
+                    <select id="select-target-scene"></select>
+                    <span class="hint-text">Objek ini bila diklik/hover akan "teleport" pengguna ke scene lain.</span>
+                </div>
+
+                <div id="note-input-container">
+                    <label for="input-note-title">Tajuk Mesej:</label>
+                    <input type="text" id="input-note-title" placeholder="Contoh: Enjin Utama">
+                    <label for="input-note">Kandungan Mesej / Informasi:</label>
+                    <input type="text" id="input-note" placeholder="Contoh: Komponen Enjin Utama v2.0">
+                </div>
+
+                <button type="button" id="btn-save-interaction" class="btn-save-interaction">+ Tambah Tindakan Ke Senarai</button>
+            </div>
         </div>
 
-        <!-- SENARAI TINDAKAN AKTIF TERDAFTAR -->
-        <div class="section-box">
-            <label>📋 Senarai Tindakan Didaftarkan:</label>
-            <ul id="saved-actions-list" class="hierarchy-list">
-                <li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>
-            </ul>
+        <div id="bottom-panel-col-right">
+            <h3>📋 Senarai Tindakan</h3>
+            <!-- SENARAI TINDAKAN AKTIF TERDAFTAR -->
+            <div class="section-box">
+                <label>📋 Senarai Tindakan Didaftarkan:</label>
+                <ul id="saved-actions-list" class="hierarchy-list">
+                    <li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>
+                </ul>
+            </div>
         </div>
     </div>
 
@@ -975,6 +1035,7 @@
             });
 
             if (target === previewCameraMarker) cameraHelper.update();
+            updateTransformInputsFromModel(target);
         }
 
         document.getElementById('btn-undo').addEventListener('click', () => {
@@ -1009,6 +1070,71 @@
             if (selectedModel === previewCameraMarker) {
                 cameraHelper.update();
             }
+            if (selectedModel) {
+                updateTransformInputsFromModel(selectedModel);
+            }
+        });
+
+        // ---- TRANSFORM TEPAT (input Position/Rotation°/Scale) ----
+        const inputPosX = document.getElementById('input-pos-x');
+        const inputPosY = document.getElementById('input-pos-y');
+        const inputPosZ = document.getElementById('input-pos-z');
+        const inputRotX = document.getElementById('input-rot-x');
+        const inputRotY = document.getElementById('input-rot-y');
+        const inputRotZ = document.getElementById('input-rot-z');
+        const inputScaleX = document.getElementById('input-scale-x');
+        const inputScaleY = document.getElementById('input-scale-y');
+        const inputScaleZ = document.getElementById('input-scale-z');
+        const transformNumericInputs = [
+            inputPosX, inputPosY, inputPosZ,
+            inputRotX, inputRotY, inputRotZ,
+            inputScaleX, inputScaleY, inputScaleZ
+        ];
+
+        function updateTransformInputsFromModel(model) {
+            if (!model || document.activeElement && transformNumericInputs.includes(document.activeElement)) return;
+            inputPosX.value = model.position.x.toFixed(3);
+            inputPosY.value = model.position.y.toFixed(3);
+            inputPosZ.value = model.position.z.toFixed(3);
+            inputRotX.value = THREE.MathUtils.radToDeg(model.rotation.x).toFixed(1);
+            inputRotY.value = THREE.MathUtils.radToDeg(model.rotation.y).toFixed(1);
+            inputRotZ.value = THREE.MathUtils.radToDeg(model.rotation.z).toFixed(1);
+            inputScaleX.value = model.scale.x.toFixed(3);
+            inputScaleY.value = model.scale.y.toFixed(3);
+            inputScaleZ.value = model.scale.z.toFixed(3);
+        }
+
+        function clearTransformInputs() {
+            transformNumericInputs.forEach(input => { input.value = ''; });
+        }
+
+        function applyTransformInputsToModel() {
+            if (!selectedModel) return;
+            recordAndApplyTransform(selectedModel, () => {
+                selectedModel.position.set(
+                    parseFloat(inputPosX.value) || 0,
+                    parseFloat(inputPosY.value) || 0,
+                    parseFloat(inputPosZ.value) || 0
+                );
+                selectedModel.rotation.set(
+                    THREE.MathUtils.degToRad(parseFloat(inputRotX.value) || 0),
+                    THREE.MathUtils.degToRad(parseFloat(inputRotY.value) || 0),
+                    THREE.MathUtils.degToRad(parseFloat(inputRotZ.value) || 0)
+                );
+                const sx = parseFloat(inputScaleX.value);
+                const sy = parseFloat(inputScaleY.value);
+                const sz = parseFloat(inputScaleZ.value);
+                selectedModel.scale.set(
+                    Number.isFinite(sx) && sx !== 0 ? sx : 1,
+                    Number.isFinite(sy) && sy !== 0 ? sy : 1,
+                    Number.isFinite(sz) && sz !== 0 ? sz : 1
+                );
+            });
+            scheduleAutoSave();
+        }
+
+        transformNumericInputs.forEach(input => {
+            input.addEventListener('change', applyTransformInputsToModel);
         });
 
         // PEMBAIKAN OPACITY GIZMO
@@ -3277,6 +3403,7 @@
             chkInitialHidden.checked = (model.userData.initialVisibility === false);
             chkGrabbable.checked = !!model.userData.isGrabbable;
             chkSolid.checked = !!model.userData.isSolid;
+            updateTransformInputsFromModel(model);
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
                 model.userData.interactions = [
@@ -3302,6 +3429,7 @@
             chkInitialHidden.checked = false;
             chkGrabbable.checked = false;
             chkSolid.checked = false;
+            clearTransformInputs();
             infoPopup.style.display = 'none';
             closeAnimModal();
             updateHierarchyUISelection();
