@@ -514,6 +514,9 @@
                 geometry = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32);
             } else if (type === 'plane') {
                 geometry = new THREE.PlaneGeometry(2, 2);
+            } else if (type === 'zone') {
+                geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+                material = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.8 });
             } else if (type === 'text') {
                 const userText = objData.textContent || '';
                 const canvas = document.createElement('canvas');
@@ -985,6 +988,30 @@
             }
         }
 
+        // ZON SASARAN — semak sama ada objek yang baru dilepas jatuh dalam mana-mana
+        // zon yang memantaunya (zon & objek sama-sama anak terus contentRoot, jadi
+        // position/quaternion boleh dibanding terus, tak perlu tukar ruang koordinat).
+        function checkPlacementZones(droppedObject) {
+            loadedModelsList.forEach(zoneObj => {
+                if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
+
+                const matches = zoneObj.userData.interactions.filter(act =>
+                    act.trigger === 'onPlaceInZone' &&
+                    Array.isArray(act.watchObjectIds) &&
+                    act.watchObjectIds.some(wid => wid == droppedObject.userData.id)
+                );
+                if (matches.length === 0) return;
+
+                const zoneRadius = Math.max(zoneObj.scale.x, zoneObj.scale.y, zoneObj.scale.z) * 0.5;
+                const distance = zoneObj.position.distanceTo(droppedObject.position);
+                if (distance > zoneRadius) return;
+
+                droppedObject.position.copy(zoneObj.position);
+                droppedObject.quaternion.copy(zoneObj.quaternion);
+                triggerInteraction(zoneObj, 'onPlaceInZone');
+            });
+        }
+
         function onControllerSelectEnd(event) {
             if (!grabbedObject) return;
 
@@ -994,6 +1021,8 @@
             if (grabStartState && objectOverlapsSolid(obj)) {
                 obj.position.copy(grabStartState.position);
                 obj.quaternion.copy(grabStartState.quaternion);
+            } else {
+                checkPlacementZones(obj);
             }
 
             grabbedObject = null;

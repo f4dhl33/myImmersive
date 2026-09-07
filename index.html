@@ -265,6 +265,7 @@
         }
         .badge-click { background: #007acc; color: white; }
         .badge-hover { background: #e67e22; color: white; }
+        .badge-zone { background: #00e5ff; color: #003844; }
 
         .action-item-desc {
             font-size: 11px;
@@ -485,6 +486,7 @@
                 <button id="btn-add-cylinder" class="btn-secondary">+ Silinder</button>
                 <button id="btn-add-plane" class="btn-secondary">+ Satah</button>
                 <button id="btn-add-text" class="btn-secondary btn-full btn-text-panel">🔤 + Papan Teks</button>
+                <button id="btn-add-zone" class="btn-secondary btn-full" style="background:#005999;">🎯 + Zon Sasaran (Trigger Zone)</button>
             </div>
         </div>
 
@@ -626,7 +628,14 @@
             <select id="select-trigger">
                 <option value="onClick">Pengguna Klik Objek (On Click)</option>
                 <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
+                <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
             </select>
+
+            <div id="watch-obj-container" class="display-none">
+                <label for="select-watch-objects">Pilih Objek Yang Dipantau (Boleh Diambil):</label>
+                <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                <select id="select-watch-objects" multiple size="4"></select>
+            </div>
 
             <label for="select-action">Tindakan (Action Effect):</label>
             <select id="select-action">
@@ -2435,6 +2444,40 @@
             });
         }
 
+        // ZON SASARAN — dropdown pilih objek "Boleh Diambil" yang dipantau oleh zon ni
+        const watchObjContainer = document.getElementById('watch-obj-container');
+        const selectWatchObjects = document.getElementById('select-watch-objects');
+
+        function updateWatchObjectDropdown() {
+            selectWatchObjects.innerHTML = "";
+
+            loadedModelsList.forEach(obj => {
+                if (!obj.userData.isGrabbable) return;
+                if (selectedModel && obj.userData.id === selectedModel.userData.id) return;
+                const opt = document.createElement('option');
+                opt.value = obj.userData.id;
+                opt.textContent = `🤏 ${obj.userData.fileName}`;
+                selectWatchObjects.appendChild(opt);
+            });
+
+            if (selectWatchObjects.options.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.textContent = "-- Tiada objek 'Boleh Diambil' lagi --";
+                opt.disabled = true;
+                selectWatchObjects.appendChild(opt);
+            }
+        }
+
+        document.getElementById('select-trigger').addEventListener('change', function () {
+            if (this.value === 'onPlaceInZone') {
+                watchObjContainer.style.display = 'block';
+                updateWatchObjectDropdown();
+            } else {
+                watchObjContainer.style.display = 'none';
+            }
+        });
+
         selectAction.addEventListener('change', () => {
             audioSelectContainer.style.display = 'none';
             noteInputContainer.style.display = 'none';
@@ -2577,6 +2620,10 @@
             } else if (type === 'plane') {
                 geometry = new THREE.PlaneGeometry(2, 2);
                 nameStr = 'Satah';
+            } else if (type === 'zone') {
+                geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+                material = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.8 });
+                nameStr = 'Zon Sasaran';
             } else if (type === 'text') {
                 const userText = options.presetText !== undefined ? options.presetText : prompt("Sila taipkan teks untuk dipaparkan:", "Teks Informasi");
                 if (!userText) return null;
@@ -2615,14 +2662,14 @@
 
             mesh.userData = {
                 id: options.id || (Date.now() + Math.random()),
-                fileName: (isText ? '🔤 Teks: ' : '🧊 ') + nameStr,
+                fileName: (isText ? '🔤 Teks: ' : type === 'zone' ? '🎯 ' : '🧊 ') + nameStr,
                 kind: 'primitive',
                 primType: type,
                 textContent: fullUserText,
                 initialPosition: new THREE.Vector3().copy(mesh.position),
                 initialRotation: new THREE.Euler().copy(mesh.rotation),
                 initialScale: new THREE.Vector3().copy(mesh.scale),
-                initialVisibility: true,
+                initialVisibility: type !== 'zone',
                 interactions: [],
                 isGrabbable: false,
                 isSolid: false,
@@ -2650,6 +2697,7 @@
         document.getElementById('btn-add-cylinder').addEventListener('click', () => addPrimitive('cylinder'));
         document.getElementById('btn-add-plane').addEventListener('click', () => addPrimitive('plane'));
         document.getElementById('btn-add-text').addEventListener('click', () => addPrimitive('text'));
+        document.getElementById('btn-add-zone').addEventListener('click', () => addPrimitive('zone'));
 
         // GAMBAR 2D (satah bertekstur dari fail imej dimuat naik)
         function buildImagePlaneMesh(url, fileName, fileExt, options) {
@@ -2926,6 +2974,31 @@
             }
         }
 
+        // ZON SASARAN — semak sama ada objek yang baru dilepas jatuh dalam mana-mana
+        // zon yang memantaunya. Zon & objek sama-sama anak terus contentRoot, jadi
+        // boleh banding position/quaternion terus (ruang lokal sama), tak perlu tukar
+        // ke koordinat dunia.
+        function checkPlacementZones(droppedObject) {
+            loadedModelsList.forEach(zoneObj => {
+                if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
+
+                const matches = zoneObj.userData.interactions.filter(act =>
+                    act.trigger === 'onPlaceInZone' &&
+                    Array.isArray(act.watchObjectIds) &&
+                    act.watchObjectIds.some(wid => wid == droppedObject.userData.id)
+                );
+                if (matches.length === 0) return;
+
+                const zoneRadius = Math.max(zoneObj.scale.x, zoneObj.scale.y, zoneObj.scale.z) * 0.5;
+                const distance = zoneObj.position.distanceTo(droppedObject.position);
+                if (distance > zoneRadius) return;
+
+                droppedObject.position.copy(zoneObj.position);
+                droppedObject.quaternion.copy(zoneObj.quaternion);
+                triggerInteraction(zoneObj, 'onPlaceInZone');
+            });
+        }
+
         function onControllerSelectEnd(event) {
             if (!grabbedObject) return;
 
@@ -2937,6 +3010,8 @@
             if (grabStartState && objectOverlapsSolid(obj)) {
                 obj.position.copy(grabStartState.position);
                 obj.quaternion.copy(grabStartState.quaternion);
+            } else {
+                checkPlacementZones(obj);
             }
 
             grabbedObject = null;
@@ -3162,9 +3237,15 @@
                 const li = document.createElement('li');
                 li.className = 'hierarchy-item';
 
-                const isClick = act.trigger === 'onClick';
-                const badgeClass = isClick ? 'badge-click' : 'badge-hover';
-                const badgeText = isClick ? 'KLIK' : 'HOVER';
+                let badgeClass = 'badge-hover';
+                let badgeText = 'HOVER';
+                if (act.trigger === 'onClick') {
+                    badgeClass = 'badge-click';
+                    badgeText = 'KLIK';
+                } else if (act.trigger === 'onPlaceInZone') {
+                    badgeClass = 'badge-zone';
+                    badgeText = 'ZON';
+                }
 
                 li.innerHTML = `
                     <div style="display:flex; align-items:center; overflow:hidden;">
@@ -3270,6 +3351,7 @@
             }
 
             const action = selectAction.value;
+            const trigger = document.getElementById('select-trigger').value;
             let audioFile = "";
             let note = "";
             let noteTitle = "";
@@ -3281,6 +3363,12 @@
             let targetSceneId = null;
 
             const selectedTargets = Array.from(selectTargetObjects.selectedOptions).map(opt => opt.value);
+            const selectedWatchObjects = Array.from(selectWatchObjects.selectedOptions).map(opt => opt.value).filter(v => v !== "");
+
+            if (trigger === 'onPlaceInZone' && selectedWatchObjects.length === 0) {
+                alert("Sila pilih sekurang-kurangnya satu objek 'Boleh Diambil' untuk dipantau oleh zon ini!");
+                return;
+            }
 
             if (action === 'playSound') {
                 audioFile = selectAudioFile.value;
@@ -3311,7 +3399,7 @@
 
             const newActionObj = {
                 id: Date.now() + Math.random(),
-                trigger: document.getElementById('select-trigger').value,
+                trigger: trigger,
                 action: action,
                 note: note,
                 noteTitle: noteTitle,
@@ -3325,7 +3413,8 @@
                 stepZ: sZ,
                 stepMode: sMode,
                 targetSceneId: targetSceneId,
-                targetObjectIds: selectedTargets.length > 0 ? selectedTargets : ['self']
+                targetObjectIds: selectedTargets.length > 0 ? selectedTargets : ['self'],
+                watchObjectIds: trigger === 'onPlaceInZone' ? selectedWatchObjects : []
             };
 
             if (!selectedModel.userData.interactions) {
