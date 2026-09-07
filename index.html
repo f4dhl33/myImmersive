@@ -6,11 +6,19 @@
     <title>WebXR PdP Builder - Animation Timeline & Speed Inspector</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { overflow: hidden; background-color: #1a1a1a; color: white; display: flex; flex-direction: column; height: 100vh; width: 100vw; }
+        body { overflow: hidden; background-color: #1a1a1a; color: white; display: flex; height: 100vh; width: 100vw; }
 
-        #main-row { display: flex; flex: 1 1 auto; min-height: 0; width: 100%; }
+        /* Lajur tengah: canvas (atas) + Panel Interaksi (bawah) — lebar setakat
+           ruang antara panel kiri & kanan sahaja, dua-dua panel tu kekal penuh tinggi. */
+        #center-column {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 100%;
+        }
 
-        /* PANEL BAWAH — Panel Interaksi (Trigger/Tindakan) */
+        /* PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja */
         #bottom-panel {
             flex: 0 0 260px;
             width: 100%;
@@ -491,7 +499,6 @@
         </div>
     </div>
 
-    <div id="main-row">
     <!-- PANEL KIRI -->
     <div id="left-panel">
         <h3>🎬 Scene Projek</h3>
@@ -544,6 +551,7 @@
         </div>
     </div>
 
+    <div id="center-column">
     <!-- CANVAS TENGAH -->
     <div id="canvas-container">
         <div id="top-bar">
@@ -603,79 +611,7 @@
         </div>
     </div>
 
-    <!-- PANEL KANAN -->
-    <div id="right-panel">
-        <h3>2. Transform Objek</h3>
-
-        <div class="section-box">
-            <label for="selected-object-name">Objek Dipilih:</label>
-            <input type="text" id="selected-object-name" value="Tiada Objek Dipilih" readonly class="input-readonly">
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="chk-initial-hidden">
-                <span>🙈 Sembunyi Objek Pada Awalnya</span>
-            </label>
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="chk-grabbable">
-                <span>🤏 Boleh Diambil & Alih (Pick & Place)</span>
-            </label>
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="chk-solid">
-                <span>🧱 Pepejal (elak objek lain terbenam bila diletak)</span>
-            </label>
-
-            <label>Kawalan Kamera & Pergerakan:</label>
-            <div class="btn-action-group">
-                <button id="btn-undo" class="btn-secondary">↶ Undo</button>
-                <button id="btn-redo" class="btn-secondary">↷ Redo</button>
-                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Fokus Kamera pada Objek Dipilih">🔍 Fokus</button>
-            </div>
-
-            <label style="margin-top: 10px;">Mod Kawalan Objek:</label>
-            <div class="btn-grid">
-                <button id="btn-mode-translate" class="btn-mode active">Gerak (Move)</button>
-                <button id="btn-mode-rotate" class="btn-mode">Pusing (Rotate)</button>
-                <button id="btn-mode-scale" class="btn-mode btn-full">Saiz (Scale)</button>
-            </div>
-
-            <label style="margin-top: 10px;">Ruang Paksi (Space):</label>
-            <div class="btn-grid">
-                <button id="btn-space-local" class="btn-mode active">Tempatan (Local)</button>
-                <button id="btn-space-world" class="btn-mode">Global (World)</button>
-            </div>
-
-            <label style="margin-top: 10px;">📐 Transform Tepat:</label>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Pos</span>
-                <input type="number" id="input-pos-x" step="0.01" placeholder="X">
-                <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
-                <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
-            </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Rot°</span>
-                <input type="number" id="input-rot-x" step="1" placeholder="X">
-                <input type="number" id="input-rot-y" step="1" placeholder="Y">
-                <input type="number" id="input-rot-z" step="1" placeholder="Z">
-            </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Skala</span>
-                <input type="number" id="input-scale-x" step="0.01" placeholder="X">
-                <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
-                <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
-            </div>
-
-            <label style="margin-top: 10px;">Reset Berasingan:</label>
-            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Kedudukan (Position)</button>
-            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Putaran (Rotation)</button>
-            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Skala (Scale)</button>
-            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Keseluruhan Objek</button>
-        </div>
-    </div>
-    </div> <!-- /#main-row -->
-
-    <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), letak di bawah viewport -->
+    <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja -->
     <div id="bottom-panel">
         <div id="bottom-panel-col-left">
             <h3>3. Panel Interaksi</h3>
@@ -786,6 +722,78 @@
                     <li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>
                 </ul>
             </div>
+        </div>
+    </div>
+    </div> <!-- /#center-column -->
+
+    <!-- PANEL KANAN -->
+    <div id="right-panel">
+        <h3>2. Transform Objek</h3>
+
+        <div class="section-box">
+            <label for="selected-object-name">Objek Dipilih:</label>
+            <input type="text" id="selected-object-name" value="Tiada Objek Dipilih" readonly class="input-readonly">
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-initial-hidden">
+                <span>🙈 Sembunyi Objek Pada Awalnya</span>
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-grabbable">
+                <span>🤏 Boleh Diambil & Alih (Pick & Place)</span>
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-solid">
+                <span>🧱 Pepejal (elak objek lain terbenam bila diletak)</span>
+            </label>
+
+            <label>Kawalan Kamera & Pergerakan:</label>
+            <div class="btn-action-group">
+                <button id="btn-undo" class="btn-secondary">↶ Undo</button>
+                <button id="btn-redo" class="btn-secondary">↷ Redo</button>
+                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Fokus Kamera pada Objek Dipilih">🔍 Fokus</button>
+            </div>
+
+            <label style="margin-top: 10px;">Mod Kawalan Objek:</label>
+            <div class="btn-grid">
+                <button id="btn-mode-translate" class="btn-mode active">Gerak (Move)</button>
+                <button id="btn-mode-rotate" class="btn-mode">Pusing (Rotate)</button>
+                <button id="btn-mode-scale" class="btn-mode btn-full">Saiz (Scale)</button>
+            </div>
+
+            <label style="margin-top: 10px;">Ruang Paksi (Space):</label>
+            <div class="btn-grid">
+                <button id="btn-space-local" class="btn-mode active">Tempatan (Local)</button>
+                <button id="btn-space-world" class="btn-mode">Global (World)</button>
+            </div>
+
+            <label style="margin-top: 10px;">📐 Transform Tepat:</label>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Pos</span>
+                <input type="number" id="input-pos-x" step="0.01" placeholder="X">
+                <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
+                <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Rot°</span>
+                <input type="number" id="input-rot-x" step="1" placeholder="X">
+                <input type="number" id="input-rot-y" step="1" placeholder="Y">
+                <input type="number" id="input-rot-z" step="1" placeholder="Z">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Skala</span>
+                <input type="number" id="input-scale-x" step="0.01" placeholder="X">
+                <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
+                <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
+            </div>
+
+            <label style="margin-top: 10px;">Reset Berasingan:</label>
+            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Kedudukan (Position)</button>
+            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Putaran (Rotation)</button>
+            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Skala (Scale)</button>
+            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Keseluruhan Objek</button>
         </div>
     </div>
 
