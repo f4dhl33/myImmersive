@@ -29,15 +29,30 @@
             padding: 15px;
             overflow-y: auto;
         }
+        #bottom-panel-col-objects {
+            flex: 0 0 240px;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+        #bottom-panel-col-objects .section-box { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        #bottom-panel-col-objects .hierarchy-list { flex: 1; }
         #bottom-panel-col-left {
-            flex: 1 1 55%;
-            min-width: 320px;
+            flex: 1 1 40%;
+            min-width: 300px;
         }
         #bottom-panel-col-right {
-            flex: 1 1 45%;
-            min-width: 260px;
+            flex: 1 1 30%;
+            min-width: 240px;
         }
         #bottom-panel h3 { margin-bottom: 10px; }
+
+        /* RESIZE HANDLES — seret untuk ubah saiz panel */
+        .resize-handle { flex-shrink: 0; background: #3c3c3c; z-index: 15; }
+        .resize-handle:hover, .resize-handle.resizing { background: #007acc; }
+        .resize-handle-v { width: 5px; cursor: col-resize; }
+        .resize-handle-h { width: 100%; height: 5px; cursor: row-resize; }
+        body.preview-mode .resize-handle { display: none !important; }
 
         /* PANEL KIRI & KANAN */
         #left-panel, #right-panel {
@@ -259,7 +274,21 @@
         .scene-drag-item.drag-over { border-top: 2px solid #007acc; background: #1a3a4a; }
         .hierarchy-item.camera-item { background: #3a2e00; border: 1px solid #ffcc00; color: #ffcc00; }
         .hierarchy-empty-msg { color: #666; font-style: italic; padding: 5px; }
-        .media-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+        .media-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; flex: 1 1 auto; min-width: 0; }
+        .hierarchy-item-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+        .selected-object-badge {
+            font-size: 13px;
+            font-weight: bold;
+            color: #007acc;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         
         .btn-vis-obj {
             background: #333; color: #ccc; border: 1px solid #555; border-radius: 3px;
@@ -538,18 +567,14 @@
         </div>
 
         <div class="section-box">
-            <label>📦 Objek 3D & Kamera:</label>
-            <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
-            <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Nyah-Pilih Objek (Deselect All)</button>
-        </div>
-
-        <div class="section-box">
             <label>🎵 Media & Audio:</label>
             <ul id="hierarchy-tree-media" class="hierarchy-list">
                 <li class="hierarchy-empty-msg">Tiada fail media diimport</li>
             </ul>
         </div>
     </div>
+
+    <div class="resize-handle resize-handle-v" id="resize-left-panel" title="Seret untuk ubah saiz panel kiri"></div>
 
     <div id="center-column">
     <!-- CANVAS TENGAH -->
@@ -611,8 +636,18 @@
         </div>
     </div>
 
+    <div class="resize-handle resize-handle-h" id="resize-bottom-panel" title="Seret untuk ubah saiz panel bawah"></div>
+
     <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja -->
     <div id="bottom-panel">
+        <div id="bottom-panel-col-objects">
+            <h3>📦 Objek 3D & Kamera</h3>
+            <div class="section-box">
+                <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
+                <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Nyah-Pilih Objek (Deselect All)</button>
+            </div>
+        </div>
+
         <div id="bottom-panel-col-left">
             <h3>3. Panel Interaksi</h3>
             <div class="section-box">
@@ -726,13 +761,14 @@
     </div>
     </div> <!-- /#center-column -->
 
+    <div class="resize-handle resize-handle-v" id="resize-right-panel" title="Seret untuk ubah saiz panel kanan"></div>
+
     <!-- PANEL KANAN -->
     <div id="right-panel">
         <h3>2. Transform Objek</h3>
 
         <div class="section-box">
-            <label for="selected-object-name">Objek Dipilih:</label>
-            <input type="text" id="selected-object-name" value="Tiada Objek Dipilih" readonly class="input-readonly">
+            <div id="selected-object-name" class="selected-object-badge">Tiada Objek Dipilih</div>
 
             <label class="checkbox-label">
                 <input type="checkbox" id="chk-initial-hidden">
@@ -1968,7 +2004,7 @@
 
                 li.innerHTML = `
                     <span class="media-title-text">⠿ 🎬 ${meta.name}${firstBadge}</span>
-                    <div>
+                    <div class="hierarchy-item-actions">
                         <button class="btn-vis-obj" title="Tukar Nama Scene">✏️</button>
                         <button class="btn-delete-obj" title="Padam Scene Ini">✕</button>
                     </div>
@@ -2078,8 +2114,8 @@
                 const li = document.createElement('li');
                 const updated = p.updated_at ? new Date(p.updated_at).toLocaleString() : '';
                 li.innerHTML = `
-                    <span>📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Kemas kini: ${updated}</span></span>
-                    <div>
+                    <span class="media-title-text" style="max-width:180px;">📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Kemas kini: ${updated}</span></span>
+                    <div class="hierarchy-item-actions">
                         <button class="btn-vis-obj" title="Tukar Nama Projek">✏️</button>
                         <button class="btn-delete-obj" title="Padam Projek">✕</button>
                     </div>
@@ -3406,7 +3442,7 @@
 
             selectedModel = model;
             transformControls.attach(model);
-            document.getElementById('selected-object-name').value = model.userData.fileName || model.name;
+            document.getElementById('selected-object-name').textContent = model.userData.fileName || model.name;
             
             chkInitialHidden.checked = (model.userData.initialVisibility === false);
             chkGrabbable.checked = !!model.userData.isGrabbable;
@@ -3433,7 +3469,7 @@
         function deselectObject() {
             selectedModel = null;
             transformControls.detach();
-            document.getElementById('selected-object-name').value = "Tiada Objek Dipilih";
+            document.getElementById('selected-object-name').textContent = "Tiada Objek Dipilih";
             chkInitialHidden.checked = false;
             chkGrabbable.checked = false;
             chkSolid.checked = false;
@@ -3758,7 +3794,7 @@
                 
                 li.innerHTML = `
                     <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
-                    <div>
+                    <div class="hierarchy-item-actions">
                         <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Tukar Ketampilan Permulaan Mod Pratonton">${visIcon}</button>
                         <button class="btn-rename-obj" title="Tukar Nama Objek">✏️</button>
                         <button class="btn-delete-obj" title="Padam Model Ini">✕</button>
@@ -3788,7 +3824,7 @@
                     if (!newName || newName.trim() === '') return;
                     model.userData.fileName = newName.trim();
                     if (selectedModel === model) {
-                        document.getElementById('selected-object-name').value = model.userData.fileName;
+                        document.getElementById('selected-object-name').textContent = model.userData.fileName;
                     }
                     renderObjectsList();
                     scheduleAutoSave();
@@ -3822,7 +3858,7 @@
                 
                 li.innerHTML = `
                     <span class="media-title-text">🎵 ${fileName}</span>
-                    <div>
+                    <div class="hierarchy-item-actions">
                         <button class="btn-play-audio" title="Uji Bunyi Ini">▶</button>
                         <button class="btn-delete-obj" title="Padam Audio Ini">✕</button>
                     </div>
@@ -4092,6 +4128,60 @@
             scene.background = new THREE.Color(bgColorPicker.value);
             scheduleAutoSave();
         });
+
+        // ---- RESIZE PANEL (seret handle untuk ubah saiz, simpan dalam localStorage) ----
+        function makeResizable(handle, targetPanel, axis, opts) {
+            opts = opts || {};
+            const min = opts.min || 150;
+            const max = opts.max || 700;
+            const invert = !!opts.invert;
+            const storageKey = 'webxr_panel_size_' + handle.id;
+
+            function applySize(size) {
+                size = Math.max(min, Math.min(max, size));
+                if (axis === 'horizontal') {
+                    targetPanel.style.width = size + 'px';
+                    targetPanel.style.minWidth = size + 'px';
+                } else {
+                    targetPanel.style.flexBasis = size + 'px';
+                }
+                return size;
+            }
+
+            const savedSize = parseFloat(localStorage.getItem(storageKey));
+            if (Number.isFinite(savedSize)) applySize(savedSize);
+
+            handle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                handle.classList.add('resizing');
+
+                const startPos = axis === 'horizontal' ? e.clientX : e.clientY;
+                const startSize = axis === 'horizontal' ? targetPanel.offsetWidth : targetPanel.offsetHeight;
+                document.body.style.userSelect = 'none';
+
+                function onMouseMove(ev) {
+                    const currentPos = axis === 'horizontal' ? ev.clientX : ev.clientY;
+                    const delta = currentPos - startPos;
+                    const finalSize = applySize(startSize + (invert ? -delta : delta));
+                    localStorage.setItem(storageKey, finalSize);
+                    window.dispatchEvent(new Event('resize'));
+                }
+
+                function onMouseUp() {
+                    handle.classList.remove('resizing');
+                    document.body.style.userSelect = '';
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                }
+
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+            });
+        }
+
+        makeResizable(document.getElementById('resize-left-panel'), document.getElementById('left-panel'), 'horizontal', { min: 200, max: 500 });
+        makeResizable(document.getElementById('resize-right-panel'), document.getElementById('right-panel'), 'horizontal', { min: 250, max: 550, invert: true });
+        makeResizable(document.getElementById('resize-bottom-panel'), document.getElementById('bottom-panel'), 'vertical', { min: 150, max: 500, invert: true });
 
         // MULAKAN APLIKASI — semak sesi Supabase & papar gate yang sesuai
         initApp();
