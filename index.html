@@ -2743,7 +2743,7 @@
                     const intersects = raycaster.intersectObjects(visibleObjects, true);
                     if (intersects.length > 0) {
                         let hitModel = intersects[0].object;
-                        while (hitModel.parent && hitModel.parent !== scene) {
+                        while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                             hitModel = hitModel.parent;
                         }
                         triggerInteraction(hitModel, 'onClick', event.clientX, event.clientY);
@@ -2755,7 +2755,7 @@
 
                 if (intersects.length > 0) {
                     let hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene) {
+                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                         hitModel = hitModel.parent;
                     }
                     selectObject(hitModel);
@@ -2780,7 +2780,7 @@
 
                 if (intersects.length > 0) {
                     hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene) {
+                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                         hitModel = hitModel.parent;
                     }
                 }
@@ -2829,7 +2829,7 @@
             if (intersects.length === 0) return null;
 
             let hitModel = intersects[0].object;
-            while (hitModel.parent && hitModel.parent !== scene) {
+            while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                 hitModel = hitModel.parent;
             }
             return hitModel;
