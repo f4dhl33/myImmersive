@@ -583,7 +583,17 @@
                 <input type="checkbox" id="chk-initial-hidden">
                 <span>🙈 Sembunyi Objek Pada Awalnya</span>
             </label>
-            
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-grabbable">
+                <span>🤏 Boleh Diambil & Alih (Pick & Place)</span>
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-solid">
+                <span>🧱 Pepejal (elak objek lain terbenam bila diletak)</span>
+            </label>
+
             <label>Kawalan Kamera & Pergerakan:</label>
             <div class="btn-action-group">
                 <button id="btn-undo" class="btn-secondary">↶ Undo</button>
@@ -1254,6 +1264,22 @@
             }
         });
 
+        const chkGrabbable = document.getElementById('chk-grabbable');
+        chkGrabbable.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.isGrabbable = this.checked;
+                scheduleAutoSave();
+            }
+        });
+
+        const chkSolid = document.getElementById('chk-solid');
+        chkSolid.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.isSolid = this.checked;
+                scheduleAutoSave();
+            }
+        });
+
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
         const uploadedAudios = {};
@@ -1430,7 +1456,9 @@
                     initialRotation: [ud.initialRotation.x, ud.initialRotation.y, ud.initialRotation.z],
                     initialScale: ud.initialScale.toArray(),
                     initialVisibility: ud.initialVisibility,
-                    interactions: ud.interactions || []
+                    interactions: ud.interactions || [],
+                    isGrabbable: ud.isGrabbable || false,
+                    isSolid: ud.isSolid || false
                 };
             });
 
@@ -1534,6 +1562,8 @@
                         initialScale: new THREE.Vector3().fromArray(objData.initialScale),
                         initialVisibility: objData.initialVisibility,
                         interactions: objData.interactions || [],
+                        isGrabbable: objData.isGrabbable || false,
+                        isSolid: objData.isSolid || false,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -1602,6 +1632,8 @@
                         mesh.userData.initialScale.fromArray(objData.initialScale);
                         mesh.userData.initialVisibility = objData.initialVisibility;
                         mesh.userData.interactions = objData.interactions || [];
+                        mesh.userData.isGrabbable = objData.isGrabbable || false;
+                        mesh.userData.isSolid = objData.isSolid || false;
                     }
                 }
             }
@@ -2592,6 +2624,8 @@
                 initialScale: new THREE.Vector3().copy(mesh.scale),
                 initialVisibility: true,
                 interactions: [],
+                isGrabbable: false,
+                isSolid: false,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -2650,6 +2684,8 @@
                         initialScale: new THREE.Vector3().copy(mesh.scale),
                         initialVisibility: true,
                         interactions: [],
+                        isGrabbable: false,
+                        isSolid: false,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -2695,6 +2731,8 @@
                     mesh.userData.initialScale.fromArray(objData.initialScale);
                     mesh.userData.initialVisibility = objData.initialVisibility;
                     mesh.userData.interactions = objData.interactions || [];
+                    mesh.userData.isGrabbable = objData.isGrabbable || false;
+                    mesh.userData.isSolid = objData.isSolid || false;
                 }
                 return mesh;
             });
@@ -2835,8 +2873,15 @@
             return hitModel;
         }
 
+        let justReleasedGrab = false;
+
         function onControllerSelect(event) {
             if (!isPreviewMode) return;
+
+            if (justReleasedGrab) {
+                justReleasedGrab = false;
+                return;
+            }
 
             if (isARSession && !isPlaced) {
                 if (reticle.visible) placeContentAtReticle();
@@ -2850,6 +2895,60 @@
         }
         controller1.addEventListener('select', onControllerSelect);
         controller2.addEventListener('select', onControllerSelect);
+
+        // ---- PICK & PLACE (genggam & alih objek "Boleh Diambil" guna controller) ----
+        let grabbedObject = null;
+        let grabStartState = null;
+
+        function objectOverlapsSolid(obj) {
+            const box = new THREE.Box3().setFromObject(obj);
+            for (const other of loadedModelsList) {
+                if (other === obj || !other.userData.isSolid || !other.visible) continue;
+                const otherBox = new THREE.Box3().setFromObject(other);
+                if (box.intersectsBox(otherBox)) return true;
+            }
+            return false;
+        }
+
+        function onControllerSelectStart(event) {
+            if (!isPreviewMode || grabbedObject) return;
+            if (isARSession && !isPlaced) return;
+
+            const controller = event.target;
+            const hitModel = getControllerRaycastHit(controller);
+            if (hitModel && hitModel.userData.isGrabbable) {
+                grabbedObject = hitModel;
+                grabStartState = {
+                    position: hitModel.position.clone(),
+                    quaternion: hitModel.quaternion.clone()
+                };
+                controller.attach(hitModel);
+            }
+        }
+
+        function onControllerSelectEnd(event) {
+            if (!grabbedObject) return;
+
+            const obj = grabbedObject;
+            contentRoot.attach(obj);
+
+            // Elak objek "terbenam" dalam objek pepejal lain — kembalikan ke
+            // kedudukan asal (sebelum digenggam) kalau tempat letak bertindih.
+            if (grabStartState && objectOverlapsSolid(obj)) {
+                obj.position.copy(grabStartState.position);
+                obj.quaternion.copy(grabStartState.quaternion);
+            }
+
+            grabbedObject = null;
+            grabStartState = null;
+            justReleasedGrab = true;
+            scheduleAutoSave();
+        }
+
+        controller1.addEventListener('selectstart', onControllerSelectStart);
+        controller1.addEventListener('selectend', onControllerSelectEnd);
+        controller2.addEventListener('selectstart', onControllerSelectStart);
+        controller2.addEventListener('selectend', onControllerSelectEnd);
 
         let infoPopupHideTimer = null;
 
@@ -3095,6 +3194,8 @@
             document.getElementById('selected-object-name').value = model.userData.fileName || model.name;
             
             chkInitialHidden.checked = (model.userData.initialVisibility === false);
+            chkGrabbable.checked = !!model.userData.isGrabbable;
+            chkSolid.checked = !!model.userData.isSolid;
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
                 model.userData.interactions = [
@@ -3118,6 +3219,8 @@
             transformControls.detach();
             document.getElementById('selected-object-name').value = "Tiada Objek Dipilih";
             chkInitialHidden.checked = false;
+            chkGrabbable.checked = false;
+            chkSolid.checked = false;
             infoPopup.style.display = 'none';
             closeAnimModal();
             updateHierarchyUISelection();
@@ -3331,6 +3434,8 @@
                         initialScale: new THREE.Vector3(1, 1, 1),
                         initialVisibility: true,
                         interactions: [],
+                        isGrabbable: false,
+                        isSolid: false,
                         isRotating: false,
                         mixer: mixer,
                         animAction: animAction,
@@ -3649,7 +3754,9 @@
             }
 
             // HOVER GUNA CONTROLLER VR (laser pointer) — setara logik hover tetikus desktop
-            if (renderer.xr.isPresenting && isPreviewMode) {
+            // (skip semasa objek sedang digenggam — elak raycast pelik terhadap objek
+            // yang sekarang jadi anak controller sendiri)
+            if (renderer.xr.isPresenting && isPreviewMode && !grabbedObject) {
                 const vrHit = getControllerRaycastHit(controller1) || getControllerRaycastHit(controller2);
                 if (vrHit !== hoveredModel) {
                     hoveredModel = vrHit;

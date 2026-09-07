@@ -427,6 +427,8 @@
                         kind: 'model',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        isGrabbable: objData.isGrabbable || false,
+                        isSolid: objData.isSolid || false,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -478,6 +480,8 @@
                         kind: 'image',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        isGrabbable: objData.isGrabbable || false,
+                        isSolid: objData.isSolid || false,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -545,6 +549,8 @@
                 kind: 'primitive',
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
+                isGrabbable: objData.isGrabbable || false,
+                isSolid: objData.isSolid || false,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -930,7 +936,14 @@
             return hitModel;
         }
 
+        let justReleasedGrab = false;
+
         function onControllerSelect(event) {
+            if (justReleasedGrab) {
+                justReleasedGrab = false;
+                return;
+            }
+
             if (isARSession && !isPlaced) {
                 if (reticle.visible) placeContentAtReticle();
                 return;
@@ -941,6 +954,57 @@
         }
         controller1.addEventListener('select', onControllerSelect);
         controller2.addEventListener('select', onControllerSelect);
+
+        // ---- PICK & PLACE (genggam & alih objek "Boleh Diambil" guna controller) ----
+        let grabbedObject = null;
+        let grabStartState = null;
+
+        function objectOverlapsSolid(obj) {
+            const box = new THREE.Box3().setFromObject(obj);
+            for (const other of loadedModelsList) {
+                if (other === obj || !other.userData.isSolid || !other.visible) continue;
+                const otherBox = new THREE.Box3().setFromObject(other);
+                if (box.intersectsBox(otherBox)) return true;
+            }
+            return false;
+        }
+
+        function onControllerSelectStart(event) {
+            if (grabbedObject) return;
+            if (isARSession && !isPlaced) return;
+
+            const controller = event.target;
+            const hitModel = getControllerRaycastHit(controller);
+            if (hitModel && hitModel.userData.isGrabbable) {
+                grabbedObject = hitModel;
+                grabStartState = {
+                    position: hitModel.position.clone(),
+                    quaternion: hitModel.quaternion.clone()
+                };
+                controller.attach(hitModel);
+            }
+        }
+
+        function onControllerSelectEnd(event) {
+            if (!grabbedObject) return;
+
+            const obj = grabbedObject;
+            contentRoot.attach(obj);
+
+            if (grabStartState && objectOverlapsSolid(obj)) {
+                obj.position.copy(grabStartState.position);
+                obj.quaternion.copy(grabStartState.quaternion);
+            }
+
+            grabbedObject = null;
+            grabStartState = null;
+            justReleasedGrab = true;
+        }
+
+        controller1.addEventListener('selectstart', onControllerSelectStart);
+        controller1.addEventListener('selectend', onControllerSelectEnd);
+        controller2.addEventListener('selectstart', onControllerSelectStart);
+        controller2.addEventListener('selectend', onControllerSelectEnd);
 
         // ---------------------------------------------------------------
         // SESI WEBXR (VR/AR) — reposisi kamera & urus latar passthrough
@@ -1042,7 +1106,7 @@
                 reticle.visible = false;
             }
 
-            if (renderer.xr.isPresenting) {
+            if (renderer.xr.isPresenting && !grabbedObject) {
                 const vrHit = getControllerRaycastHit(controller1) || getControllerRaycastHit(controller2);
                 if (vrHit !== hoveredModel) {
                     hoveredModel = vrHit;
