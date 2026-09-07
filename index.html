@@ -3757,9 +3757,10 @@
                 const visIcon = isHiddenInit ? '🙈' : '👁️';
                 
                 li.innerHTML = `
-                    <span>${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
+                    <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
                     <div>
                         <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Tukar Ketampilan Permulaan Mod Pratonton">${visIcon}</button>
+                        <button class="btn-rename-obj" title="Tukar Nama Objek">✏️</button>
                         <button class="btn-delete-obj" title="Padam Model Ini">✕</button>
                     </div>
                 `;
@@ -3775,6 +3776,19 @@
                     model.userData.initialVisibility = !model.userData.initialVisibility;
                     if (selectedModel === model) {
                         chkInitialHidden.checked = (model.userData.initialVisibility === false);
+                    }
+                    renderObjectsList();
+                    scheduleAutoSave();
+                });
+
+                const btnRename = li.querySelector('.btn-rename-obj');
+                btnRename.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const newName = prompt('Nama baharu untuk objek ni:', model.userData.fileName);
+                    if (!newName || newName.trim() === '') return;
+                    model.userData.fileName = newName.trim();
+                    if (selectedModel === model) {
+                        document.getElementById('selected-object-name').value = model.userData.fileName;
                     }
                     renderObjectsList();
                     scheduleAutoSave();
