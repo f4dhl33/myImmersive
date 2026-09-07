@@ -1,0 +1,3754 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR PdP Builder - Animation Timeline & Speed Inspector</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { overflow: hidden; background-color: #1a1a1a; color: white; display: flex; height: 100vh; width: 100vw; }
+
+        /* PANEL KIRI & KANAN */
+        #left-panel, #right-panel {
+            width: 280px;
+            min-width: 280px;
+            background: #252526;
+            border-right: 1px solid #3c3c3c;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            z-index: 10;
+            overflow-y: auto;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        #right-panel {
+            width: 320px;
+            min-width: 320px;
+            border-right: none;
+            border-left: 1px solid #3c3c3c;
+        }
+
+        /* SEMBUNYIKAN PANEL DALAM MOD PRATONTON */
+        body.preview-mode #left-panel,
+        body.preview-mode #right-panel,
+        body.preview-mode .bg-picker-group,
+        body.preview-mode #anim-modal {
+            display: none !important;
+        }
+
+        /* CANVAS TENGAH */
+        #canvas-container {
+            flex-grow: 1;
+            position: relative;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* TOP BAR COMPACT */
+        #top-bar {
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 30, 30, 0.9);
+            padding: 6px 16px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid #444;
+            z-index: 20;
+            font-size: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        /* ELEMEN UI */
+        h3 { font-size: 13px; text-transform: uppercase; color: #007acc; margin-bottom: 10px; letter-spacing: 1px; }
+        .section-box { background: #1e1e1e; padding: 12px; border-radius: 6px; border: 1px solid #333; margin-bottom: 15px; }
+        label { font-size: 11px; color: #ccc; display: block; margin-bottom: 5px; }
+        select, input, button {
+            width: 100%;
+            padding: 8px;
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        select[multiple] {
+            height: 80px;
+            padding: 4px;
+        }
+        button { background: #0e639c; cursor: pointer; border: none; font-weight: bold; }
+        button:hover { background: #1177bb; }
+        
+        #loading-text { color: #ffcc00; font-size: 11px; display: none; margin-top: 5px; }
+        .top-bar-text { color: #eee; }
+        
+        .bg-picker-group { display: flex; align-items: center; gap: 5px; }
+        .bg-picker-label { margin: 0; font-size: 11px; color: #ccc; }
+        .bg-picker-input { width: 24px; height: 20px; padding: 0; border: none; cursor: pointer; margin: 0; }
+        .btn-apply { width: auto; padding: 2px 8px; margin: 0; font-size: 10px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; }
+        
+        .btn-ar-top { width: auto; padding: 4px 10px; margin: 0; font-size: 11px; border-radius: 4px; background: #28a745; color: white; font-weight: bold; }
+        .btn-ar-top:hover { background: #218838; }
+        .btn-exit-preview { background: #d9534f; display: none; width: auto; padding: 4px 10px; margin: 0; font-size: 11px; border-radius: 4px; color: white; font-weight: bold; }
+        .btn-exit-preview:hover { background: #c9302c; }
+
+        .input-readonly { color: #888; }
+        .btn-save-interaction { background: #28a745; margin-bottom: 0; }
+        .btn-save-interaction:hover { background: #218838; }
+
+        .btn-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; }
+        .btn-grid button { flex: 1 1 45%; margin-bottom: 0; padding: 6px; font-size: 11px; }
+        .btn-grid .btn-full { flex: 1 1 100%; }
+
+        .btn-mode.active { background: #007acc; border: 1px solid #005999; }
+        .btn-action-group { display: flex; gap: 5px; margin-bottom: 5px; }
+        .btn-secondary { background: #444; color: white; font-size: 11px; padding: 5px; margin-bottom: 0; border: none; cursor: pointer; border-radius: 3px; }
+        .btn-secondary:hover { background: #555; }
+        .btn-focus { background: #007acc; font-weight: bold; }
+        .btn-focus:hover { background: #005999; }
+
+        .btn-reset-single { background: #d9534f; color: white; font-size: 10px; padding: 4px; margin-bottom: 3px; }
+        .btn-reset-single:hover { background: #c9302c; }
+        .btn-reset-all { background: #b92c28; font-weight: bold; margin-top: 5px; }
+        .btn-text-panel { background: #007acc !important; font-weight: bold; }
+        .btn-text-panel:hover { background: #005999 !important; }
+
+        .input-inline-group { display: flex; gap: 5px; }
+        .input-inline-group input { flex: 1; }
+
+        .checkbox-label {
+            margin-top: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 11px;
+            color: #ffcc00;
+            font-weight: bold;
+            background: #2a2a2a;
+            padding: 6px 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+        }
+        .checkbox-label input { width: auto; margin: 0; cursor: pointer; }
+
+        .hint-text { font-size: 10px; color: #aaa; margin-bottom: 5px; }
+
+        /* MODAL INSPECTOR MASA ANIMASI */
+        #anim-modal {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 420px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #007acc;
+            border-radius: 8px;
+            padding: 12px 15px;
+            z-index: 40;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+            display: none;
+        }
+        #anim-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: bold;
+            color: #007acc;
+            margin-bottom: 8px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        .anim-time-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .anim-time-row input[type="range"] {
+            flex-grow: 1;
+            margin: 0;
+            cursor: pointer;
+        }
+        .time-counter {
+            font-size: 11px;
+            color: #ffcc00;
+            font-weight: bold;
+            min-width: 90px;
+            text-align: right;
+        }
+        .anim-modal-grid {
+            display: flex;
+            gap: 6px;
+        }
+        .anim-modal-grid select, .anim-modal-grid button {
+            margin: 0;
+            font-size: 11px;
+            padding: 5px;
+        }
+
+        /* SENARAI HIERARKI OBJEK & MEDIA */
+        .hierarchy-list {
+            list-style: none;
+            max-height: 140px;
+            overflow-y: auto;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 5px;
+        }
+        .hierarchy-item {
+            padding: 5px 8px;
+            font-size: 11px;
+            color: #ddd;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-bottom: 3px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .hierarchy-item:hover { background: #2a2d2e; }
+        .hierarchy-item.selected { background: #094771; color: white; font-weight: bold; }
+        .scene-drag-item { cursor: grab; }
+        .scene-drag-item.dragging { opacity: 0.4; cursor: grabbing; }
+        .scene-drag-item.drag-over { border-top: 2px solid #007acc; background: #1a3a4a; }
+        .hierarchy-item.camera-item { background: #3a2e00; border: 1px solid #ffcc00; color: #ffcc00; }
+        .hierarchy-empty-msg { color: #666; font-style: italic; padding: 5px; }
+        .media-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+        
+        .btn-vis-obj {
+            background: #333; color: #ccc; border: 1px solid #555; border-radius: 3px;
+            padding: 2px 5px; font-size: 10px; cursor: pointer; margin-right: 4px; width: auto;
+        }
+        .btn-vis-obj:hover { background: #444; color: #fff; }
+        .btn-vis-obj.hidden-state { color: #d9534f; border-color: #d9534f; }
+
+        .btn-delete-obj {
+            background: #d9534f; color: white; border: none; border-radius: 3px;
+            padding: 2px 5px; font-size: 10px; cursor: pointer; margin: 0; width: auto;
+        }
+        .btn-delete-obj:hover { background: #b92c28; }
+
+        .btn-play-audio {
+            background: #28a745; color: white; border: none; border-radius: 3px;
+            padding: 2px 6px; font-size: 10px; cursor: pointer; margin: 0 4px 0 0; width: auto;
+        }
+        .btn-play-audio:hover { background: #218838; }
+
+        .btn-manual-deselect {
+            background: #555;
+            color: #fff;
+            font-size: 11px;
+            padding: 6px;
+            margin-top: 8px;
+            margin-bottom: 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .btn-manual-deselect:hover { background: #666; }
+
+        .trigger-badge {
+            font-size: 9px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-right: 5px;
+        }
+        .badge-click { background: #007acc; color: white; }
+        .badge-hover { background: #e67e22; color: white; }
+
+        .action-item-desc {
+            font-size: 11px;
+            color: #ccc;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 180px;
+        }
+
+        .display-none { display: none; }
+
+        /* POPUP INFO INTERAKTIF (VISUAL FEEDBACK) */
+        #info-popup {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: 2px solid #007acc;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            z-index: 30;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: none;
+            max-width: 280px;
+        }
+        #info-popup .info-popup-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffcc00;
+            margin-bottom: 3px;
+        }
+        #info-popup .info-popup-content {
+            font-size: 13px;
+            font-weight: normal;
+            color: #fff;
+        }
+
+        /* AUTH & SENARAI PROJEK (SUPABASE) */
+        .profile-badge { color: #ffcc00 !important; }
+        .save-status-text { font-size: 10px; color: #8fd18f; min-width: 90px; }
+
+        .app-gate {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 10, 10, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .gate-box {
+            background: #1e1e1e;
+            border: 1px solid #007acc;
+            border-radius: 10px;
+            padding: 25px 30px;
+            width: 340px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            text-align: center;
+        }
+        .gate-box h2 { font-size: 16px; color: #007acc; margin-bottom: 6px; }
+        .gate-box p { font-size: 11px; color: #aaa; margin-bottom: 15px; }
+        .gate-box input { margin-bottom: 12px; }
+        .gate-error-text { font-size: 11px; color: #d9534f; margin: -6px 0 10px; min-height: 14px; }
+
+        .auth-tabs { display: flex; gap: 6px; margin-bottom: 15px; }
+        .auth-tab-btn {
+            flex: 1; margin: 0; padding: 8px; font-size: 12px;
+            background: #333; border: 1px solid #444; color: #aaa; cursor: pointer; border-radius: 4px;
+        }
+        .auth-tab-btn.active { background: #0e639c; color: #fff; border-color: #0e639c; }
+
+        #project-gate-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+            text-align: left;
+        }
+        #project-gate-list li {
+            padding: 8px 10px;
+            font-size: 11px;
+            color: #ddd;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #project-gate-list li:hover { background: #2a2d2e; }
+        #project-gate-list .project-meta { font-size: 9px; color: #777; display: block; margin-top: 2px; }
+    </style>
+
+    <!-- SUPABASE (Auth + Database + Storage) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+    <!-- THREE.JS CORE & LIBRARIES -->
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+</head>
+<body>
+
+    <!-- PINTU MASUK: SIGN IN / DAFTAR AKAUN -->
+    <div id="auth-gate" class="app-gate">
+        <div class="gate-box">
+            <h2>🔐 Log Masuk / Daftar Akaun</h2>
+            <p>Sign in untuk simpan & urus projek korang di cloud.</p>
+
+            <div class="auth-tabs">
+                <button type="button" id="tab-signin" class="auth-tab-btn active">Log Masuk</button>
+                <button type="button" id="tab-signup" class="auth-tab-btn">Daftar Akaun</button>
+            </div>
+
+            <div id="auth-normal-fields">
+                <input type="email" id="auth-email" placeholder="Emel" autocomplete="username">
+                <input type="password" id="auth-password" placeholder="Kata Laluan (min 6 aksara)" autocomplete="current-password">
+                <div style="text-align:right; margin-top:-6px; margin-bottom:10px;">
+                    <a href="#" id="link-forgot-password" style="font-size:11px; color:#007acc; text-decoration:none;">Lupa Kata Laluan?</a>
+                </div>
+                <div id="auth-error" class="gate-error-text"></div>
+                <button type="button" id="auth-submit-btn">Log Masuk</button>
+            </div>
+
+            <div id="auth-forgot-fields" style="display:none;">
+                <p style="margin-top:-8px;">Masukkan emel akaun korang — kami hantar link reset kata laluan.</p>
+                <input type="email" id="forgot-email" placeholder="Emel">
+                <div id="forgot-error" class="gate-error-text"></div>
+                <button type="button" id="btn-send-reset">Hantar Link Reset</button>
+                <button type="button" id="btn-back-to-signin" class="btn-secondary" style="margin-top:8px; padding:8px;">Kembali</button>
+            </div>
+
+            <div id="auth-newpass-fields" style="display:none;">
+                <p style="margin-top:-8px;">Tetapkan kata laluan baharu untuk akaun korang.</p>
+                <input type="password" id="new-password-input" placeholder="Kata Laluan Baharu (min 6 aksara)">
+                <div id="newpass-error" class="gate-error-text"></div>
+                <button type="button" id="btn-set-new-password">Tetapkan Kata Laluan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PINTU MASUK: SENARAI PROJEK -->
+    <div id="project-gate" class="app-gate" style="display:none;">
+        <div class="gate-box">
+            <h2>📁 Projek Saya</h2>
+            <p>Pilih projek sedia ada atau cipta baharu.</p>
+
+            <ul id="project-gate-list"></ul>
+
+            <input type="text" id="new-project-name-input" placeholder="Nama Projek Baharu">
+            <div id="project-gate-error" class="gate-error-text"></div>
+            <button type="button" id="btn-create-project">+ Cipta Projek Baharu</button>
+            <div class="btn-action-group" style="margin-top:10px;">
+                <button type="button" id="btn-open-account-settings" class="btn-secondary" style="padding:8px;">⚙️ Akaun Saya</button>
+                <button type="button" id="btn-gate-sign-out" class="btn-secondary" style="padding:8px;">Log Keluar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL TETAPAN AKAUN -->
+    <div id="account-settings-modal" class="app-gate" style="display:none;">
+        <div class="gate-box" style="width:320px;">
+            <h2>⚙️ Akaun Saya</h2>
+            <p>Emel: <b id="account-email-display">-</b></p>
+
+            <label style="font-size:11px; color:#ccc; display:block; text-align:left; margin-bottom:5px;">Tukar Kata Laluan</label>
+            <input type="password" id="account-new-password" placeholder="Kata Laluan Baharu (min 6 aksara)">
+            <input type="password" id="account-confirm-password" placeholder="Sahkan Kata Laluan Baharu">
+            <div id="account-password-status" class="gate-error-text"></div>
+            <button type="button" id="btn-change-password">Tukar Kata Laluan</button>
+
+            <hr style="border-color:#333; margin:16px 0;">
+
+            <label style="font-size:11px; color:#d9534f; display:block; text-align:left; margin-bottom:5px;">Zon Bahaya</label>
+            <p style="color:#d9534f; font-size:10px;">Padam semua projek, scene, dan fail (model/gambar/audio) akaun ini secara KEKAL. Tindakan ini tidak boleh dibuat asal.</p>
+            <input type="text" id="account-delete-confirm-input" placeholder='Taip "PADAM" untuk sahkan'>
+            <div id="account-delete-status" class="gate-error-text"></div>
+            <button type="button" id="btn-delete-account" style="background:#d9534f;">🗑️ Padam Akaun & Semua Data</button>
+
+            <button type="button" id="btn-close-account-settings" class="btn-secondary" style="margin-top:12px; padding:8px;">Tutup</button>
+        </div>
+    </div>
+
+    <!-- PANEL KIRI -->
+    <div id="left-panel">
+        <h3>🎬 Scene Projek</h3>
+        <div class="section-box">
+            <label>🎬 Senarai Scene (dalam projek ni):</label>
+            <ul id="scenes-list" class="hierarchy-list"></ul>
+            <button id="btn-add-scene" class="btn-secondary btn-full" style="margin-top:5px;">+ Scene Baharu</button>
+        </div>
+
+        <h3>1. Pustaka & Import</h3>
+        <div class="section-box">
+            <label for="file-input">Muat Naik Model (.glb, .gltf, .fbx)</label>
+            <input type="file" id="file-input" accept=".glb,.gltf,.fbx" multiple>
+            <div id="loading-text">Sedang memuat naik fail 3D...</div>
+        </div>
+
+        <div class="section-box">
+            <label>🧊 Bentuk Asas & Teks:</label>
+            <div class="btn-grid">
+                <button id="btn-add-box" class="btn-secondary">+ Kubus</button>
+                <button id="btn-add-sphere" class="btn-secondary">+ Sfera</button>
+                <button id="btn-add-cylinder" class="btn-secondary">+ Silinder</button>
+                <button id="btn-add-plane" class="btn-secondary">+ Satah</button>
+                <button id="btn-add-text" class="btn-secondary btn-full btn-text-panel">🔤 + Papan Teks</button>
+            </div>
+        </div>
+
+        <div class="section-box">
+            <label for="audio-input">Muat Naik Audio (.mp3, .wav, .ogg)</label>
+            <input type="file" id="audio-input" accept=".mp3,.wav,.ogg" multiple>
+        </div>
+
+        <div class="section-box">
+            <label for="image-input">Muat Naik Gambar 2D (.jpg, .png, .webp, .gif)</label>
+            <input type="file" id="image-input" accept=".jpg,.jpeg,.png,.webp,.gif" multiple>
+        </div>
+
+        <div class="section-box">
+            <label>📦 Objek 3D & Kamera:</label>
+            <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
+            <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Nyah-Pilih Objek (Deselect All)</button>
+        </div>
+
+        <div class="section-box">
+            <label>🎵 Media & Audio:</label>
+            <ul id="hierarchy-tree-media" class="hierarchy-list">
+                <li class="hierarchy-empty-msg">Tiada fail media diimport</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- CANVAS TENGAH -->
+    <div id="canvas-container">
+        <div id="top-bar">
+            <span class="top-bar-text">Editor Mod: <b id="mode-text-label">Penyuntingan Interaktif</b></span>
+
+            <span class="top-bar-text profile-badge">📁 <b id="project-name-label">-</b></span>
+            <button id="btn-toggle-public" class="btn-apply" title="Tukar status Awam/Persendirian">🔒 Persendirian</button>
+            <button id="btn-share-project" class="btn-apply" title="Dapatkan Link/QR Pratonton AR/VR">🔗 Kongsi</button>
+            <button id="btn-my-projects" class="btn-apply" title="Kembali ke Senarai Projek">Projek Saya</button>
+            <span id="save-status-text" class="save-status-text"></span>
+
+            <div class="bg-picker-group">
+                <label for="bg-color-picker" class="bg-picker-label">Latar:</label>
+                <input type="color" id="bg-color-picker" value="#87ceeb" class="bg-picker-input">
+                <button id="btn-apply-bg" class="btn-apply">OK</button>
+            </div>
+
+            <button id="btn-toggle-preview" class="btn-ar-top">Pratonton WebXR (AR/VR)</button>
+            <button id="btn-exit-preview" class="btn-exit-preview">✕ Keluar Pratonton</button>
+        </div>
+
+        <!-- MODAL PRATONTON & INSPECTOR MASA ANIMASI -->
+        <div id="anim-modal">
+            <div id="anim-modal-header">
+                <span>🎬 Timeline Inspector: <b id="anim-modal-title">Model</b></span>
+                <button id="btn-close-anim-modal" class="btn-delete-obj" style="padding:1px 6px;">✕</button>
+            </div>
+            <div class="anim-time-row">
+                <input type="range" id="anim-scrubber" min="0" max="100" step="0.01" value="0">
+                <span id="anim-time-display" class="time-counter">0.00s / 0.00s</span>
+            </div>
+            <div class="anim-modal-grid">
+                <button id="anim-btn-play-pause" style="flex:1;">⏸ Jeda</button>
+                <select id="anim-speed-select" style="flex:1.5;">
+                    <option value="0.25">0.25x (Sangat Perlahan)</option>
+                    <option value="0.5">0.5x (Perlahan)</option>
+                    <option value="1" selected>1.0x (Normal)</option>
+                    <option value="2">2.0x (Laju)</option>
+                </select>
+                <button id="anim-btn-set-start" style="flex:1.5; background:#0e639c;">Guna Masa Mula</button>
+                <button id="anim-btn-set-end" style="flex:1.5; background:#28a745;">Guna Masa Tamat</button>
+            </div>
+        </div>
+
+        <div id="info-popup"></div>
+    </div>
+
+    <!-- MODAL KONGSI LINK/QR VIEWER AR/VR -->
+    <div id="share-modal" class="app-gate" style="display:none;">
+        <div class="gate-box" style="width:300px;">
+            <h2>🔗 Kongsi Pratonton AR/VR</h2>
+            <p id="share-modal-status">Projek mesti ditanda "🌐 Awam" dahulu supaya pengguna lain boleh akses tanpa log masuk.</p>
+            <div id="share-qr-code" style="display:flex; justify-content:center; margin:12px 0;"></div>
+            <input type="text" id="share-link-input" readonly style="font-size:10px;" onclick="this.select()">
+            <button type="button" id="btn-copy-share-link">📋 Salin Link</button>
+            <button type="button" id="btn-close-share-modal" class="btn-secondary" style="margin-top:8px; padding:8px;">Tutup</button>
+        </div>
+    </div>
+
+    <!-- PANEL KANAN -->
+    <div id="right-panel">
+        <h3>2. Panel Interaksi</h3>
+        
+        <div class="section-box">
+            <label for="selected-object-name">Objek Dipilih:</label>
+            <input type="text" id="selected-object-name" value="Tiada Objek Dipilih" readonly class="input-readonly">
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="chk-initial-hidden">
+                <span>🙈 Sembunyi Objek Pada Awalnya</span>
+            </label>
+            
+            <label>Kawalan Kamera & Pergerakan:</label>
+            <div class="btn-action-group">
+                <button id="btn-undo" class="btn-secondary">↶ Undo</button>
+                <button id="btn-redo" class="btn-secondary">↷ Redo</button>
+                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Fokus Kamera pada Objek Dipilih">🔍 Fokus</button>
+            </div>
+
+            <label style="margin-top: 10px;">Mod Kawalan Objek:</label>
+            <div class="btn-grid">
+                <button id="btn-mode-translate" class="btn-mode active">Gerak (Move)</button>
+                <button id="btn-mode-rotate" class="btn-mode">Pusing (Rotate)</button>
+                <button id="btn-mode-scale" class="btn-mode btn-full">Saiz (Scale)</button>
+            </div>
+
+            <label style="margin-top: 10px;">Ruang Paksi (Space):</label>
+            <div class="btn-grid">
+                <button id="btn-space-local" class="btn-mode active">Tempatan (Local)</button>
+                <button id="btn-space-world" class="btn-mode">Global (World)</button>
+            </div>
+
+            <label style="margin-top: 10px;">Reset Berasingan:</label>
+            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Kedudukan (Position)</button>
+            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Putaran (Rotation)</button>
+            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Skala (Scale)</button>
+            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Keseluruhan Objek</button>
+        </div>
+
+        <div class="section-box">
+            <label for="select-trigger">Pemicu (Trigger Event):</label>
+            <select id="select-trigger">
+                <option value="onClick">Pengguna Klik Objek (On Click)</option>
+                <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
+            </select>
+
+            <label for="select-action">Tindakan (Action Effect):</label>
+            <select id="select-action">
+                <option value="popInfo">Paparkan Teks / Informasi</option>
+                <option value="toggleModelAnim">Mula / Henti Animasi Model (Play/Pause Animasi)</option>
+                <option value="stepMove">Pergerakan Langkah / Shift (Step Move)</option>
+                <option value="toggleTargetVisibility">Sembunyi / Tunjuk Objek (Toggle Visibility)</option>
+                <option value="playSound">Mainkan Audio / Bunyi</option>
+                <option value="changeColor">Tukar Warna Material</option>
+                <option value="rotateAnim">Putaran Objek Manual (Simple Spin)</option>
+                <option value="changeScene">🎬 Tukar ke Scene Lain (Change Scene)</option>
+            </select>
+
+            <!-- PILIHAN MULTI-TARGET OBJEK -->
+            <div id="target-obj-container" class="display-none">
+                <label for="select-target-objects">Pilih Objek Sasaran Tindakan:</label>
+                <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                <select id="select-target-objects" multiple size="4"></select>
+            </div>
+
+            <!-- KAWALAN ANIMASI LANJUTAN -->
+            <div id="anim-mode-container" class="display-none">
+                <button type="button" id="btn-open-anim-modal" class="btn-secondary" style="background:#007acc; font-weight:bold; margin-bottom:10px;">🎬 Buka Pemotong Masa Animasi</button>
+                
+                <label for="select-anim-mode">Mod Mainan Animasi:</label>
+                <select id="select-anim-mode">
+                    <option value="once">Sekali Sahaja (Play Once & Stop)</option>
+                    <option value="toggleReverse">Klik 1: Buka / Klik 2: Tutup (Toggle Reverse)</option>
+                    <option value="loop">Berulang (Loop)</option>
+                </select>
+
+                <label for="select-anim-dir">Arah Animasi Permulaan:</label>
+                <select id="select-anim-dir">
+                    <option value="forward">Ke Hadapan (Forward)</option>
+                    <option value="reverse">Berpatah Balik (Reverse)</option>
+                    <option value="pingpong">Ping-Pong (Mula ↔ Akhir)</option>
+                </select>
+
+                <label>Julat Masa Animasi (Saat):</label>
+                <div class="input-inline-group">
+                    <input type="number" id="input-anim-starttime" step="0.1" min="0" value="0" placeholder="Mula (0s)">
+                    <input type="number" id="input-anim-endtime" step="0.1" min="0" value="0" placeholder="Tamat (0=Full)">
+                </div>
+            </div>
+
+            <!-- KAWALAN PERGERAKAN LANGKAH (STEP MOVE / SHIFT) -->
+            <div id="step-move-container" class="display-none">
+                <label>Unit Pergerakan Langkah (Offset X, Y, Z):</label>
+                <div class="input-inline-group">
+                    <input type="number" id="input-step-x" step="0.5" value="0" placeholder="X">
+                    <input type="number" id="input-step-y" step="0.5" value="0" placeholder="Y">
+                    <input type="number" id="input-step-z" step="0.5" value="2" placeholder="Z">
+                </div>
+
+                <label for="select-step-mode" style="margin-top: 5px;">Mod Langkah:</label>
+                <select id="select-step-mode">
+                    <option value="accumulate">Bergerak Ke Depan Berterusan (+Step)</option>
+                    <option value="toggle">Klik 1: Ke Depan / Klik 2: Kembali Asal</option>
+                </select>
+            </div>
+
+            <div id="audio-select-container" class="display-none">
+                <label for="select-audio-file">Pilih Fail Audio:</label>
+                <select id="select-audio-file">
+                    <option value="">-- Tiada Fail Audio Muat Naik --</option>
+                </select>
+            </div>
+
+            <div id="scene-select-container" class="display-none">
+                <label for="select-target-scene">Pilih Scene Sasaran:</label>
+                <select id="select-target-scene"></select>
+                <span class="hint-text">Objek ini bila diklik/hover akan "teleport" pengguna ke scene lain.</span>
+            </div>
+
+            <div id="note-input-container">
+                <label for="input-note-title">Tajuk Mesej:</label>
+                <input type="text" id="input-note-title" placeholder="Contoh: Enjin Utama">
+                <label for="input-note">Kandungan Mesej / Informasi:</label>
+                <input type="text" id="input-note" placeholder="Contoh: Komponen Enjin Utama v2.0">
+            </div>
+
+            <button type="button" id="btn-save-interaction" class="btn-save-interaction">+ Tambah Tindakan Ke Senarai</button>
+        </div>
+
+        <!-- SENARAI TINDAKAN AKTIF TERDAFTAR -->
+        <div class="section-box">
+            <label>📋 Senarai Tindakan Didaftarkan:</label>
+            <ul id="saved-actions-list" class="hierarchy-list">
+                <li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- SCRIPT THREE.JS -->
+    <script>
+        // VRButton/ARButton — versi r128 cuma sedia sebagai ES module (examples/jsm/), bukan
+        // classic script (examples/js/) macam pustaka lain dalam fail ni, jadi ditulis semula
+        // di sini (logik sama seperti THREE.VRButton/ARButton rasmi) supaya tak perlu load
+        // fail luar. Digeneralize untuk sokong immersive-vr DAN immersive-ar (cross-platform:
+        // headset VR, headset AR/passthrough, telefon Android Chrome dgn ARCore).
+        function createXRButton(renderer, sessionMode, label) {
+            const button = document.createElement('button');
+            const isAR = sessionMode === 'immersive-ar';
+
+            function stylizeElement(element) {
+                element.style.position = 'absolute';
+                element.style.bottom = '20px';
+                element.style.padding = '12px 6px';
+                element.style.border = '1px solid #fff';
+                element.style.borderRadius = '4px';
+                element.style.background = 'rgba(0,0,0,0.1)';
+                element.style.color = '#fff';
+                element.style.font = 'normal 13px sans-serif';
+                element.style.textAlign = 'center';
+                element.style.opacity = '0.5';
+                element.style.outline = 'none';
+                element.style.zIndex = '999';
+            }
+
+            function disableButton() {
+                button.style.display = '';
+                button.style.cursor = 'auto';
+                button.style.left = 'calc(50% - 75px)';
+                button.style.width = '150px';
+                button.onmouseenter = null;
+                button.onmouseleave = null;
+                button.onclick = null;
+            }
+
+            function showXRNotFound() {
+                disableButton();
+                button.textContent = label + ' NOT SUPPORTED';
+            }
+
+            function showEnterXR() {
+                let currentSession = null;
+
+                async function onSessionStarted(session) {
+                    session.addEventListener('end', onSessionEnded);
+                    await renderer.xr.setSession(session);
+                    button.textContent = 'EXIT ' + label;
+                    currentSession = session;
+                }
+
+                function onSessionEnded() {
+                    currentSession.removeEventListener('end', onSessionEnded);
+                    button.textContent = 'ENTER ' + label;
+                    currentSession = null;
+                }
+
+                button.style.display = '';
+                button.style.cursor = 'pointer';
+                button.style.left = 'calc(50% - 50px)';
+                button.style.width = '100px';
+                button.textContent = 'ENTER ' + label;
+
+                button.onmouseenter = () => { button.style.opacity = '1.0'; };
+                button.onmouseleave = () => { button.style.opacity = '0.5'; };
+                button.onclick = () => {
+                    if (currentSession === null) {
+                        const sessionInit = isAR
+                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'] }
+                            : { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] };
+                        navigator.xr.requestSession(sessionMode, sessionInit).then(onSessionStarted);
+                    } else {
+                        currentSession.end();
+                    }
+                };
+            }
+
+            if ('xr' in navigator) {
+                button.id = sessionMode + '-button';
+                button.style.display = 'none';
+                stylizeElement(button);
+
+                navigator.xr.isSessionSupported(sessionMode).then(function (supported) {
+                    supported ? showEnterXR() : showXRNotFound();
+                }).catch(() => showXRNotFound());
+
+                return button;
+            } else {
+                const message = document.createElement('a');
+                if (window.isSecureContext === false) {
+                    message.href = document.location.href.replace(/^http:/, 'https:');
+                    message.innerHTML = 'WEBXR NEEDS HTTPS';
+                } else {
+                    message.href = 'https://immersiveweb.dev/';
+                    message.innerHTML = 'WEBXR NOT AVAILABLE';
+                }
+                message.style.left = 'calc(50% - 90px)';
+                message.style.width = '180px';
+                message.style.textDecoration = 'none';
+                stylizeElement(message);
+                return message;
+            }
+        }
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+
+        const gridHelper = new THREE.GridHelper(10, 10, 0x007acc, 0xffffff);
+        scene.add(gridHelper);
+
+        const mainCamera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        mainCamera.position.set(3, 4, 5);
+
+        // RIG KAMERA — perlu untuk WebXR: semasa sesi VR aktif, headset kawal transform
+        // "mainCamera" terus (relatif kepada rig ni). Gerakkan rig, bukan kamera, untuk "teleport".
+        const cameraRig = new THREE.Object3D();
+        cameraRig.name = 'CameraRig';
+        cameraRig.add(mainCamera);
+        scene.add(cameraRig);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.outputEncoding = THREE.sRGBEncoding;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.0;
+        renderer.xr.enabled = true;
+        renderer.xr.setReferenceSpaceType('local-floor');
+        container.appendChild(renderer.domElement);
+
+        // BUTANG MASUK VR/AR SEBENAR (WebXR) — cross-platform: headset VR, headset AR
+        // (passthrough), telefon Android Chrome (ARCore). Auto sembunyi/disable kalau
+        // peranti/browser tak sokong (contoh iOS Safari — tiada navigator.xr langsung).
+        const vrButtonEl = createXRButton(renderer, 'immersive-vr', 'VR');
+        vrButtonEl.style.position = 'absolute';
+        vrButtonEl.style.bottom = '20px';
+        vrButtonEl.style.zIndex = '50';
+        container.appendChild(vrButtonEl);
+
+        const arButtonEl = createXRButton(renderer, 'immersive-ar', 'AR');
+        arButtonEl.style.position = 'absolute';
+        arButtonEl.style.bottom = '70px';
+        arButtonEl.style.zIndex = '50';
+        container.appendChild(arButtonEl);
+
+        const controls = new THREE.OrbitControls(mainCamera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        // DUMMY KAMERA (PREVIEW STARTING POINT OBJECT)
+        const previewCameraMarker = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        previewCameraMarker.position.set(0, 2, 6);
+        previewCameraMarker.userData = {
+            id: 'default_preview_camera',
+            fileName: '📷 Kedudukan Awal Kamera',
+            initialPosition: new THREE.Vector3(0, 2, 6),
+            initialRotation: new THREE.Euler(0, 0, 0),
+            initialScale: new THREE.Vector3(1, 1, 1),
+            initialVisibility: true,
+            interactions: []
+        };
+
+        const cameraHelper = new THREE.CameraHelper(previewCameraMarker);
+        scene.add(previewCameraMarker);
+        scene.add(cameraHelper);
+
+        // KAWALAN GIZMO TRANSFORM
+        const transformControls = new THREE.TransformControls(mainCamera, renderer.domElement);
+        transformControls.size = 1.2;
+        transformControls.setSpace('local');
+        scene.add(transformControls);
+
+        // GLOBAL UNDO / REDO HISTORY STACK
+        let undoStack = [];
+        let redoStack = [];
+        let gizmoDragStartState = null;
+
+        let isDraggingGizmo = false;
+        transformControls.addEventListener('dragging-changed', function (event) {
+            controls.enabled = !event.value;
+            isDraggingGizmo = event.value;
+
+            const currentTarget = transformControls.object;
+            if (!currentTarget) return;
+
+            if (event.value) {
+                gizmoDragStartState = {
+                    position: currentTarget.position.clone(),
+                    rotation: currentTarget.rotation.clone(),
+                    scale: currentTarget.scale.clone()
+                };
+            } else {
+                if (gizmoDragStartState) {
+                    const endState = {
+                        position: currentTarget.position.clone(),
+                        rotation: currentTarget.rotation.clone(),
+                        scale: currentTarget.scale.clone()
+                    };
+
+                    if (!gizmoDragStartState.position.equals(endState.position) ||
+                        !gizmoDragStartState.rotation.equals(endState.rotation) ||
+                        !gizmoDragStartState.scale.equals(endState.scale)) {
+                        
+                        pushGlobalHistory({
+                            target: currentTarget,
+                            oldState: gizmoDragStartState,
+                            newState: endState
+                        });
+                    }
+                    gizmoDragStartState = null;
+                }
+            }
+        });
+
+        function pushGlobalHistory(action) {
+            undoStack.push(action);
+            redoStack = [];
+            scheduleAutoSave();
+        }
+
+        function recordAndApplyTransform(target, applyTransformFn) {
+            if (!target) return;
+
+            const oldState = {
+                position: target.position.clone(),
+                rotation: target.rotation.clone(),
+                scale: target.scale.clone()
+            };
+
+            applyTransformFn();
+
+            const newState = {
+                position: target.position.clone(),
+                rotation: target.rotation.clone(),
+                scale: target.scale.clone()
+            };
+
+            pushGlobalHistory({
+                target: target,
+                oldState: oldState,
+                newState: newState
+            });
+
+            if (target === previewCameraMarker) cameraHelper.update();
+        }
+
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            if (undoStack.length === 0) return;
+
+            const action = undoStack.pop();
+            action.target.position.copy(action.oldState.position);
+            action.target.rotation.copy(action.oldState.rotation);
+            action.target.scale.copy(action.oldState.scale);
+
+            redoStack.push(action);
+            selectObject(action.target);
+            if (action.target === previewCameraMarker) cameraHelper.update();
+            scheduleAutoSave();
+        });
+
+        document.getElementById('btn-redo').addEventListener('click', () => {
+            if (redoStack.length === 0) return;
+
+            const action = redoStack.pop();
+            action.target.position.copy(action.newState.position);
+            action.target.rotation.copy(action.newState.rotation);
+            action.target.scale.copy(action.newState.scale);
+
+            undoStack.push(action);
+            selectObject(action.target);
+            if (action.target === previewCameraMarker) cameraHelper.update();
+            scheduleAutoSave();
+        });
+
+        transformControls.addEventListener('change', function () {
+            if (selectedModel === previewCameraMarker) {
+                cameraHelper.update();
+            }
+        });
+
+        // PEMBAIKAN OPACITY GIZMO
+        function isAxisMatch(childName, activeAxis) {
+            if (!childName || !activeAxis) return false;
+            if (childName === activeAxis) return true;
+            const normActive = activeAxis.replace(/^(R|S)/, '');
+            const normChild = childName.replace(/^(R|S)/, '');
+            return normActive === normChild;
+        }
+
+        if (transformControls.children[0]) {
+            transformControls.children[0].onBeforeRender = function () {
+                const activeAxis = transformControls.axis;
+
+                this.traverse((child) => {
+                    if ((child.isMesh || child.isLine || child.isPoints) && child.material) {
+                        if (child.material.visible === false) return;
+
+                        child.material.transparent = true;
+                        const childName = child.name || '';
+
+                        if (activeAxis) {
+                            if (isAxisMatch(childName, activeAxis)) {
+                                child.material.opacity = 1.0;
+                            } else {
+                                child.material.opacity = 0.5;
+                            }
+                        } else {
+                            child.material.opacity = 0.7;
+                        }
+                    }
+                });
+            };
+        }
+
+        // LIGHTING
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        pmremGenerator.compileEquirectangularShader();
+        const roomEnv = new THREE.RoomEnvironment();
+        scene.environment = pmremGenerator.fromScene(roomEnv).texture;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        scene.add(dirLight);
+
+        // PREVIEW MODE LOGIC
+        let isPreviewMode = false;
+        const btnTogglePreview = document.getElementById('btn-toggle-preview');
+        const btnExitPreview = document.getElementById('btn-exit-preview');
+        const modeTextLabel = document.getElementById('mode-text-label');
+
+        const editorCameraState = {
+            position: new THREE.Vector3(),
+            rotation: new THREE.Euler(),
+            target: new THREE.Vector3()
+        };
+
+        // Letak semula visibility awal objek + posisi kamera/rig kat Kedudukan Awal Kamera.
+        // Dipakai semasa masuk Pratonton, DAN semula bila "Tukar Scene" dicetus sewaktu
+        // pratonton/VR/AR sedang aktif (macam "portal" ke scene lain).
+        function applyPreviewVisibilityAndCamera() {
+            loadedModelsList.forEach(m => {
+                m.visible = (m.userData.initialVisibility !== false);
+            });
+
+            if (renderer.xr.isPresenting) {
+                cameraRig.position.copy(previewCameraMarker.position);
+                cameraRig.rotation.copy(previewCameraMarker.rotation);
+                mainCamera.position.set(0, 0, 0);
+                mainCamera.rotation.set(0, 0, 0);
+                controls.enabled = false;
+            } else {
+                mainCamera.position.copy(previewCameraMarker.position);
+                mainCamera.rotation.copy(previewCameraMarker.rotation);
+
+                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(previewCameraMarker.quaternion);
+                controls.target.copy(mainCamera.position).add(forward.multiplyScalar(3));
+
+                controls.mouseButtons = {
+                    LEFT: THREE.MOUSE.ROTATE,
+                    MIDDLE: THREE.MOUSE.DOLLY,
+                    RIGHT: THREE.MOUSE.PAN
+                };
+                controls.enabled = true;
+                controls.update();
+            }
+        }
+
+        // Fallback bila hit-test AR tak disokong peranti/browser — letak kandungan
+        // 1.5m di hadapan titik mula sesi AR (world-locked, tak "ikut kamera").
+        function placeContentAtDefault() {
+            contentRoot.position.set(0, 0, -1.5);
+            contentRoot.quaternion.identity();
+            isPlaced = true;
+            reticle.visible = false;
+            loadedModelsList.forEach(m => {
+                m.visible = (m.userData.initialVisibility !== false);
+            });
+        }
+
+        function placeContentAtReticle() {
+            contentRoot.position.setFromMatrixPosition(reticle.matrix);
+            contentRoot.quaternion.setFromRotationMatrix(reticle.matrix);
+            isPlaced = true;
+            reticle.visible = false;
+            loadedModelsList.forEach(m => {
+                m.visible = (m.userData.initialVisibility !== false);
+            });
+        }
+
+        async function setPreviewMode(enable) {
+            isPreviewMode = enable;
+            hoveredModel = null;
+            if (enable) {
+                // Scene PERTAMA (paling atas dalam senarai) sentiasa jadi default view bila
+                // masuk Pratonton/VR/AR — tak kira scene mana yang terakhir diedit.
+                if (projectScenesMeta.length > 0 && activeSceneId !== projectScenesMeta[0].id) {
+                    await switchToScene(projectScenesMeta[0].id);
+                }
+
+                closeAnimModal();
+                document.body.classList.add('preview-mode');
+                btnTogglePreview.style.display = 'none';
+                btnExitPreview.style.display = 'block';
+                modeTextLabel.innerText = "Pratonton Pengguna (Interactive Mode)";
+
+                deselectObject();
+                gridHelper.visible = false;
+                cameraHelper.visible = false;
+
+                if (!renderer.xr.isPresenting) {
+                    editorCameraState.position.copy(mainCamera.position);
+                    editorCameraState.rotation.copy(mainCamera.rotation);
+                    editorCameraState.target.copy(controls.target);
+                }
+
+                if (isARSession) {
+                    // AR: jangan letak kamera/visibility lagi — tunggu tap-to-place (hit-test).
+                    isPlaced = false;
+                    hitTestSourceRequested = false;
+                    hitTestSource = null;
+                    reticle.visible = false;
+                    contentRoot.position.set(0, 0, 0);
+                    contentRoot.quaternion.identity();
+                    loadedModelsList.forEach(m => { m.visible = false; });
+                } else {
+                    applyPreviewVisibilityAndCamera();
+                }
+
+            } else {
+                document.body.classList.remove('preview-mode');
+                btnTogglePreview.style.display = 'block';
+                btnExitPreview.style.display = 'none';
+                modeTextLabel.innerText = "Penyuntingan Interaktif";
+
+                gridHelper.visible = true;
+                cameraHelper.visible = true;
+
+                loadedModelsList.forEach(m => {
+                    m.visible = true;
+                });
+
+                contentRoot.position.set(0, 0, 0);
+                contentRoot.quaternion.identity();
+
+                if (!renderer.xr.isPresenting) {
+                    cameraRig.position.set(0, 0, 0);
+                    cameraRig.rotation.set(0, 0, 0);
+                    mainCamera.position.copy(editorCameraState.position);
+                    mainCamera.rotation.copy(editorCameraState.rotation);
+                    controls.target.copy(editorCameraState.target);
+
+                    controls.mouseButtons = {
+                        LEFT: THREE.MOUSE.ROTATE,
+                        MIDDLE: THREE.MOUSE.DOLLY,
+                        RIGHT: THREE.MOUSE.PAN
+                    };
+                    controls.enabled = true;
+                    controls.update();
+                }
+            }
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        // HOOK SESI WEBXR SEBENAR (headset) — sentiasa sync dengan mod pratonton sedia ada
+        let savedSceneBackgroundForAR = null;
+
+        renderer.xr.addEventListener('sessionstart', async () => {
+            // Tentukan AR vs VR DULU (setPreviewMode baca isARSession untuk putuskan
+            // sama ada terus letak kamera macam VR, atau tunggu tap-to-place untuk AR).
+            const session = renderer.xr.getSession();
+            const blendMode = session && session.environmentBlendMode;
+            isARSession = !!(blendMode && blendMode !== 'opaque');
+
+            await setPreviewMode(true);
+
+            // AR (passthrough) perlukan latar lut sinar supaya kamera dunia sebenar nampak.
+            // VR (environmentBlendMode 'opaque') kekal guna warna latar biasa.
+            if (isARSession) {
+                savedSceneBackgroundForAR = scene.background;
+                scene.background = null;
+            }
+        });
+        renderer.xr.addEventListener('sessionend', () => {
+            cameraRig.position.set(0, 0, 0);
+            cameraRig.rotation.set(0, 0, 0);
+            contentRoot.position.set(0, 0, 0);
+            contentRoot.quaternion.identity();
+
+            isARSession = false;
+            isPlaced = false;
+            hitTestSource = null;
+            hitTestSourceRequested = false;
+            reticle.visible = false;
+
+            if (savedSceneBackgroundForAR !== null) {
+                scene.background = savedSceneBackgroundForAR;
+                savedSceneBackgroundForAR = null;
+            }
+
+            setPreviewMode(false);
+        });
+
+        btnTogglePreview.addEventListener('click', () => setPreviewMode(true));
+        btnExitPreview.addEventListener('click', () => setPreviewMode(false));
+
+        // FUNGSI FOKUS KAMERA
+        document.getElementById('btn-focus-obj').addEventListener('click', () => {
+            if (!selectedModel) {
+                alert("Sila pilih satu objek 3D atau Kamera terlebih dahulu!");
+                return;
+            }
+
+            const box = new THREE.Box3().setFromObject(selectedModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+            const distance = maxDim * 2.5;
+            const direction = new THREE.Vector3()
+                .subVectors(mainCamera.position, controls.target)
+                .normalize();
+
+            if (direction.length() === 0) direction.set(0, 1, 2).normalize();
+
+            mainCamera.position.copy(center).add(direction.multiplyScalar(distance));
+            controls.target.copy(center);
+            controls.update();
+        });
+
+        // KOTAK SEMAK INITIAL HIDDEN
+        const chkInitialHidden = document.getElementById('chk-initial-hidden');
+        chkInitialHidden.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.initialVisibility = !this.checked;
+                renderObjectsList();
+                scheduleAutoSave();
+            }
+        });
+
+        // STRUKTUR ARRAY OBJEK & AUDIO
+        const loadedModelsList = [];
+        const uploadedAudios = {};
+        let selectedModel = null;
+        let hoveredModel = null;
+        let activeAudioElement = null;
+
+        // KANDUNGAN SCENE (semua objek) diletak dalam group ni, BUKAN terus dalam `scene`.
+        // Semasa editing/VR, group ni kekal identity transform (sama macam sebelum ni).
+        // Semasa AR tap-to-place, group INI yang digerakkan ke titik hit-test, bukan kamera.
+        const contentRoot = new THREE.Group();
+        contentRoot.name = 'ContentRoot';
+        scene.add(contentRoot);
+
+        // RETICLE (penunjuk tap-to-place semasa AR)
+        const reticleGeometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
+        const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
+        const reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+        reticle.matrixAutoUpdate = false;
+        reticle.visible = false;
+        scene.add(reticle);
+
+        let isARSession = false;
+        let isPlaced = false;
+        let hitTestSource = null;
+        let hitTestSourceRequested = false;
+
+        // ---------------------------------------------------------------
+        // SUPABASE (Auth + Database + Storage) & AUTO-SAVE
+        // ---------------------------------------------------------------
+        const SUPABASE_URL = 'https://jmuraizgowqwmpmetupu.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_DZ8vjKrIJhXM34D7ddS6dw_nlIL18YD';
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let activeProjectId = null;
+        let activeProjectName = null;
+        let activeProjectIsPublic = false;
+        let projectScenesMeta = []; // [{id, name}] — senarai scene dalam projek semasa
+        let activeSceneId = null;
+        let sceneDataCache = {}; // {sceneId: {bgColor, camera, objects}} untuk scene TAK aktif
+        let isRestoringProject = false;
+        let autoSaveTimer = null;
+
+        // ---- AUTH ----
+        async function signUpUser(email, password) {
+            const { data, error } = await supabaseClient.auth.signUp({ email, password });
+            if (error) throw error;
+            return data;
+        }
+
+        async function signInUser(email, password) {
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            return data;
+        }
+
+        async function signOutUser() {
+            await supabaseClient.auth.signOut();
+        }
+
+        // ---- STORAGE (fail model/gambar/audio) ----
+        async function uploadAssetToStorage(file) {
+            if (!currentUser) throw new Error('Sila log masuk dahulu.');
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+
+            const { error } = await supabaseClient.storage.from('project-assets').upload(path, file, {
+                cacheControl: '3600',
+                upsert: false
+            });
+            if (error) throw error;
+
+            const { data } = supabaseClient.storage.from('project-assets').getPublicUrl(path);
+            return data.publicUrl;
+        }
+
+        // ---- PROJEK (Firestore-setara: jadual `projects` di Supabase) ----
+        async function fetchMyProjects() {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .select('id,name,is_public,updated_at')
+                .order('updated_at', { ascending: false });
+            if (error) { console.error(error); return []; }
+            return data || [];
+        }
+
+        async function createProjectRow(name) {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .insert({ owner_id: currentUser.id, name: name, data: {} })
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        }
+
+        async function loadProjectRow(projectId) {
+            const { data, error } = await supabaseClient
+                .from('projects')
+                .select('*')
+                .eq('id', projectId)
+                .single();
+            if (error) { console.error(error); return null; }
+            return data;
+        }
+
+        async function saveProjectRow(projectId, dataObj) {
+            const { error } = await supabaseClient
+                .from('projects')
+                .update({ data: dataObj })
+                .eq('id', projectId);
+            if (error) throw error;
+        }
+
+        async function deleteProjectRow(projectId) {
+            const { error } = await supabaseClient.from('projects').delete().eq('id', projectId);
+            if (error) throw error;
+        }
+
+        async function renameProjectRow(projectId, newName) {
+            const { error } = await supabaseClient.from('projects').update({ name: newName }).eq('id', projectId);
+            if (error) throw error;
+        }
+
+        async function togglePublicRow(projectId, isPublic) {
+            const { error } = await supabaseClient.from('projects').update({ is_public: isPublic }).eq('id', projectId);
+            if (error) throw error;
+        }
+
+        function setSaveStatusText(text) {
+            const el = document.getElementById('save-status-text');
+            if (el) el.innerText = text;
+        }
+
+        function scheduleAutoSave() {
+            if (isRestoringProject || !activeProjectId) return;
+            setSaveStatusText('⏳ Menyimpan...');
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+                saveCurrentProject();
+            }, 800);
+        }
+
+        function getDefaultSceneData() {
+            return {
+                bgColor: '#87ceeb',
+                camera: {
+                    position: [0, 2, 6],
+                    rotation: [0, 0, 0],
+                    interactions: []
+                },
+                objects: []
+            };
+        }
+
+        // Serialize HANYA objek/kamera/latar scene yang SEDANG hidup dalam viewport
+        // (tidak termasuk audio — audio dikongsi sepanjang projek, bukan per-scene).
+        function serializeSceneObjectsCameraColor() {
+            const objects = loadedModelsList.map(m => {
+                const ud = m.userData;
+                return {
+                    id: ud.id,
+                    fileName: ud.fileName,
+                    kind: ud.kind || 'model',
+                    primType: ud.primType || null,
+                    textContent: ud.textContent !== undefined ? ud.textContent : null,
+                    fileUrl: (ud.kind === 'model' || ud.kind === 'image') ? (ud.sourceUrl || null) : null,
+                    fileExt: ud.fileExt || null,
+                    position: m.position.toArray(),
+                    rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+                    scale: m.scale.toArray(),
+                    initialPosition: ud.initialPosition.toArray(),
+                    initialRotation: [ud.initialRotation.x, ud.initialRotation.y, ud.initialRotation.z],
+                    initialScale: ud.initialScale.toArray(),
+                    initialVisibility: ud.initialVisibility,
+                    interactions: ud.interactions || []
+                };
+            });
+
+            return {
+                bgColor: bgColorPicker.value,
+                camera: {
+                    position: previewCameraMarker.position.toArray(),
+                    rotation: [previewCameraMarker.rotation.x, previewCameraMarker.rotation.y, previewCameraMarker.rotation.z],
+                    interactions: previewCameraMarker.userData.interactions || []
+                },
+                objects: objects
+            };
+        }
+
+        // Serialize KESELURUHAN projek (semua scene + audio dikongsi) untuk disimpan ke profile.
+        function serializeSceneForSave() {
+            if (activeSceneId) {
+                sceneDataCache[activeSceneId] = serializeSceneObjectsCameraColor();
+            }
+
+            const audios = Object.keys(uploadedAudios).map(fileName => ({
+                fileName: fileName,
+                url: uploadedAudios[fileName]
+            }));
+
+            const scenesOut = projectScenesMeta.map(meta => {
+                const sd = sceneDataCache[meta.id] || getDefaultSceneData();
+                return {
+                    id: meta.id,
+                    name: meta.name,
+                    bgColor: sd.bgColor,
+                    camera: sd.camera,
+                    objects: sd.objects
+                };
+            });
+
+            return {
+                activeSceneId: activeSceneId,
+                scenes: scenesOut,
+                audios: audios
+            };
+        }
+
+        async function saveCurrentProject() {
+            if (!activeProjectId) return;
+            const dataObj = serializeSceneForSave();
+            try {
+                await saveProjectRow(activeProjectId, dataObj);
+                const now = new Date();
+                setSaveStatusText('💾 Disimpan ' + now.toLocaleTimeString());
+            } catch (err) {
+                console.error('Auto-save gagal:', err);
+                setSaveStatusText('⚠️ Gagal simpan!');
+            }
+        }
+
+        function setupAnimationMixerFor(object3D, animations) {
+            let mixer = null, animAction = null;
+            if (animations && animations.length > 0) {
+                mixer = new THREE.AnimationMixer(object3D);
+                animAction = mixer.clipAction(animations[0]);
+
+                mixer.addEventListener('finished', function (e) {
+                    if (e.action === animAction) {
+                        if (object3D.userData.interactions) {
+                            const animAct = object3D.userData.interactions.find(a => a.action === 'toggleModelAnim');
+                            if (animAct && animAct.animMode === 'toggleReverse') {
+                                if (object3D.userData.animState === 'playing_fwd') {
+                                    object3D.userData.animState = 'atEnd';
+                                } else if (object3D.userData.animState === 'playing_rev') {
+                                    object3D.userData.animState = 'atStart';
+                                }
+                            } else {
+                                object3D.userData.animState = 'stopped';
+                            }
+                        }
+                    }
+                });
+            }
+            return { mixer, animAction };
+        }
+
+        function restoreModelFromUrl(objData) {
+            return new Promise((resolve) => {
+                const url = objData.fileUrl;
+                if (!url) { resolve(null); return; }
+
+                const ext = objData.fileExt || 'glb';
+
+                const onLoaded = (loadedRoot, animations) => {
+                    const mixerInfo = setupAnimationMixerFor(loadedRoot, animations);
+
+                    loadedRoot.userData = {
+                        id: objData.id,
+                        fileName: objData.fileName,
+                        kind: 'model',
+                        sourceUrl: url,
+                        fileExt: ext,
+                        initialPosition: new THREE.Vector3().fromArray(objData.initialPosition),
+                        initialRotation: new THREE.Euler(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]),
+                        initialScale: new THREE.Vector3().fromArray(objData.initialScale),
+                        initialVisibility: objData.initialVisibility,
+                        interactions: objData.interactions || [],
+                        isRotating: false,
+                        mixer: mixerInfo.mixer,
+                        animAction: mixerInfo.animAction,
+                        animState: 'stopped',
+                        stepStateToggle: false
+                    };
+
+                    loadedRoot.position.fromArray(objData.position);
+                    loadedRoot.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
+                    loadedRoot.scale.fromArray(objData.scale);
+
+                    fixModelMaterialLighting(loadedRoot);
+
+                    contentRoot.add(loadedRoot);
+                    loadedModelsList.push(loadedRoot);
+
+                    resolve(loadedRoot);
+                };
+
+                const onErr = (err) => {
+                    console.error('Ralat memuat semula model dari Storage:', err);
+                    resolve(null);
+                };
+
+                if (ext === 'fbx') {
+                    fbxLoader.load(url, (fbx) => onLoaded(fbx, fbx.animations), undefined, onErr);
+                } else {
+                    gltfLoader.load(url, (gltf) => onLoaded(gltf.scene, gltf.animations), undefined, onErr);
+                }
+            });
+        }
+
+        function clearViewportObjects() {
+            [...loadedModelsList].forEach(m => deleteObject(m));
+            hoveredModel = null;
+            undoStack = [];
+            redoStack = [];
+        }
+
+        // Papar satu set data scene (bgColor/camera/objects) ke dalam viewport semasa.
+        // TIDAK clear dulu — panggil clearViewportObjects() sebelum ni kalau perlu.
+        async function applySceneDataToViewport(sceneData) {
+            const bg = (sceneData && sceneData.bgColor) || '#87ceeb';
+            scene.background = new THREE.Color(bg);
+            bgColorPicker.value = bg;
+
+            const cam = (sceneData && sceneData.camera) || getDefaultSceneData().camera;
+            previewCameraMarker.position.fromArray(cam.position);
+            previewCameraMarker.rotation.set(cam.rotation[0], cam.rotation[1], cam.rotation[2]);
+            previewCameraMarker.userData.interactions = cam.interactions || [];
+            cameraHelper.update();
+
+            for (const objData of ((sceneData && sceneData.objects) || [])) {
+                if (objData.kind === 'model') {
+                    await restoreModelFromUrl(objData);
+                } else if (objData.kind === 'image') {
+                    await restoreImageFromUrl(objData);
+                } else {
+                    const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
+                    if (mesh) {
+                        mesh.position.fromArray(objData.position);
+                        mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
+                        mesh.scale.fromArray(objData.scale);
+                        mesh.userData.initialPosition.fromArray(objData.initialPosition);
+                        mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
+                        mesh.userData.initialScale.fromArray(objData.initialScale);
+                        mesh.userData.initialVisibility = objData.initialVisibility;
+                        mesh.userData.interactions = objData.interactions || [];
+                    }
+                }
+            }
+        }
+
+        async function loadProjectIntoEditor(projectId) {
+            isRestoringProject = true;
+            setSaveStatusText('⏳ Memuatkan projek...');
+
+            try {
+                const row = await loadProjectRow(projectId);
+                const data = row ? row.data : null;
+
+                clearViewportObjects();
+                Object.keys(uploadedAudios).forEach(fn => delete uploadedAudios[fn]);
+                updateAudioDropdown();
+                renderMediaList();
+
+                sceneDataCache = {};
+                projectScenesMeta = [];
+                activeSceneId = null;
+
+                if (!data || !data.scenes) {
+                    const newId = 'scene_' + (Date.now() + Math.random());
+                    projectScenesMeta = [{ id: newId, name: 'Scene 1' }];
+                    sceneDataCache[newId] = getDefaultSceneData();
+                    activeSceneId = newId;
+
+                    await applySceneDataToViewport(sceneDataCache[newId]);
+                    renderScenesList();
+                    renderObjectsList();
+                    deselectObject();
+                    setSaveStatusText('Projek baharu.');
+                    return;
+                }
+
+                (data.audios || []).forEach(a => {
+                    uploadedAudios[a.fileName] = a.url;
+                });
+                updateAudioDropdown();
+                renderMediaList();
+
+                projectScenesMeta = data.scenes.map(s => ({ id: s.id, name: s.name || 'Scene' }));
+                data.scenes.forEach(s => {
+                    sceneDataCache[s.id] = { bgColor: s.bgColor, camera: s.camera, objects: s.objects || [] };
+                });
+
+                activeSceneId = (data.activeSceneId && projectScenesMeta.some(s => s.id === data.activeSceneId))
+                    ? data.activeSceneId
+                    : projectScenesMeta[0].id;
+
+                await applySceneDataToViewport(sceneDataCache[activeSceneId]);
+
+                renderScenesList();
+                renderObjectsList();
+                deselectObject();
+                setSaveStatusText('💾 Projek dimuatkan.');
+            } finally {
+                isRestoringProject = false;
+            }
+        }
+
+        async function switchToScene(sceneId) {
+            if (sceneId === activeSceneId) return;
+            if (!projectScenesMeta.some(s => s.id === sceneId)) return;
+
+            isRestoringProject = true;
+            try {
+                if (activeSceneId) {
+                    sceneDataCache[activeSceneId] = serializeSceneObjectsCameraColor();
+                }
+
+                clearViewportObjects();
+                deselectObject();
+
+                activeSceneId = sceneId;
+                const target = sceneDataCache[sceneId] || getDefaultSceneData();
+                await applySceneDataToViewport(target);
+
+                renderScenesList();
+                renderObjectsList();
+            } finally {
+                isRestoringProject = false;
+            }
+            scheduleAutoSave();
+        }
+
+        // Tukar scene dicetus oleh tindakan interaksi (onClick/onHover) semasa Pratonton/VR/AR
+        // sedang aktif — bukan dari klik senarai scene dalam editor. Selepas scene bertukar,
+        // letak semula visibility awal & kamera ikut Kedudukan Awal Kamera scene baru tu
+        // (macam "portal"/teleport ke scene lain).
+        async function changeSceneDuringInteraction(targetSceneId) {
+            if (!targetSceneId || targetSceneId === activeSceneId) return;
+            if (!projectScenesMeta.some(s => s.id === targetSceneId)) return;
+
+            await switchToScene(targetSceneId);
+
+            if (isPreviewMode) {
+                if (isARSession) {
+                    // AR: minta pengguna tap-to-place semula untuk scene baharu ni
+                    // (bukan gerakkan kamera — realiti sebenar tak berubah).
+                    isPlaced = false;
+                    hitTestSourceRequested = false;
+                    hitTestSource = null;
+                    reticle.visible = false;
+                    contentRoot.position.set(0, 0, 0);
+                    contentRoot.quaternion.identity();
+                    loadedModelsList.forEach(m => { m.visible = false; });
+                } else {
+                    applyPreviewVisibilityAndCamera();
+                }
+            }
+        }
+
+        function addNewScene() {
+            const name = prompt('Nama Scene Baharu:', 'Scene ' + (projectScenesMeta.length + 1));
+            if (!name) return;
+
+            const newId = 'scene_' + (Date.now() + Math.random());
+            projectScenesMeta.push({ id: newId, name: name });
+            sceneDataCache[newId] = getDefaultSceneData();
+            switchToScene(newId);
+        }
+
+        function renameScene(sceneId) {
+            const meta = projectScenesMeta.find(s => s.id === sceneId);
+            if (!meta) return;
+
+            const newName = prompt('Nama baharu untuk scene ni:', meta.name);
+            if (!newName) return;
+
+            meta.name = newName;
+            renderScenesList();
+            scheduleAutoSave();
+        }
+
+        function deleteSceneUI(sceneId) {
+            if (projectScenesMeta.length <= 1) {
+                alert('Tidak boleh dipadam — projek mesti ada sekurang-kurangnya satu scene.');
+                return;
+            }
+            const meta = projectScenesMeta.find(s => s.id === sceneId);
+            if (!meta) return;
+
+            if (!confirm(`Padam scene "${meta.name}"?\n\nSemua objek & tindakan dalam scene ni akan hilang. Tindakan ini tidak boleh dibuat asal (undo).`)) return;
+
+            const wasActive = sceneId === activeSceneId;
+            projectScenesMeta = projectScenesMeta.filter(s => s.id !== sceneId);
+            delete sceneDataCache[sceneId];
+
+            if (wasActive) {
+                activeSceneId = null;
+                switchToScene(projectScenesMeta[0].id);
+            } else {
+                renderScenesList();
+                scheduleAutoSave();
+            }
+        }
+
+        function reorderScene(draggedId, targetId) {
+            const fromIndex = projectScenesMeta.findIndex(s => s.id === draggedId);
+            const toIndex = projectScenesMeta.findIndex(s => s.id === targetId);
+            if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+
+            const [moved] = projectScenesMeta.splice(fromIndex, 1);
+            projectScenesMeta.splice(toIndex, 0, moved);
+
+            renderScenesList();
+            scheduleAutoSave();
+        }
+
+        let draggedSceneId = null;
+
+        function renderScenesList() {
+            const list = document.getElementById('scenes-list');
+            list.innerHTML = '';
+
+            if (projectScenesMeta.length === 0) {
+                list.innerHTML = '<li class="hierarchy-empty-msg">Tiada scene lagi</li>';
+                return;
+            }
+
+            projectScenesMeta.forEach((meta, index) => {
+                const li = document.createElement('li');
+                li.className = 'hierarchy-item scene-drag-item' + (meta.id === activeSceneId ? ' selected' : '');
+                li.draggable = true;
+
+                const firstBadge = index === 0 ? ' <span class="hint-text" style="color:#ffcc00;">(Default)</span>' : '';
+
+                li.innerHTML = `
+                    <span class="media-title-text">⠿ 🎬 ${meta.name}${firstBadge}</span>
+                    <div>
+                        <button class="btn-vis-obj" title="Tukar Nama Scene">✏️</button>
+                        <button class="btn-delete-obj" title="Padam Scene Ini">✕</button>
+                    </div>
+                `;
+
+                li.addEventListener('click', () => switchToScene(meta.id));
+
+                li.addEventListener('dragstart', (e) => {
+                    draggedSceneId = meta.id;
+                    li.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', meta.id);
+                });
+
+                li.addEventListener('dragend', () => {
+                    draggedSceneId = null;
+                    document.querySelectorAll('#scenes-list .hierarchy-item').forEach(el => {
+                        el.classList.remove('dragging', 'drag-over');
+                    });
+                });
+
+                li.addEventListener('dragover', (e) => {
+                    if (!draggedSceneId || draggedSceneId === meta.id) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    li.classList.add('drag-over');
+                });
+
+                li.addEventListener('dragleave', () => {
+                    li.classList.remove('drag-over');
+                });
+
+                li.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    li.classList.remove('drag-over');
+                    if (!draggedSceneId || draggedSceneId === meta.id) return;
+                    reorderScene(draggedSceneId, meta.id);
+                });
+
+                const btnRename = li.querySelector('.btn-vis-obj');
+                btnRename.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    renameScene(meta.id);
+                });
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteSceneUI(meta.id);
+                });
+
+                list.appendChild(li);
+            });
+        }
+
+        document.getElementById('btn-add-scene').addEventListener('click', addNewScene);
+
+        // ---- SKRIN GATE (Auth & Senarai Projek) ----
+        function showAuthGate() {
+            document.getElementById('auth-gate').style.display = 'flex';
+            document.getElementById('project-gate').style.display = 'none';
+        }
+
+        function showProjectGate() {
+            document.getElementById('auth-gate').style.display = 'none';
+            document.getElementById('project-gate').style.display = 'flex';
+            renderProjectGateList();
+        }
+
+        function updatePublicToggleButton() {
+            const btn = document.getElementById('btn-toggle-public');
+            if (activeProjectIsPublic) {
+                btn.textContent = '🌐 Awam';
+                btn.style.background = '#28a745';
+            } else {
+                btn.textContent = '🔒 Persendirian';
+                btn.style.background = '';
+            }
+        }
+
+        async function openProjectById(projectId, name, isPublic) {
+            activeProjectId = projectId;
+            activeProjectName = name;
+            activeProjectIsPublic = !!isPublic;
+            document.getElementById('project-name-label').innerText = name;
+            updatePublicToggleButton();
+
+            await loadProjectIntoEditor(projectId);
+
+            document.getElementById('auth-gate').style.display = 'none';
+            document.getElementById('project-gate').style.display = 'none';
+        }
+
+        async function renderProjectGateList() {
+            const list = document.getElementById('project-gate-list');
+            list.innerHTML = '<li style="cursor:default; color:#666;">Memuatkan...</li>';
+
+            const projects = await fetchMyProjects();
+
+            if (projects.length === 0) {
+                list.innerHTML = '<li style="cursor:default; color:#666; font-style:italic;">Tiada projek lagi — cipta satu di bawah.</li>';
+                return;
+            }
+
+            list.innerHTML = '';
+            projects.forEach(p => {
+                const li = document.createElement('li');
+                const updated = p.updated_at ? new Date(p.updated_at).toLocaleString() : '';
+                li.innerHTML = `
+                    <span>📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Kemas kini: ${updated}</span></span>
+                    <div>
+                        <button class="btn-vis-obj" title="Tukar Nama Projek">✏️</button>
+                        <button class="btn-delete-obj" title="Padam Projek">✕</button>
+                    </div>
+                `;
+
+                li.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-delete-obj') || e.target.closest('.btn-vis-obj')) return;
+                    openProjectById(p.id, p.name, p.is_public);
+                });
+
+                const btnRename = li.querySelector('.btn-vis-obj');
+                btnRename.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const newName = prompt('Nama baharu untuk projek ni:', p.name);
+                    if (!newName || newName.trim() === '') return;
+                    await renameProjectRow(p.id, newName.trim());
+                    renderProjectGateList();
+                });
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Padam projek "${p.name}"?\n\nSemua scene & fail dalam projek ni akan hilang. Tindakan ini tidak boleh dibuat asal.`)) return;
+                    await deleteProjectRow(p.id);
+                    renderProjectGateList();
+                });
+
+                list.appendChild(li);
+            });
+        }
+
+        // ---- WIRING: SKRIN AUTH ----
+        let authMode = 'signin';
+        const tabSignIn = document.getElementById('tab-signin');
+        const tabSignUp = document.getElementById('tab-signup');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const authErrorEl = document.getElementById('auth-error');
+
+        function showAuthNormalFields() {
+            document.getElementById('auth-forgot-fields').style.display = 'none';
+            document.getElementById('auth-newpass-fields').style.display = 'none';
+            document.getElementById('auth-normal-fields').style.display = 'block';
+        }
+
+        tabSignIn.addEventListener('click', () => {
+            authMode = 'signin';
+            tabSignIn.classList.add('active');
+            tabSignUp.classList.remove('active');
+            authSubmitBtn.textContent = 'Log Masuk';
+            authErrorEl.textContent = '';
+            showAuthNormalFields();
+        });
+        tabSignUp.addEventListener('click', () => {
+            authMode = 'signup';
+            tabSignUp.classList.add('active');
+            tabSignIn.classList.remove('active');
+            authSubmitBtn.textContent = 'Daftar Akaun';
+            authErrorEl.textContent = '';
+            showAuthNormalFields();
+        });
+
+        // ---- LUPA KATA LALUAN ----
+        document.getElementById('link-forgot-password').addEventListener('click', (e) => {
+            e.preventDefault();
+            document.getElementById('auth-normal-fields').style.display = 'none';
+            document.getElementById('auth-forgot-fields').style.display = 'block';
+            document.getElementById('forgot-email').value = document.getElementById('auth-email').value;
+            document.getElementById('forgot-error').textContent = '';
+        });
+
+        document.getElementById('btn-back-to-signin').addEventListener('click', () => {
+            showAuthNormalFields();
+        });
+
+        document.getElementById('btn-send-reset').addEventListener('click', async () => {
+            const email = document.getElementById('forgot-email').value.trim();
+            const errorEl = document.getElementById('forgot-error');
+            errorEl.style.color = '#d9534f';
+            errorEl.textContent = '';
+
+            if (!email) {
+                errorEl.textContent = 'Sila isi emel.';
+                return;
+            }
+
+            try {
+                const redirectUrl = window.location.origin + window.location.pathname;
+                const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+                if (error) throw error;
+                errorEl.style.color = '#8fd18f';
+                errorEl.textContent = 'Link reset dihantar! Sila semak emel korang (termasuk folder spam).';
+            } catch (err) {
+                errorEl.textContent = err.message || 'Gagal hantar link reset.';
+            }
+        });
+
+        document.getElementById('btn-set-new-password').addEventListener('click', async () => {
+            const newPassword = document.getElementById('new-password-input').value;
+            const errorEl = document.getElementById('newpass-error');
+            errorEl.style.color = '#d9534f';
+            errorEl.textContent = '';
+
+            if (!newPassword || newPassword.length < 6) {
+                errorEl.textContent = 'Kata laluan mesti sekurang-kurangnya 6 aksara.';
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+                errorEl.style.color = '#8fd18f';
+                errorEl.textContent = 'Kata laluan berjaya ditukar! Sila log masuk semula.';
+                setTimeout(() => {
+                    showAuthNormalFields();
+                    showAuthGate();
+                }, 1500);
+            } catch (err) {
+                errorEl.textContent = err.message || 'Gagal tetapkan kata laluan baharu.';
+            }
+        });
+
+        authSubmitBtn.addEventListener('click', async () => {
+            const email = document.getElementById('auth-email').value.trim();
+            const password = document.getElementById('auth-password').value;
+            authErrorEl.style.color = '#d9534f';
+            authErrorEl.textContent = '';
+
+            if (!email || !password) {
+                authErrorEl.textContent = 'Sila isi emel & kata laluan.';
+                return;
+            }
+
+            authSubmitBtn.disabled = true;
+            try {
+                if (authMode === 'signup') {
+                    await signUpUser(email, password);
+                    authErrorEl.style.color = '#8fd18f';
+                    authErrorEl.textContent = 'Akaun didaftar! Sila log masuk.';
+                    tabSignIn.click();
+                } else {
+                    const result = await signInUser(email, password);
+                    currentUser = result.user;
+                    showProjectGate();
+                }
+            } catch (err) {
+                authErrorEl.style.color = '#d9534f';
+                authErrorEl.textContent = err.message || 'Ralat berlaku.';
+            } finally {
+                authSubmitBtn.disabled = false;
+            }
+        });
+
+        // ---- WIRING: SKRIN SENARAI PROJEK ----
+        document.getElementById('btn-create-project').addEventListener('click', async () => {
+            const nameInput = document.getElementById('new-project-name-input');
+            const errorEl = document.getElementById('project-gate-error');
+            const name = nameInput.value.trim();
+            errorEl.textContent = '';
+
+            if (!name) {
+                errorEl.textContent = 'Sila isi nama projek.';
+                return;
+            }
+
+            try {
+                const row = await createProjectRow(name);
+                nameInput.value = '';
+                await openProjectById(row.id, row.name, row.is_public);
+            } catch (err) {
+                errorEl.textContent = err.message || 'Gagal cipta projek.';
+            }
+        });
+
+        document.getElementById('btn-gate-sign-out').addEventListener('click', async () => {
+            await signOutUser();
+            currentUser = null;
+            activeProjectId = null;
+            showAuthGate();
+        });
+
+        // ---- WIRING: MODAL AKAUN SAYA ----
+        async function deleteAllUserStorageFiles() {
+            const { data: files, error } = await supabaseClient.storage.from('project-assets').list(currentUser.id);
+            if (error) { console.error('Gagal senaraikan fail Storage:', error); return; }
+            if (!files || files.length === 0) return;
+
+            const paths = files.map(f => `${currentUser.id}/${f.name}`);
+            const { error: removeError } = await supabaseClient.storage.from('project-assets').remove(paths);
+            if (removeError) console.error('Gagal padam fail Storage:', removeError);
+        }
+
+        async function deleteAllUserProjects() {
+            const { error } = await supabaseClient.from('projects').delete().eq('owner_id', currentUser.id);
+            if (error) throw error;
+        }
+
+        document.getElementById('btn-open-account-settings').addEventListener('click', () => {
+            document.getElementById('account-email-display').textContent = currentUser ? currentUser.email : '-';
+            document.getElementById('account-new-password').value = '';
+            document.getElementById('account-confirm-password').value = '';
+            document.getElementById('account-password-status').textContent = '';
+            document.getElementById('account-delete-confirm-input').value = '';
+            document.getElementById('account-delete-status').textContent = '';
+            document.getElementById('account-settings-modal').style.display = 'flex';
+        });
+
+        document.getElementById('btn-close-account-settings').addEventListener('click', () => {
+            document.getElementById('account-settings-modal').style.display = 'none';
+        });
+
+        document.getElementById('btn-change-password').addEventListener('click', async () => {
+            const newPassword = document.getElementById('account-new-password').value;
+            const confirmPassword = document.getElementById('account-confirm-password').value;
+            const statusEl = document.getElementById('account-password-status');
+            statusEl.style.color = '#d9534f';
+            statusEl.textContent = '';
+
+            if (!newPassword || newPassword.length < 6) {
+                statusEl.textContent = 'Kata laluan mesti sekurang-kurangnya 6 aksara.';
+                return;
+            }
+            if (newPassword !== confirmPassword) {
+                statusEl.textContent = 'Kata laluan tidak sepadan.';
+                return;
+            }
+
+            try {
+                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+                statusEl.style.color = '#8fd18f';
+                statusEl.textContent = 'Kata laluan berjaya ditukar!';
+                document.getElementById('account-new-password').value = '';
+                document.getElementById('account-confirm-password').value = '';
+            } catch (err) {
+                statusEl.textContent = err.message || 'Gagal tukar kata laluan.';
+            }
+        });
+
+        document.getElementById('btn-delete-account').addEventListener('click', async () => {
+            const confirmInput = document.getElementById('account-delete-confirm-input');
+            const statusEl = document.getElementById('account-delete-status');
+            statusEl.style.color = '#d9534f';
+            statusEl.textContent = '';
+
+            if (confirmInput.value.trim().toUpperCase() !== 'PADAM') {
+                statusEl.textContent = 'Sila taip "PADAM" (huruf besar) untuk sahkan.';
+                return;
+            }
+
+            if (!confirm('Ini tindakan TERAKHIR. Semua projek & fail anda akan dipadam KEKAL. Teruskan?')) return;
+
+            statusEl.style.color = '#ffcc00';
+            statusEl.textContent = 'Memadam data...';
+
+            try {
+                await deleteAllUserStorageFiles();
+                await deleteAllUserProjects();
+
+                statusEl.style.color = '#8fd18f';
+                statusEl.textContent = 'Semua data dipadam. Log keluar...';
+
+                setTimeout(async () => {
+                    await signOutUser();
+                    currentUser = null;
+                    activeProjectId = null;
+                    document.getElementById('account-settings-modal').style.display = 'none';
+                    showAuthGate();
+                }, 1500);
+            } catch (err) {
+                statusEl.style.color = '#d9534f';
+                statusEl.textContent = err.message || 'Gagal padam data.';
+            }
+        });
+
+        // ---- WIRING: TOP-BAR (dalam editor) ----
+        document.getElementById('btn-my-projects').addEventListener('click', async () => {
+            if (activeProjectId) await saveCurrentProject();
+            showProjectGate();
+        });
+
+        document.getElementById('btn-toggle-public').addEventListener('click', async () => {
+            if (!activeProjectId) return;
+            activeProjectIsPublic = !activeProjectIsPublic;
+            updatePublicToggleButton();
+            try {
+                await togglePublicRow(activeProjectId, activeProjectIsPublic);
+            } catch (err) {
+                console.error('Gagal tukar status awam:', err);
+            }
+        });
+
+        // ---- MODAL KONGSI LINK/QR ----
+        let shareQrInstance = null;
+
+        function getViewerUrl() {
+            const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
+            return base + 'view.html?project=' + encodeURIComponent(activeProjectId);
+        }
+
+        document.getElementById('btn-share-project').addEventListener('click', () => {
+            if (!activeProjectId) return;
+
+            const statusEl = document.getElementById('share-modal-status');
+            const qrContainer = document.getElementById('share-qr-code');
+            const linkInput = document.getElementById('share-link-input');
+
+            qrContainer.innerHTML = '';
+            linkInput.value = '';
+
+            if (!activeProjectIsPublic) {
+                statusEl.textContent = 'Projek ini masih "🔒 Persendirian". Tukar jadi "🌐 Awam" dahulu (butang di top-bar) supaya pengguna lain boleh akses tanpa log masuk.';
+            } else {
+                const url = getViewerUrl();
+                statusEl.textContent = 'Sesiapa dengan link/QR ni boleh terus buka pratonton AR/VR (tanpa perlu log masuk):';
+                linkInput.value = url;
+                shareQrInstance = new QRCode(qrContainer, {
+                    text: url,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#000000',
+                    colorLight: '#ffffff'
+                });
+            }
+
+            document.getElementById('share-modal').style.display = 'flex';
+        });
+
+        document.getElementById('btn-close-share-modal').addEventListener('click', () => {
+            document.getElementById('share-modal').style.display = 'none';
+        });
+
+        document.getElementById('btn-copy-share-link').addEventListener('click', () => {
+            const linkInput = document.getElementById('share-link-input');
+            if (!linkInput.value) return;
+
+            // Utamakan execCommand('copy') — jalan pada mana-mana origin (termasuk
+            // http:// LAN IP semasa testing), tak macam Clipboard API yang perlukan
+            // secure context (https/localhost) dan boleh gagal senyap.
+            linkInput.focus();
+            linkInput.select();
+            linkInput.setSelectionRange(0, linkInput.value.length);
+
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (e) {
+                copied = false;
+            }
+
+            if (copied) {
+                showPopupMessage('📋 Link disalin!', 1500);
+                return;
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(linkInput.value).then(() => {
+                    showPopupMessage('📋 Link disalin!', 1500);
+                }).catch(() => {
+                    showPopupMessage('⚠️ Gagal salin — sila tekan Ctrl+C selepas klik link', 2500);
+                });
+            } else {
+                showPopupMessage('⚠️ Gagal salin — sila tekan Ctrl+C selepas klik link', 2500);
+            }
+        });
+
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            currentUser = session ? session.user : null;
+
+            if (event === 'PASSWORD_RECOVERY') {
+                showAuthGate();
+                document.getElementById('auth-normal-fields').style.display = 'none';
+                document.getElementById('auth-forgot-fields').style.display = 'none';
+                document.getElementById('auth-newpass-fields').style.display = 'block';
+            }
+        });
+
+        async function initApp() {
+            // Kalau link ni dibuka dari emel reset kata laluan, biar event
+            // 'PASSWORD_RECOVERY' di atas uruskan papar borang — jangan ganggu.
+            if (window.location.hash.includes('type=recovery')) return;
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            currentUser = session ? session.user : null;
+
+            if (currentUser) {
+                showProjectGate();
+            } else {
+                showAuthGate();
+            }
+        }
+
+        const clock = new THREE.Clock();
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const infoPopup = document.getElementById('info-popup');
+
+        // AUDIO & ACTION INPUTS
+        const audioInput = document.getElementById('audio-input');
+        const selectAudioFile = document.getElementById('select-audio-file');
+        const selectAction = document.getElementById('select-action');
+        const audioSelectContainer = document.getElementById('audio-select-container');
+        const noteInputContainer = document.getElementById('note-input-container');
+        
+        // ANIMATION INPUTS
+        const animModeContainer = document.getElementById('anim-mode-container');
+        const selectAnimMode = document.getElementById('select-anim-mode');
+        const selectAnimDir = document.getElementById('select-anim-dir');
+        const inputAnimStartTime = document.getElementById('input-anim-starttime');
+        const inputAnimEndTime = document.getElementById('input-anim-endtime');
+
+        // ANIMATION MODAL ELEMENTS
+        const animModal = document.getElementById('anim-modal');
+        const animModalTitle = document.getElementById('anim-modal-title');
+        const animScrubber = document.getElementById('anim-scrubber');
+        const animTimeDisplay = document.getElementById('anim-time-display');
+        const animBtnPlayPause = document.getElementById('anim-btn-play-pause');
+        const animSpeedSelect = document.getElementById('anim-speed-select');
+        let isModalScrubbing = false;
+
+        // STEP MOVE INPUTS
+        const stepMoveContainer = document.getElementById('step-move-container');
+        const inputStepX = document.getElementById('input-step-x');
+        const inputStepY = document.getElementById('input-step-y');
+        const inputStepZ = document.getElementById('input-step-z');
+        const selectStepMode = document.getElementById('select-step-mode');
+
+        // TARGET OBJECTS MULTI-SELECT INPUT
+        const targetObjContainer = document.getElementById('target-obj-container');
+        const selectTargetObjects = document.getElementById('select-target-objects');
+        const savedActionsList = document.getElementById('saved-actions-list');
+
+        // TUKAR SCENE INPUT
+        const sceneSelectContainer = document.getElementById('scene-select-container');
+        const selectTargetScene = document.getElementById('select-target-scene');
+
+        function updateTargetSceneDropdown() {
+            selectTargetScene.innerHTML = '';
+            projectScenesMeta.forEach(meta => {
+                const opt = document.createElement('option');
+                opt.value = meta.id;
+                const isCurrent = meta.id === activeSceneId;
+                opt.textContent = isCurrent ? `🎬 ${meta.name} (Scene Semasa)` : `🎬 ${meta.name}`;
+                selectTargetScene.appendChild(opt);
+            });
+        }
+
+        audioInput.addEventListener('change', async (event) => {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            let successCount = 0;
+            for (const file of Array.from(files)) {
+                try {
+                    const url = await uploadAssetToStorage(file);
+                    uploadedAudios[file.name] = url;
+                    successCount++;
+                } catch (err) {
+                    console.error('Ralat upload audio:', err);
+                    alert(`Gagal upload "${file.name}": ` + (err.message || err));
+                }
+            }
+
+            updateAudioDropdown();
+            renderMediaList();
+            scheduleAutoSave();
+            if (successCount > 0) alert(`${successCount} fail audio telah berjaya dimuat naik!`);
+            audioInput.value = "";
+        });
+
+        function updateAudioDropdown() {
+            selectAudioFile.innerHTML = "";
+            const keys = Object.keys(uploadedAudios);
+            if (keys.length === 0) {
+                selectAudioFile.innerHTML = `<option value="">-- Tiada Fail Audio Muat Naik --</option>`;
+                return;
+            }
+
+            keys.forEach(fileName => {
+                const opt = document.createElement('option');
+                opt.value = fileName;
+                opt.textContent = fileName;
+                selectAudioFile.appendChild(opt);
+            });
+        }
+
+        function updateTargetObjectDropdown() {
+            selectTargetObjects.innerHTML = "";
+
+            loadedModelsList.forEach(obj => {
+                const opt = document.createElement('option');
+                opt.value = obj.userData.id;
+                const isSelf = selectedModel && obj.userData.id === selectedModel.userData.id;
+                opt.textContent = isSelf ? `🎯 ${obj.userData.fileName} (Objek Ini)` : `📦 ${obj.userData.fileName}`;
+                if (isSelf) opt.selected = true;
+                selectTargetObjects.appendChild(opt);
+            });
+        }
+
+        selectAction.addEventListener('change', () => {
+            audioSelectContainer.style.display = 'none';
+            noteInputContainer.style.display = 'none';
+            animModeContainer.style.display = 'none';
+            stepMoveContainer.style.display = 'none';
+            targetObjContainer.style.display = 'none';
+            sceneSelectContainer.style.display = 'none';
+
+            const val = selectAction.value;
+            if (val === 'playSound') {
+                audioSelectContainer.style.display = 'block';
+            } else if (val === 'popInfo') {
+                noteInputContainer.style.display = 'block';
+            } else if (val === 'toggleModelAnim') {
+                animModeContainer.style.display = 'block';
+                targetObjContainer.style.display = 'block';
+                updateTargetObjectDropdown();
+            } else if (val === 'stepMove') {
+                stepMoveContainer.style.display = 'block';
+                targetObjContainer.style.display = 'block';
+                updateTargetObjectDropdown();
+            } else if (val === 'toggleTargetVisibility') {
+                targetObjContainer.style.display = 'block';
+                updateTargetObjectDropdown();
+            } else if (val === 'changeColor' || val === 'rotateAnim') {
+                targetObjContainer.style.display = 'block';
+                updateTargetObjectDropdown();
+            } else if (val === 'changeScene') {
+                sceneSelectContainer.style.display = 'block';
+                updateTargetSceneDropdown();
+            }
+        });
+
+        // -------------------------------------------------------------
+        // LOGIK MODAL INSPECTOR & PREVIEW MASA ANIMASI
+        // -------------------------------------------------------------
+        function openAnimModal() {
+            if (!selectedModel || !selectedModel.userData.mixer || !selectedModel.userData.animAction) {
+                alert("Objek ini tidak mempunyai animasi 3D terbina untuk diuji.");
+                return;
+            }
+
+            const action = selectedModel.userData.animAction;
+            const duration = action.getClip().duration;
+
+            animModalTitle.innerText = selectedModel.userData.fileName;
+            animScrubber.max = duration;
+            animScrubber.value = action.time || 0;
+            animSpeedSelect.value = action.timeScale || 1.0;
+
+            action.play();
+            action.paused = false;
+
+            animModal.style.display = "block";
+            animBtnPlayPause.innerText = "⏸ Jeda";
+        }
+
+        function closeAnimModal() {
+            animModal.style.display = "none";
+            if (selectedModel && selectedModel.userData.animAction) {
+                selectedModel.userData.animAction.timeScale = 1.0;
+            }
+        }
+
+        document.getElementById('btn-open-anim-modal').addEventListener('click', openAnimModal);
+        document.getElementById('btn-close-anim-modal').addEventListener('click', closeAnimModal);
+
+        animBtnPlayPause.addEventListener('click', () => {
+            if (!selectedModel || !selectedModel.userData.animAction) return;
+            const action = selectedModel.userData.animAction;
+            action.paused = !action.paused;
+            animBtnPlayPause.innerText = action.paused ? "▶ Main" : "⏸ Jeda";
+        });
+
+        animSpeedSelect.addEventListener('change', () => {
+            if (!selectedModel || !selectedModel.userData.animAction) return;
+            selectedModel.userData.animAction.timeScale = parseFloat(animSpeedSelect.value);
+        });
+
+        animScrubber.addEventListener('mousedown', () => { isModalScrubbing = true; });
+        animScrubber.addEventListener('mouseup', () => { isModalScrubbing = false; });
+        animScrubber.addEventListener('input', () => {
+            if (!selectedModel || !selectedModel.userData.animAction || !selectedModel.userData.mixer) return;
+            const action = selectedModel.userData.animAction;
+            action.time = parseFloat(animScrubber.value);
+            selectedModel.userData.mixer.update(0); // Force render pose
+        });
+
+        document.getElementById('anim-btn-set-start').addEventListener('click', () => {
+            if (!selectedModel || !selectedModel.userData.animAction) return;
+            inputAnimStartTime.value = selectedModel.userData.animAction.time.toFixed(1);
+            showPopupMessage(`⏱️ Masa Mula Diberi: ${inputAnimStartTime.value}s`, 1500);
+        });
+
+        document.getElementById('anim-btn-set-end').addEventListener('click', () => {
+            if (!selectedModel || !selectedModel.userData.animAction) return;
+            inputAnimEndTime.value = selectedModel.userData.animAction.time.toFixed(1);
+            showPopupMessage(`⏱️ Masa Tamat Diberi: ${inputAnimEndTime.value}s`, 1500);
+        });
+
+
+        function getTargetObjects(sourceModel, targetIdsArray) {
+            if (!targetIdsArray || !Array.isArray(targetIdsArray) || targetIdsArray.length === 0) {
+                return [sourceModel];
+            }
+
+            const targets = [];
+            targetIdsArray.forEach(id => {
+                if (id === 'self') {
+                    if (!targets.includes(sourceModel)) targets.push(sourceModel);
+                } else if (previewCameraMarker && id == previewCameraMarker.userData.id) {
+                    if (!targets.includes(previewCameraMarker)) targets.push(previewCameraMarker);
+                } else {
+                    const found = loadedModelsList.find(o => o.userData.id == id);
+                    if (found && !targets.includes(found)) targets.push(found);
+                }
+            });
+
+            return targets.length > 0 ? targets : [sourceModel];
+        }
+
+        // PRIMITIVES & TEXT
+        function addPrimitive(type, options) {
+            options = options || {};
+            let geometry, material, mesh, nameStr;
+            let isText = false;
+            let fullUserText = null;
+
+            material = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide });
+
+            if (type === 'box') {
+                geometry = new THREE.BoxGeometry(1, 1, 1);
+                nameStr = 'Kubus';
+            } else if (type === 'sphere') {
+                geometry = new THREE.SphereGeometry(0.6, 32, 32);
+                nameStr = 'Sfera';
+            } else if (type === 'cylinder') {
+                geometry = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32);
+                nameStr = 'Silinder';
+            } else if (type === 'plane') {
+                geometry = new THREE.PlaneGeometry(2, 2);
+                nameStr = 'Satah';
+            } else if (type === 'text') {
+                const userText = options.presetText !== undefined ? options.presetText : prompt("Sila taipkan teks untuk dipaparkan:", "Teks Informasi");
+                if (!userText) return null;
+
+                isText = true;
+                fullUserText = userText;
+                nameStr = userText.length > 15 ? userText.substring(0, 15) + '...' : userText;
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 1024;
+                canvas.height = 256;
+                
+                ctx.fillStyle = 'rgba(20, 20, 20, 0.8)';
+                ctx.roundRect ? ctx.roundRect(0, 0, canvas.width, canvas.height, 30) : ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.fill();
+                
+                ctx.strokeStyle = '#007acc';
+                ctx.lineWidth = 15;
+                ctx.strokeRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.font = 'bold 80px "Segoe UI", sans-serif';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(userText, canvas.width / 2, canvas.height / 2);
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+                geometry = new THREE.PlaneGeometry(4, 1);
+            }
+
+            mesh = new THREE.Mesh(geometry, material);
+            const offsetCount = loadedModelsList.length;
+            mesh.position.set((offsetCount % 3) - 1, isText ? 1.5 : 0.5, (offsetCount % 2) - 0.5);
+
+            mesh.userData = {
+                id: options.id || (Date.now() + Math.random()),
+                fileName: (isText ? '🔤 Teks: ' : '🧊 ') + nameStr,
+                kind: 'primitive',
+                primType: type,
+                textContent: fullUserText,
+                initialPosition: new THREE.Vector3().copy(mesh.position),
+                initialRotation: new THREE.Euler().copy(mesh.rotation),
+                initialScale: new THREE.Vector3().copy(mesh.scale),
+                initialVisibility: true,
+                interactions: [],
+                isRotating: false,
+                mixer: null,
+                animAction: null,
+                animState: 'stopped',
+                stepStateToggle: false
+            };
+
+            contentRoot.add(mesh);
+            loadedModelsList.push(mesh);
+
+            if (!options.skipSelect) {
+                renderObjectsList();
+                selectObject(mesh);
+            }
+
+            scheduleAutoSave();
+            return mesh;
+        }
+
+        document.getElementById('btn-add-box').addEventListener('click', () => addPrimitive('box'));
+        document.getElementById('btn-add-sphere').addEventListener('click', () => addPrimitive('sphere'));
+        document.getElementById('btn-add-cylinder').addEventListener('click', () => addPrimitive('cylinder'));
+        document.getElementById('btn-add-plane').addEventListener('click', () => addPrimitive('plane'));
+        document.getElementById('btn-add-text').addEventListener('click', () => addPrimitive('text'));
+
+        // GAMBAR 2D (satah bertekstur dari fail imej dimuat naik)
+        function buildImagePlaneMesh(url, fileName, fileExt, options) {
+            options = options || {};
+            return new Promise((resolve) => {
+                const loader = new THREE.TextureLoader();
+
+                loader.load(url, (texture) => {
+                    texture.encoding = THREE.sRGBEncoding;
+
+                    const imgW = texture.image ? texture.image.width : 0;
+                    const imgH = texture.image ? texture.image.height : 0;
+                    const aspect = (imgW && imgH) ? (imgW / imgH) : 1;
+                    const height = 2;
+                    const width = height * aspect;
+
+                    const geometry = new THREE.PlaneGeometry(width, height);
+                    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+                    const mesh = new THREE.Mesh(geometry, material);
+
+                    const offsetCount = loadedModelsList.length;
+                    mesh.position.set((offsetCount % 3) - 1, height / 2, (offsetCount % 2) - 0.5);
+
+                    mesh.userData = {
+                        id: options.id || (Date.now() + Math.random()),
+                        fileName: fileName,
+                        kind: 'image',
+                        sourceUrl: url,
+                        fileExt: fileExt,
+                        initialPosition: new THREE.Vector3().copy(mesh.position),
+                        initialRotation: new THREE.Euler().copy(mesh.rotation),
+                        initialScale: new THREE.Vector3().copy(mesh.scale),
+                        initialVisibility: true,
+                        interactions: [],
+                        isRotating: false,
+                        mixer: null,
+                        animAction: null,
+                        animState: 'stopped',
+                        stepStateToggle: false
+                    };
+
+                    contentRoot.add(mesh);
+                    loadedModelsList.push(mesh);
+
+                    if (!options.skipSelect) {
+                        renderObjectsList();
+                        selectObject(mesh);
+                    }
+
+                    scheduleAutoSave();
+                    resolve(mesh);
+                }, undefined, (err) => {
+                    console.error('Ralat memuat gambar:', err);
+                    resolve(null);
+                });
+            });
+        }
+
+        // Upload gambar BAHARU ke Supabase Storage dahulu, kemudian papar.
+        async function addImagePlane(file, options) {
+            const url = await uploadAssetToStorage(file);
+            const fileExt = (file.name.split('.').pop() || 'png').toLowerCase();
+            return buildImagePlaneMesh(url, '🖼️ ' + file.name, fileExt, options);
+        }
+
+        // Muat semula gambar SEDIA ADA terus dari URL Storage (tiada upload semula).
+        function restoreImageFromUrl(objData) {
+            if (!objData.fileUrl) return Promise.resolve(null);
+
+            return buildImagePlaneMesh(objData.fileUrl, objData.fileName, objData.fileExt, { id: objData.id, skipSelect: true }).then(mesh => {
+                if (mesh) {
+                    mesh.position.fromArray(objData.position);
+                    mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
+                    mesh.scale.fromArray(objData.scale);
+                    mesh.userData.initialPosition.fromArray(objData.initialPosition);
+                    mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
+                    mesh.userData.initialScale.fromArray(objData.initialScale);
+                    mesh.userData.initialVisibility = objData.initialVisibility;
+                    mesh.userData.interactions = objData.interactions || [];
+                }
+                return mesh;
+            });
+        }
+
+        const imageInput = document.getElementById('image-input');
+        imageInput.addEventListener('change', (event) => {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            Array.from(files).forEach((file) => {
+                addImagePlane(file).catch(err => {
+                    console.error('Gagal upload gambar:', err);
+                    alert('Gagal upload gambar: ' + (err.message || err));
+                });
+            });
+            imageInput.value = '';
+        });
+
+        // LOGIK KLIK & RAYCASTING STABIL
+        let pointerDownPos = { x: 0, y: 0 };
+
+        renderer.domElement.addEventListener('pointerdown', (event) => {
+            pointerDownPos.x = event.clientX;
+            pointerDownPos.y = event.clientY;
+        });
+
+        renderer.domElement.addEventListener('pointerup', (event) => {
+            if (event.button !== 0) return;
+            if (isDraggingGizmo) return;
+
+            const deltaX = Math.abs(event.clientX - pointerDownPos.x);
+            const deltaY = Math.abs(event.clientY - pointerDownPos.y);
+
+            if (deltaX > 5 || deltaY > 5) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, mainCamera);
+
+            if (isPreviewMode) {
+                if (loadedModelsList.length > 0) {
+                    const visibleObjects = loadedModelsList.filter(o => o.visible);
+                    const intersects = raycaster.intersectObjects(visibleObjects, true);
+                    if (intersects.length > 0) {
+                        let hitModel = intersects[0].object;
+                        while (hitModel.parent && hitModel.parent !== scene) {
+                            hitModel = hitModel.parent;
+                        }
+                        triggerInteraction(hitModel, 'onClick', event.clientX, event.clientY);
+                    }
+                }
+            } else {
+                const targets = [...loadedModelsList, previewCameraMarker];
+                const intersects = raycaster.intersectObjects(targets, true);
+
+                if (intersects.length > 0) {
+                    let hitModel = intersects[0].object;
+                    while (hitModel.parent && hitModel.parent !== scene) {
+                        hitModel = hitModel.parent;
+                    }
+                    selectObject(hitModel);
+                }
+            }
+        });
+
+        // HOVER EVENT
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            if (!isPreviewMode) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, mainCamera);
+
+            let hitModel = null;
+            if (loadedModelsList.length > 0) {
+                const visibleObjects = loadedModelsList.filter(o => o.visible);
+                const intersects = raycaster.intersectObjects(visibleObjects, true);
+
+                if (intersects.length > 0) {
+                    hitModel = intersects[0].object;
+                    while (hitModel.parent && hitModel.parent !== scene) {
+                        hitModel = hitModel.parent;
+                    }
+                }
+            }
+
+            if (hitModel !== hoveredModel) {
+                hoveredModel = hitModel;
+                clearTimeout(infoPopupHideTimer);
+                infoPopup.style.display = 'none';
+
+                if (hoveredModel) {
+                    triggerInteraction(hoveredModel, 'onHover', event.clientX, event.clientY);
+                }
+            }
+        });
+
+        // KAWALAN CONTROLLER VR (WebXR) — laser pointer untuk klik & hover dalam headset sebenar
+        const controller1 = renderer.xr.getController(0);
+        const controller2 = renderer.xr.getController(1);
+        scene.add(controller1);
+        scene.add(controller2);
+
+        const controllerLaserGeometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, -5)
+        ]);
+        const controllerLaserMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff });
+
+        [controller1, controller2].forEach(ctrl => {
+            const laser = new THREE.Line(controllerLaserGeometry, controllerLaserMaterial);
+            laser.name = 'controller-laser';
+            ctrl.add(laser);
+        });
+
+        const controllerRaycaster = new THREE.Raycaster();
+        const controllerTempMatrix = new THREE.Matrix4();
+
+        function getControllerRaycastHit(controller) {
+            controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
+            controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(controllerTempMatrix);
+
+            if (loadedModelsList.length === 0) return null;
+            const visibleObjects = loadedModelsList.filter(o => o.visible);
+            const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
+            if (intersects.length === 0) return null;
+
+            let hitModel = intersects[0].object;
+            while (hitModel.parent && hitModel.parent !== scene) {
+                hitModel = hitModel.parent;
+            }
+            return hitModel;
+        }
+
+        function onControllerSelect(event) {
+            if (!isPreviewMode) return;
+
+            if (isARSession && !isPlaced) {
+                if (reticle.visible) placeContentAtReticle();
+                return;
+            }
+
+            const hitModel = getControllerRaycastHit(event.target);
+            if (hitModel) {
+                triggerInteraction(hitModel, 'onClick');
+            }
+        }
+        controller1.addEventListener('select', onControllerSelect);
+        controller2.addEventListener('select', onControllerSelect);
+
+        let infoPopupHideTimer = null;
+
+        function showPopupMessage(message, duration) {
+            infoPopup.innerText = message;
+            infoPopup.style.left = '50%';
+            infoPopup.style.top = 'auto';
+            infoPopup.style.bottom = '30px';
+            infoPopup.style.transform = 'translateX(-50%)';
+            infoPopup.style.display = 'block';
+
+            clearTimeout(infoPopupHideTimer);
+            infoPopupHideTimer = setTimeout(() => { infoPopup.style.display = 'none'; }, duration);
+        }
+
+        function showInfoPopupAtPointer(title, content, duration, clientX, clientY) {
+            infoPopup.innerHTML = '';
+            if (title) {
+                const elTitle = document.createElement('div');
+                elTitle.className = 'info-popup-title';
+                elTitle.textContent = title;
+                infoPopup.appendChild(elTitle);
+            }
+            const elContent = document.createElement('div');
+            elContent.className = 'info-popup-content';
+            elContent.textContent = content || '';
+            infoPopup.appendChild(elContent);
+
+            infoPopup.style.bottom = 'auto';
+            infoPopup.style.transform = 'none';
+            infoPopup.style.display = 'block';
+
+            const containerRect = container.getBoundingClientRect();
+            let left = clientX - containerRect.left + 16;
+            let top = clientY - containerRect.top + 16;
+
+            const maxLeft = container.clientWidth - infoPopup.offsetWidth - 10;
+            const maxTop = container.clientHeight - infoPopup.offsetHeight - 10;
+            left = Math.max(10, Math.min(left, Math.max(10, maxLeft)));
+            top = Math.max(10, Math.min(top, Math.max(10, maxTop)));
+
+            infoPopup.style.left = left + 'px';
+            infoPopup.style.top = top + 'px';
+
+            clearTimeout(infoPopupHideTimer);
+            infoPopupHideTimer = setTimeout(() => { infoPopup.style.display = 'none'; }, duration);
+        }
+
+        // TRIGGER LOGIC
+        function triggerInteraction(model, eventType, clientX, clientY) {
+            if (!model.userData.interactions || !Array.isArray(model.userData.interactions)) return;
+
+            const matchingActions = model.userData.interactions.filter(act => act.trigger === eventType);
+            if (matchingActions.length === 0) return;
+
+            matchingActions.forEach(config => {
+                const targets = getTargetObjects(model, config.targetObjectIds);
+
+                // 1. ANIMATION TOGGLE
+                if (config.action === 'toggleModelAnim') {
+                    targets.forEach(targetObj => {
+                        if (targetObj.userData.mixer && targetObj.userData.animAction) {
+                            const action = targetObj.userData.animAction;
+                            const state = targetObj.userData.animState;
+                            const clipDuration = action.getClip().duration;
+
+                            const startTime = Math.max(0, config.animStartTime || 0);
+                            const endTime = (config.animEndTime && config.animEndTime > startTime) 
+                                ? Math.min(config.animEndTime, clipDuration) 
+                                : clipDuration;
+
+                            targetObj.userData.customStartTime = startTime;
+                            targetObj.userData.customEndTime = endTime;
+                            targetObj.userData.animDir = config.animDir;
+
+                            if (config.animMode === 'toggleReverse') {
+                                action.setLoop(THREE.LoopOnce, 1);
+                                action.clampWhenFinished = true;
+
+                                if (state === 'stopped' || state === 'atStart') {
+                                    action.reset();
+                                    action.time = startTime;
+                                    action.timeScale = 1;
+                                    action.play();
+                                    action.paused = false;
+                                    targetObj.userData.animState = 'playing_fwd';
+                                } else if (state === 'atEnd' || state === 'playing_fwd') {
+                                    action.paused = false;
+                                    action.timeScale = -1;
+                                    if (action.time >= endTime) action.time = endTime;
+                                    action.play();
+                                    targetObj.userData.animState = 'playing_rev';
+                                } else if (state === 'playing_rev') {
+                                    action.paused = false;
+                                    action.timeScale = 1;
+                                    action.play();
+                                    targetObj.userData.animState = 'playing_fwd';
+                                }
+                            } else {
+                                if (config.animMode === 'once') {
+                                    action.setLoop(THREE.LoopOnce, 1);
+                                    action.clampWhenFinished = true;
+                                } else {
+                                    action.setLoop(THREE.LoopRepeat, Infinity);
+                                }
+
+                                if (state === 'stopped' || state === 'paused') {
+                                    if (state === 'stopped') action.reset();
+                                    if (action.time < startTime || action.time >= endTime) action.time = startTime;
+                                    action.timeScale = (config.animDir === 'reverse') ? -1 : 1;
+                                    action.play();
+                                    action.paused = false;
+                                    targetObj.userData.animState = 'playing';
+                                } else {
+                                    action.paused = true;
+                                    targetObj.userData.animState = 'paused';
+                                }
+                            }
+                        }
+                    });
+                } 
+                // 2. STEP MOVE / SHIFT
+                else if (config.action === 'stepMove') {
+                    targets.forEach(targetObj => {
+                        const stepVec = new THREE.Vector3(config.stepX || 0, config.stepY || 0, config.stepZ || 0);
+                        stepVec.applyQuaternion(targetObj.quaternion);
+
+                        if (config.stepMode === 'toggle') {
+                            if (!targetObj.userData.stepStateToggle) {
+                                targetObj.position.add(stepVec);
+                                targetObj.userData.stepStateToggle = true;
+                            } else {
+                                targetObj.position.sub(stepVec);
+                                targetObj.userData.stepStateToggle = false;
+                            }
+                        } else {
+                            targetObj.position.add(stepVec);
+                        }
+                    });
+                }
+                // 3. TOGGLE TARGET VISIBILITY
+                else if (config.action === 'toggleTargetVisibility') {
+                    targets.forEach(targetObj => {
+                        targetObj.visible = !targetObj.visible;
+                    });
+                }
+                else if (config.action === 'changeColor') {
+                    targets.forEach(targetObj => {
+                        targetObj.traverse((child) => {
+                            if (child.isMesh && child.material && child.material.color) {
+                                child.material.color.setHex(Math.random() * 0xffffff);
+                            }
+                        });
+                    });
+                } 
+                else if (config.action === 'rotateAnim') {
+                    targets.forEach(targetObj => {
+                        targetObj.userData.isRotating = !targetObj.userData.isRotating;
+                    });
+                }
+                else if (config.action === 'popInfo') {
+                    const containerRect = container.getBoundingClientRect();
+                    const px = (typeof clientX === 'number') ? clientX : (containerRect.left + container.clientWidth / 2);
+                    const py = (typeof clientY === 'number') ? clientY : (containerRect.top + container.clientHeight / 2);
+                    // onHover: kekal terpapar selagi kursor di atas objek (hilang bila hover tamat, lihat pointermove).
+                    // onClick: kekal guna timer tetap sebab ia tindakan sekali klik, bukan status berterusan.
+                    const popupDuration = (eventType === 'onHover') ? 3600000 : 3000;
+                    showInfoPopupAtPointer(config.noteTitle, config.note || "Maklumat Objek", popupDuration, px, py);
+                } 
+                else if (config.action === 'playSound') {
+                    if (config.audioFile && uploadedAudios[config.audioFile]) {
+                        const audio = new Audio(uploadedAudios[config.audioFile]);
+                        audio.play();
+                    }
+                }
+                else if (config.action === 'changeScene') {
+                    changeSceneDuringInteraction(config.targetSceneId);
+                }
+            });
+
+            const hasPopInfo = matchingActions.some(a => a.action === 'popInfo');
+            if (!hasPopInfo) {
+                showPopupMessage(`⚡ ${matchingActions.length} Tindakan Dijalankan!`, 1500);
+            }
+        }
+
+        function getActionSummaryText(act) {
+            if (act.action === 'popInfo') return `💬 ${act.noteTitle ? act.noteTitle + ': ' : ''}"${act.note || ''}"`;
+            if (act.action === 'toggleModelAnim') return `🎬 Animasi (${act.animMode})`;
+            if (act.action === 'stepMove') return `🚗 Step Move (${act.stepX}, ${act.stepY}, ${act.stepZ})`;
+            if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibiliti (${act.targetObjectIds ? act.targetObjectIds.length : 1} sasaran)`;
+            if (act.action === 'playSound') return `🎵 Audio: ${act.audioFile}`;
+            if (act.action === 'changeColor') return `🎨 Tukar Warna`;
+            if (act.action === 'rotateAnim') return `↻ Putaran Manual`;
+            if (act.action === 'changeScene') {
+                const meta = projectScenesMeta.find(s => s.id === act.targetSceneId);
+                return `🎬 Tukar Scene: ${meta ? meta.name : '(scene dipadam)'}`;
+            }
+            return `⚡ Tindakan`;
+        }
+
+        function renderSavedActionsList() {
+            savedActionsList.innerHTML = "";
+
+            if (!selectedModel || !selectedModel.userData.interactions || selectedModel.userData.interactions.length === 0) {
+                savedActionsList.innerHTML = `<li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>`;
+                return;
+            }
+
+            selectedModel.userData.interactions.forEach((act) => {
+                const li = document.createElement('li');
+                li.className = 'hierarchy-item';
+
+                const isClick = act.trigger === 'onClick';
+                const badgeClass = isClick ? 'badge-click' : 'badge-hover';
+                const badgeText = isClick ? 'KLIK' : 'HOVER';
+
+                li.innerHTML = `
+                    <div style="display:flex; align-items:center; overflow:hidden;">
+                        <span class="trigger-badge ${badgeClass}">${badgeText}</span>
+                        <span class="action-item-desc">${getActionSummaryText(act)}</span>
+                    </div>
+                    <button class="btn-delete-obj" title="Padam Tindakan Ini">✕</button>
+                `;
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectedModel.userData.interactions = selectedModel.userData.interactions.filter(a => a.id !== act.id);
+                    renderSavedActionsList();
+                    scheduleAutoSave();
+                });
+
+                savedActionsList.appendChild(li);
+            });
+        }
+
+        function selectObject(model) {
+            if (isPreviewMode) return;
+
+            selectedModel = model;
+            transformControls.attach(model);
+            document.getElementById('selected-object-name').value = model.userData.fileName || model.name;
+            
+            chkInitialHidden.checked = (model.userData.initialVisibility === false);
+
+            if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
+                model.userData.interactions = [
+                    { ...model.userData.interaction, id: Date.now() + Math.random() }
+                ];
+                delete model.userData.interaction;
+            }
+
+            if (!model.userData.interactions) {
+                model.userData.interactions = [];
+            }
+
+            selectAction.value = 'popInfo';
+            selectAction.dispatchEvent(new Event('change'));
+            updateHierarchyUISelection();
+            renderSavedActionsList();
+        }
+
+        function deselectObject() {
+            selectedModel = null;
+            transformControls.detach();
+            document.getElementById('selected-object-name').value = "Tiada Objek Dipilih";
+            chkInitialHidden.checked = false;
+            infoPopup.style.display = 'none';
+            closeAnimModal();
+            updateHierarchyUISelection();
+            renderSavedActionsList();
+        }
+
+        document.getElementById('btn-manual-deselect').addEventListener('click', () => {
+            deselectObject();
+        });
+
+        function deleteObject(model) {
+            if (model === previewCameraMarker) {
+                alert("Kamera Utama tidak boleh dipadam!");
+                return;
+            }
+
+            if (selectedModel === model) {
+                deselectObject();
+            }
+            contentRoot.remove(model);
+
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    if (child.geometry) child.geometry.dispose();
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (!mat) return;
+                        if (mat.map) mat.map.dispose();
+                        mat.dispose();
+                    });
+                }
+            });
+
+            const index = loadedModelsList.indexOf(model);
+            if (index > -1) {
+                loadedModelsList.splice(index, 1);
+            }
+            renderObjectsList();
+            scheduleAutoSave();
+        }
+
+        // TAMBAH TINDAKAN KE SENARAI
+        document.getElementById('btn-save-interaction').addEventListener('click', () => {
+            if (!selectedModel) {
+                alert("Sila pilih satu objek 3D terlebih dahulu!");
+                return;
+            }
+
+            const action = selectAction.value;
+            let audioFile = "";
+            let note = "";
+            let noteTitle = "";
+            let aMode = "once";
+            let aDir = "forward";
+            let aStartTime = 0;
+            let aEndTime = 0;
+            let sX = 0, sY = 0, sZ = 0, sMode = "accumulate";
+            let targetSceneId = null;
+
+            const selectedTargets = Array.from(selectTargetObjects.selectedOptions).map(opt => opt.value);
+
+            if (action === 'playSound') {
+                audioFile = selectAudioFile.value;
+                if (!audioFile) {
+                    alert("Sila muat naik dan pilih fail audio terlebih dahulu!");
+                    return;
+                }
+            } else if (action === 'popInfo') {
+                noteTitle = document.getElementById('input-note-title').value;
+                note = document.getElementById('input-note').value;
+            } else if (action === 'toggleModelAnim') {
+                aMode = selectAnimMode.value;
+                aDir = selectAnimDir.value;
+                aStartTime = parseFloat(inputAnimStartTime.value) || 0;
+                aEndTime = parseFloat(inputAnimEndTime.value) || 0;
+            } else if (action === 'stepMove') {
+                sX = parseFloat(inputStepX.value) || 0;
+                sY = parseFloat(inputStepY.value) || 0;
+                sZ = parseFloat(inputStepZ.value) || 0;
+                sMode = selectStepMode.value;
+            } else if (action === 'changeScene') {
+                targetSceneId = selectTargetScene.value;
+                if (!targetSceneId) {
+                    alert("Sila pilih scene sasaran terlebih dahulu!");
+                    return;
+                }
+            }
+
+            const newActionObj = {
+                id: Date.now() + Math.random(),
+                trigger: document.getElementById('select-trigger').value,
+                action: action,
+                note: note,
+                noteTitle: noteTitle,
+                audioFile: audioFile,
+                animMode: aMode,
+                animDir: aDir,
+                animStartTime: aStartTime,
+                animEndTime: aEndTime,
+                stepX: sX,
+                stepY: sY,
+                stepZ: sZ,
+                stepMode: sMode,
+                targetSceneId: targetSceneId,
+                targetObjectIds: selectedTargets.length > 0 ? selectedTargets : ['self']
+            };
+
+            if (!selectedModel.userData.interactions) {
+                selectedModel.userData.interactions = [];
+            }
+
+            selectedModel.userData.interactions.push(newActionObj);
+            renderSavedActionsList();
+            scheduleAutoSave();
+            showPopupMessage(`➕ Tindakan Ditambah ke Senarai!`, 1500);
+        });
+
+        // BETULKAN COLOR SPACE TEKSTUR MODEL DIMUAT NAIK (ELAK TERLALU TERANG/PUDAR)
+        function fixModelMaterialLighting(root) {
+            root.traverse((child) => {
+                if (!child.isMesh || !child.material) return;
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach(mat => {
+                    if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
+                    if (mat.emissiveMap) mat.emissiveMap.encoding = THREE.sRGBEncoding;
+                    if (mat.envMapIntensity !== undefined) mat.envMapIntensity = 0.8;
+
+                    // Material VFX (api/glow/asap): alpha SANGAT rendah + emissive kuat
+                    // (contoh diffuse alpha 0.07, emissiveFactor putih penuh) — shader
+                    // piawai darab KESELURUHAN piksel (termasuk glow terang) dengan
+                    // alpha rendah tu, jadi glow yang patut terang jadi hampir tak
+                    // nampak. Tukar jadi additive blending supaya glow terbit penuh
+                    // tanpa terikat alpha asap (macam software/viewer asal render dia).
+                    const hasEmissiveGlow = mat.emissiveMap && mat.emissive &&
+                        (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0);
+                    if (mat.transparent && mat.opacity < 0.2 && hasEmissiveGlow) {
+                        mat.blending = THREE.AdditiveBlending;
+                        mat.depthWrite = false;
+                    }
+
+                    // Tone mapping ACES mampatkan bahagian terang — material additive
+                    // (glow/particle) patut "terbit" penuh tanpa kena mampatan ni.
+                    if (mat.blending === THREE.AdditiveBlending) {
+                        mat.toneMapped = false;
+                    }
+
+                    mat.needsUpdate = true;
+                });
+            });
+        }
+
+        // IMPORT FAIL 3D
+        const gltfLoader = new THREE.GLTFLoader();
+        const fbxLoader = new THREE.FBXLoader();
+        const fileInput = document.getElementById('file-input');
+        const loadingText = document.getElementById('loading-text');
+
+        fileInput.addEventListener('change', function(event) {
+            const files = event.target.files;
+            if (!files || files.length === 0) return;
+
+            Array.from(files).forEach(async (file) => {
+                const ext = file.name.split('.').pop().toLowerCase();
+                loadingText.style.display = 'block';
+                loadingText.innerText = 'Sedang upload fail...';
+
+                let fileURL;
+                try {
+                    fileURL = await uploadAssetToStorage(file);
+                } catch (err) {
+                    console.error('Ralat upload fail 3D:', err);
+                    loadingText.innerText = 'Ralat! Gagal upload fail.';
+                    alert('Gagal upload fail: ' + (err.message || err));
+                    return;
+                }
+
+                const onLoadSuccess = function (object3D, animations) {
+                    let mixer = null;
+                    let animAction = null;
+
+                    if (animations && animations.length > 0) {
+                        mixer = new THREE.AnimationMixer(object3D);
+                        animAction = mixer.clipAction(animations[0]);
+
+                        mixer.addEventListener('finished', function(e) {
+                            if (e.action === animAction) {
+                                if (object3D.userData.interactions) {
+                                    const animAct = object3D.userData.interactions.find(a => a.action === 'toggleModelAnim');
+                                    if (animAct && animAct.animMode === 'toggleReverse') {
+                                        if (object3D.userData.animState === 'playing_fwd') {
+                                            object3D.userData.animState = 'atEnd';
+                                        } else if (object3D.userData.animState === 'playing_rev') {
+                                            object3D.userData.animState = 'atStart';
+                                        }
+                                    } else {
+                                        object3D.userData.animState = 'stopped';
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    object3D.userData = {
+                        id: Date.now() + Math.random(),
+                        fileName: file.name,
+                        kind: 'model',
+                        sourceUrl: fileURL,
+                        fileExt: ext,
+                        initialPosition: new THREE.Vector3(),
+                        initialRotation: new THREE.Euler(),
+                        initialScale: new THREE.Vector3(1, 1, 1),
+                        initialVisibility: true,
+                        interactions: [],
+                        isRotating: false,
+                        mixer: mixer,
+                        animAction: animAction,
+                        animState: 'stopped',
+                        stepStateToggle: false
+                    };
+
+                    fixModelMaterialLighting(object3D);
+
+                    const box = new THREE.Box3().setFromObject(object3D);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                        
+                    if (maxDim > 0) {
+                        const scale = 3 / maxDim;
+                        object3D.scale.set(scale, scale, scale);
+                    }
+
+                    box.setFromObject(object3D);
+                    const center = box.getCenter(new THREE.Vector3());
+
+                    const offset = loadedModelsList.length * 0.5;
+                    object3D.position.x -= center.x - offset;
+                    object3D.position.z -= center.z;
+                    object3D.position.y -= box.min.y;
+
+                    object3D.userData.initialPosition.copy(object3D.position);
+                    object3D.userData.initialRotation.copy(object3D.rotation);
+                    object3D.userData.initialScale.copy(object3D.scale);
+
+                    contentRoot.add(object3D);
+                    loadedModelsList.push(object3D);
+
+                    renderObjectsList();
+                    selectObject(object3D);
+
+                    loadingText.style.display = 'none';
+                    scheduleAutoSave();
+                };
+
+                const onProgress = function (xhr) {
+                    if (xhr.lengthComputable) {
+                        const percentComplete = (xhr.loaded / xhr.total) * 100;
+                        loadingText.innerText = 'Memuat model: ' + Math.round(percentComplete) + '%';
+                    }
+                };
+
+                const onError = function (error) {
+                    console.error('Ralat memuat fail 3D:', error);
+                    loadingText.innerText = 'Ralat! Gagal memuat fail.';
+                };
+
+                if (ext === 'fbx') {
+                    fbxLoader.load(
+                        fileURL,
+                        (fbx) => onLoadSuccess(fbx, fbx.animations),
+                        onProgress,
+                        onError
+                    );
+                } else {
+                    gltfLoader.load(
+                        fileURL,
+                        (gltf) => onLoadSuccess(gltf.scene, gltf.animations),
+                        onProgress,
+                        onError
+                    );
+                }
+            });
+            fileInput.value = "";
+        });
+
+        function renderObjectsList() {
+            const tree = document.getElementById('hierarchy-tree-objects');
+            tree.innerHTML = "";
+
+            const liCam = document.createElement('li');
+            liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
+            liCam.dataset.id = previewCameraMarker.userData.id;
+            liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
+            liCam.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectObject(previewCameraMarker);
+            });
+            tree.appendChild(liCam);
+
+            if (loadedModelsList.length === 0) return;
+
+            loadedModelsList.forEach((model) => {
+                const li = document.createElement('li');
+                li.className = `hierarchy-item ${selectedModel === model ? 'selected' : ''}`;
+                li.dataset.id = model.userData.id;
+                
+                const isHiddenInit = (model.userData.initialVisibility === false);
+                const visIcon = isHiddenInit ? '🙈' : '👁️';
+                
+                li.innerHTML = `
+                    <span>${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
+                    <div>
+                        <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Tukar Ketampilan Permulaan Mod Pratonton">${visIcon}</button>
+                        <button class="btn-delete-obj" title="Padam Model Ini">✕</button>
+                    </div>
+                `;
+
+                li.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectObject(model);
+                });
+
+                const btnVis = li.querySelector('.btn-vis-obj');
+                btnVis.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    model.userData.initialVisibility = !model.userData.initialVisibility;
+                    if (selectedModel === model) {
+                        chkInitialHidden.checked = (model.userData.initialVisibility === false);
+                    }
+                    renderObjectsList();
+                    scheduleAutoSave();
+                });
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const objLabel = model.userData.fileName || 'objek ini';
+                    if (!confirm(`Padam "${objLabel}"?\n\nTindakan ini tidak boleh dibuat asal (undo).`)) return;
+                    deleteObject(model);
+                });
+
+                tree.appendChild(li);
+            });
+        }
+
+        function renderMediaList() {
+            const tree = document.getElementById('hierarchy-tree-media');
+            tree.innerHTML = "";
+
+            const keys = Object.keys(uploadedAudios);
+            if (keys.length === 0) {
+                tree.innerHTML = `<li class="hierarchy-empty-msg">Tiada fail media diimport</li>`;
+                return;
+            }
+
+            keys.forEach((fileName) => {
+                const li = document.createElement('li');
+                li.className = 'hierarchy-item';
+                
+                li.innerHTML = `
+                    <span class="media-title-text">🎵 ${fileName}</span>
+                    <div>
+                        <button class="btn-play-audio" title="Uji Bunyi Ini">▶</button>
+                        <button class="btn-delete-obj" title="Padam Audio Ini">✕</button>
+                    </div>
+                `;
+
+                const btnPlay = li.querySelector('.btn-play-audio');
+                btnPlay.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (activeAudioElement) {
+                        activeAudioElement.pause();
+                    }
+                    activeAudioElement = new Audio(uploadedAudios[fileName]);
+                    activeAudioElement.play();
+                });
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!confirm(`Padam fail audio "${fileName}"?\n\nTindakan ini tidak boleh dibuat asal (undo). Mana-mana tindakan "Mainkan Audio" yang guna fail ini akan gagal.`)) return;
+                    delete uploadedAudios[fileName];
+                    updateAudioDropdown();
+                    renderMediaList();
+                    scheduleAutoSave();
+                });
+
+                tree.appendChild(li);
+            });
+        }
+
+        function updateHierarchyUISelection() {
+            const items = document.querySelectorAll('#hierarchy-tree-objects .hierarchy-item');
+            items.forEach(item => {
+                if (selectedModel && item.dataset.id == selectedModel.userData.id) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+        }
+
+        renderObjectsList();
+        renderMediaList();
+
+        // MOD GIZMO
+        const btnTranslate = document.getElementById('btn-mode-translate');
+        const btnRotate = document.getElementById('btn-mode-rotate');
+        const btnScale = document.getElementById('btn-mode-scale');
+
+        function setActiveButton(activeBtn) {
+            [btnTranslate, btnRotate, btnScale].forEach(btn => btn.classList.remove('active'));
+            activeBtn.classList.add('active');
+        }
+
+        btnTranslate.addEventListener('click', () => {
+            transformControls.setMode('translate');
+            setActiveButton(btnTranslate);
+        });
+
+        btnRotate.addEventListener('click', () => {
+            transformControls.setMode('rotate');
+            setActiveButton(btnRotate);
+        });
+
+        btnScale.addEventListener('click', () => {
+            transformControls.setMode('scale');
+            setActiveButton(btnScale);
+        });
+
+        // RUANG PAKSI (LOCAL / WORLD)
+        const btnSpaceLocal = document.getElementById('btn-space-local');
+        const btnSpaceWorld = document.getElementById('btn-space-world');
+
+        btnSpaceLocal.addEventListener('click', () => {
+            transformControls.setSpace('local');
+            btnSpaceLocal.classList.add('active');
+            btnSpaceWorld.classList.remove('active');
+        });
+
+        btnSpaceWorld.addEventListener('click', () => {
+            transformControls.setSpace('world');
+            btnSpaceWorld.classList.add('active');
+            btnSpaceLocal.classList.remove('active');
+        });
+
+        // LOGIK RESET INDIVIDU OBJEK DAN KAMERA AWAL
+        document.getElementById('btn-reset-pos').addEventListener('click', () => {
+            if (selectedModel && selectedModel.userData.initialPosition) {
+                recordAndApplyTransform(selectedModel, () => {
+                    selectedModel.position.copy(selectedModel.userData.initialPosition);
+                });
+            }
+        });
+
+        document.getElementById('btn-reset-rot').addEventListener('click', () => {
+            if (selectedModel && selectedModel.userData.initialRotation) {
+                recordAndApplyTransform(selectedModel, () => {
+                    selectedModel.rotation.copy(selectedModel.userData.initialRotation);
+                });
+            }
+        });
+
+        document.getElementById('btn-reset-scale').addEventListener('click', () => {
+            if (selectedModel && selectedModel.userData.initialScale) {
+                recordAndApplyTransform(selectedModel, () => {
+                    selectedModel.scale.copy(selectedModel.userData.initialScale);
+                });
+            }
+        });
+
+        document.getElementById('btn-reset-all').addEventListener('click', () => {
+            if (selectedModel && selectedModel.userData.initialPosition) {
+                recordAndApplyTransform(selectedModel, () => {
+                    selectedModel.position.copy(selectedModel.userData.initialPosition);
+                    selectedModel.rotation.copy(selectedModel.userData.initialRotation);
+                    selectedModel.scale.copy(selectedModel.userData.initialScale);
+                });
+            }
+        });
+
+        // ANIMATE LOOP
+        function animate(timestamp, frame) {
+            const delta = clock.getDelta();
+
+            // OrbitControls.update() akan "rampas" balik posisi kamera drpd tracking headset
+            // kalau dipanggil semasa sesi VR aktif — skip semasa presenting.
+            if (!renderer.xr.isPresenting) {
+                controls.update();
+            }
+
+            // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi
+            if (renderer.xr.isPresenting && isPreviewMode && isARSession && !isPlaced && frame) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const session = renderer.xr.getSession();
+
+                if (!hitTestSourceRequested) {
+                    hitTestSourceRequested = true;
+
+                    if (session.requestHitTestSource) {
+                        session.requestReferenceSpace('viewer').then((viewerSpace) => {
+                            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+                                hitTestSource = source;
+                            }).catch(() => placeContentAtDefault());
+                        }).catch(() => placeContentAtDefault());
+
+                        session.addEventListener('end', () => {
+                            hitTestSourceRequested = false;
+                            hitTestSource = null;
+                        });
+                    } else {
+                        placeContentAtDefault();
+                    }
+                }
+
+                if (hitTestSource) {
+                    const hitTestResults = frame.getHitTestResults(hitTestSource);
+                    if (hitTestResults.length > 0) {
+                        const pose = hitTestResults[0].getPose(referenceSpace);
+                        if (pose) {
+                            reticle.visible = true;
+                            reticle.matrix.fromArray(pose.transform.matrix);
+                        }
+                    } else {
+                        reticle.visible = false;
+                    }
+                }
+            } else if (!isPlaced) {
+                reticle.visible = false;
+            }
+
+            // HOVER GUNA CONTROLLER VR (laser pointer) — setara logik hover tetikus desktop
+            if (renderer.xr.isPresenting && isPreviewMode) {
+                const vrHit = getControllerRaycastHit(controller1) || getControllerRaycastHit(controller2);
+                if (vrHit !== hoveredModel) {
+                    hoveredModel = vrHit;
+                    if (hoveredModel) {
+                        triggerInteraction(hoveredModel, 'onHover');
+                    }
+                }
+            }
+
+            // SINKRONIKAN SCRUBBER MODAL JIKA UTILITY MODAL SEDANG DIBUKA
+            if (animModal.style.display === "block" && selectedModel && selectedModel.userData.animAction) {
+                const action = selectedModel.userData.animAction;
+                const clipDuration = action.getClip().duration;
+
+                const drivenByInteraction = ['playing', 'playing_fwd', 'playing_rev'].includes(selectedModel.userData.animState);
+                if (!isModalScrubbing && !action.paused && !drivenByInteraction) {
+                    selectedModel.userData.mixer.update(delta);
+                }
+
+                if (!isModalScrubbing) {
+                    animScrubber.value = action.time;
+                }
+                animTimeDisplay.innerText = `${action.time.toFixed(2)}s / ${clipDuration.toFixed(2)}s`;
+            }
+
+            loadedModelsList.forEach(m => {
+                if (m.userData.mixer && m.userData.animAction && (m.userData.animState === 'playing' || m.userData.animState === 'playing_fwd' || m.userData.animState === 'playing_rev')) {
+                    const action = m.userData.animAction;
+                    const startTime = m.userData.customStartTime || 0;
+                    const endTime = m.userData.customEndTime || action.getClip().duration;
+                    const dir = m.userData.animDir || 'forward';
+
+                    if (action.timeScale > 0 && action.time >= endTime) {
+                        if (dir === 'pingpong') {
+                            action.timeScale = -1;
+                        } else if (m.userData.interactions) {
+                            const act = m.userData.interactions.find(a => a.action === 'toggleModelAnim');
+                            if (act && act.animMode === 'toggleReverse') {
+                                action.paused = true;
+                                action.time = endTime;
+                                m.userData.animState = 'atEnd';
+                            } else if (act && act.animMode === 'once') {
+                                action.paused = true;
+                                action.time = endTime;
+                                m.userData.animState = 'stopped';
+                            } else {
+                                action.time = startTime;
+                            }
+                        }
+                    } 
+                    else if (action.timeScale < 0 && action.time <= startTime) {
+                        if (dir === 'pingpong') {
+                            action.timeScale = 1;
+                        } else if (m.userData.interactions) {
+                            const act = m.userData.interactions.find(a => a.action === 'toggleModelAnim');
+                            if (act && act.animMode === 'toggleReverse') {
+                                action.paused = true;
+                                action.time = startTime;
+                                m.userData.animState = 'atStart';
+                            } else if (act && act.animMode === 'once') {
+                                action.paused = true;
+                                action.time = startTime;
+                                m.userData.animState = 'stopped';
+                            } else {
+                                action.time = endTime;
+                            }
+                        }
+                    }
+
+                    m.userData.mixer.update(delta);
+                }
+
+                if (m.userData.isRotating) {
+                    m.rotation.y += 0.01;
+                }
+            });
+
+            renderer.render(scene, mainCamera);
+        }
+        renderer.setAnimationLoop(animate);
+
+        window.addEventListener('resize', () => {
+            if (renderer.xr.isPresenting) return;
+            mainCamera.aspect = container.clientWidth / container.clientHeight;
+            mainCamera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        // TUKAR WARNA BACKGROUND
+        const btnApplyBg = document.getElementById('btn-apply-bg');
+        const bgColorPicker = document.getElementById('bg-color-picker');
+
+        btnApplyBg.addEventListener('click', () => {
+            scene.background = new THREE.Color(bgColorPicker.value);
+            scheduleAutoSave();
+        });
+
+        // MULAKAN APLIKASI — semak sesi Supabase & papar gate yang sesuai
+        initApp();
+    </script>
+</body>
+</html>
