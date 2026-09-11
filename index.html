@@ -553,6 +553,7 @@
                 <button id="btn-add-plane" class="btn-secondary">+ Satah</button>
                 <button id="btn-add-text" class="btn-secondary btn-full btn-text-panel">🔤 + Papan Teks</button>
                 <button id="btn-add-zone" class="btn-secondary btn-full" style="background:#005999;">🎯 + Zon Sasaran (Trigger Zone)</button>
+                <button id="btn-add-waypoint" class="btn-secondary btn-full" style="background:#0d47a1;">📍 + Waypoint (Laluan Pandu Arah)</button>
             </div>
         </div>
 
@@ -1080,6 +1081,7 @@
 
             if (target === previewCameraMarker) cameraHelper.update();
             updateTransformInputsFromModel(target);
+            maybeRebuildWaypointPathFor(target);
         }
 
         document.getElementById('btn-undo').addEventListener('click', () => {
@@ -1093,6 +1095,7 @@
             redoStack.push(action);
             selectObject(action.target);
             if (action.target === previewCameraMarker) cameraHelper.update();
+            maybeRebuildWaypointPathFor(action.target);
             scheduleAutoSave();
         });
 
@@ -1107,6 +1110,7 @@
             undoStack.push(action);
             selectObject(action.target);
             if (action.target === previewCameraMarker) cameraHelper.update();
+            maybeRebuildWaypointPathFor(action.target);
             scheduleAutoSave();
         });
 
@@ -1116,6 +1120,7 @@
             }
             if (selectedModel) {
                 updateTransformInputsFromModel(selectedModel);
+                maybeRebuildWaypointPathFor(selectedModel);
             }
         });
 
@@ -1813,6 +1818,7 @@
                         mesh.userData.interactions = objData.interactions || [];
                         mesh.userData.isGrabbable = objData.isGrabbable || false;
                         mesh.userData.isSolid = objData.isSolid || false;
+                        if (objData.primType === 'waypoint') rebuildWaypointPath();
                     }
                 }
             }
@@ -2770,6 +2776,105 @@
         }
 
         // PRIMITIVES & TEXT
+        // ---- WAYPOINT / LALUAN PANDU ARAH (garis anak panah biru mengalir antara waypoint) ----
+        // Waypoint disambung ikut turutan ia muncul dalam loadedModelsList (turutan cipta/muat).
+        // Setiap segmen ialah satah bertekstur anak panah berulang (bukan THREE.Line — linewidth
+        // WebGL selalunya dipaksa 1px, jadi susah nampak dalam AR) — texture.repeat dikira ikut
+        // jarak sebenar supaya anak panah kekal saiz tetap (tak regang) walau segmen panjang/pendek.
+        let waypointArrowTexture = null;
+        function getWaypointArrowTexture() {
+            if (waypointArrowTexture) return waypointArrowTexture;
+            const size = 128;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, size, size);
+            ctx.strokeStyle = '#29b6f6';
+            ctx.lineWidth = size * 0.16;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.beginPath();
+            ctx.moveTo(size * 0.2, size * 0.15);
+            ctx.lineTo(size * 0.7, size * 0.5);
+            ctx.lineTo(size * 0.2, size * 0.85);
+            ctx.stroke();
+
+            waypointArrowTexture = new THREE.CanvasTexture(canvas);
+            waypointArrowTexture.wrapS = THREE.RepeatWrapping;
+            waypointArrowTexture.wrapT = THREE.ClampToEdgeWrapping;
+            return waypointArrowTexture;
+        }
+
+        const WAYPOINT_PATH_TILE_SIZE = 0.4; // saiz dunia (meter) setiap ubin anak panah — kekal tetap walau segmen panjang/pendek
+        const WAYPOINT_PATH_WIDTH = 0.25;
+        const WAYPOINT_PATH_SCROLL_SPEED = 0.6;
+        let waypointPathMeshes = [];
+
+        function clearWaypointPath() {
+            // NOTA: material.map ialah tekstur BERKONGSI (waypointArrowTexture) — jangan dispose()
+            // di sini, hanya geometri & material setiap segmen.
+            waypointPathMeshes.forEach(m => {
+                contentRoot.remove(m);
+                m.geometry.dispose();
+                m.material.dispose();
+            });
+            waypointPathMeshes = [];
+        }
+
+        function rebuildWaypointPath() {
+            clearWaypointPath();
+
+            const waypoints = loadedModelsList.filter(o => o.userData.primType === 'waypoint');
+            if (waypoints.length < 2) return;
+
+            const baseTexture = getWaypointArrowTexture();
+
+            for (let i = 0; i < waypoints.length - 1; i++) {
+                const a = waypoints[i].position;
+                const b = waypoints[i + 1].position;
+                const dx = b.x - a.x;
+                const dz = b.z - a.z;
+                const length = Math.hypot(dx, dz);
+                if (length < 0.001) continue;
+
+                const segGeometry = new THREE.PlaneGeometry(length, WAYPOINT_PATH_WIDTH);
+                segGeometry.rotateX(-Math.PI / 2);
+
+                // Skalakan UV terus (bukan clone tekstur per segmen) — semua segmen kongsi
+                // SATU tekstur (murah untuk drag hidup / live-drag), anak panah kekal saiz tetap
+                // sebab repeatX dikira ikut jarak sebenar segmen.
+                const repeatX = Math.max(1, length / WAYPOINT_PATH_TILE_SIZE);
+                const uvAttr = segGeometry.attributes.uv;
+                for (let vi = 0; vi < uvAttr.count; vi++) {
+                    uvAttr.setX(vi, uvAttr.getX(vi) * repeatX);
+                }
+                uvAttr.needsUpdate = true;
+
+                const segMaterial = new THREE.MeshBasicMaterial({
+                    map: baseTexture,
+                    transparent: true,
+                    depthWrite: false,
+                    side: THREE.DoubleSide
+                });
+
+                const segMesh = new THREE.Mesh(segGeometry, segMaterial);
+                segMesh.position.set((a.x + b.x) / 2, Math.min(a.y, b.y) + 0.01, (a.z + b.z) / 2);
+                segMesh.rotation.y = Math.atan2(-dz, dx);
+                segMesh.renderOrder = 10;
+                segMesh.userData.isWaypointPathSegment = true;
+
+                contentRoot.add(segMesh);
+                waypointPathMeshes.push(segMesh);
+            }
+        }
+
+        function maybeRebuildWaypointPathFor(target) {
+            if (target && target.userData && target.userData.primType === 'waypoint') {
+                rebuildWaypointPath();
+            }
+        }
+
         function addPrimitive(type, options) {
             options = options || {};
             let geometry, material, mesh, nameStr;
@@ -2794,6 +2899,10 @@
                 geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
                 material = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.8 });
                 nameStr = 'Zon Sasaran';
+            } else if (type === 'waypoint') {
+                geometry = new THREE.CircleGeometry(0.15, 24);
+                material = new THREE.MeshBasicMaterial({ color: 0x2196f3, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+                nameStr = 'Waypoint';
             } else if (type === 'text') {
                 const userText = options.presetText !== undefined ? options.presetText : prompt("Sila taipkan teks untuk dipaparkan:", "Teks Informasi");
                 if (!userText) return null;
@@ -2830,9 +2939,14 @@
             const offsetCount = loadedModelsList.length;
             mesh.position.set((offsetCount % 3) - 1, isText ? 1.5 : 0.5, (offsetCount % 2) - 0.5);
 
+            if (type === 'waypoint') {
+                mesh.rotation.x = -Math.PI / 2;
+                mesh.position.y = 0.02;
+            }
+
             mesh.userData = {
                 id: options.id || (Date.now() + Math.random()),
-                fileName: (isText ? '🔤 Teks: ' : type === 'zone' ? '🎯 ' : '🧊 ') + nameStr,
+                fileName: (isText ? '🔤 Teks: ' : type === 'zone' ? '🎯 ' : type === 'waypoint' ? '📍 ' : '🧊 ') + nameStr,
                 kind: 'primitive',
                 primType: type,
                 textContent: fullUserText,
@@ -2853,6 +2967,8 @@
             contentRoot.add(mesh);
             loadedModelsList.push(mesh);
 
+            if (type === 'waypoint') rebuildWaypointPath();
+
             if (!options.skipSelect) {
                 renderObjectsList();
                 selectObject(mesh);
@@ -2868,6 +2984,7 @@
         document.getElementById('btn-add-plane').addEventListener('click', () => addPrimitive('plane'));
         document.getElementById('btn-add-text').addEventListener('click', () => addPrimitive('text'));
         document.getElementById('btn-add-zone').addEventListener('click', () => addPrimitive('zone'));
+        document.getElementById('btn-add-waypoint').addEventListener('click', () => addPrimitive('waypoint'));
 
         // GAMBAR 2D (satah bertekstur dari fail imej dimuat naik)
         function buildImagePlaneMesh(url, fileName, fileExt, options) {
@@ -3585,6 +3702,8 @@
                 return;
             }
 
+            const wasWaypoint = model.userData.primType === 'waypoint';
+
             if (selectedModel === model) {
                 deselectObject();
             }
@@ -3606,6 +3725,7 @@
             if (index > -1) {
                 loadedModelsList.splice(index, 1);
             }
+            if (wasWaypoint) rebuildWaypointPath();
             renderObjectsList();
             scheduleAutoSave();
         }
@@ -4081,6 +4201,12 @@
             // kalau dipanggil semasa sesi VR aktif — skip semasa presenting.
             if (!renderer.xr.isPresenting) {
                 controls.update();
+            }
+
+            // ALIRAN ANAK PANAH LALUAN WAYPOINT — tekstur berkongsi, jadi satu offset menggerakkan
+            // semua segmen serentak (nampak macam anak panah mengalir ke arah destinasi).
+            if (waypointPathMeshes.length > 0) {
+                waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
             // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi
