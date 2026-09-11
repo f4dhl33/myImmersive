@@ -907,16 +907,31 @@
         scene.add(controller1);
         scene.add(controller2);
 
-        const controllerLaserGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, 0, 0),
-            new THREE.Vector3(0, 0, -5)
-        ]);
+        const CONTROLLER_LASER_MAX_LENGTH = 5;
         const controllerLaserMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff });
+        const controllerDotGeometry = new THREE.SphereGeometry(0.012, 12, 12);
 
         [controller1, controller2].forEach(ctrl => {
-            const laser = new THREE.Line(controllerLaserGeometry, controllerLaserMaterial);
+            ctrl.addEventListener('connected', (event) => {
+                ctrl.userData.handedness = event.data && event.data.handedness;
+            });
+
+            const laserGeometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0, -CONTROLLER_LASER_MAX_LENGTH)
+            ]);
+            const laser = new THREE.Line(laserGeometry, controllerLaserMaterial);
             laser.name = 'controller-laser';
             ctrl.add(laser);
+
+            const dot = new THREE.Mesh(controllerDotGeometry, new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false }));
+            dot.name = 'controller-laser-dot';
+            dot.position.set(0, 0, -CONTROLLER_LASER_MAX_LENGTH);
+            dot.renderOrder = 999;
+            ctrl.add(dot);
+
+            ctrl.userData.laser = laser;
+            ctrl.userData.laserDot = dot;
         });
 
         const controllerRaycaster = new THREE.Raycaster();
@@ -927,15 +942,33 @@
             controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
             controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(controllerTempMatrix);
 
-            if (loadedModelsList.length === 0) return null;
-            const visibleObjects = loadedModelsList.filter(o => o.visible);
-            const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
-            if (intersects.length === 0) return null;
+            let hitModel = null;
+            let hitDistance = CONTROLLER_LASER_MAX_LENGTH;
 
-            let hitModel = intersects[0].object;
-            while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
-                hitModel = hitModel.parent;
+            if (loadedModelsList.length > 0) {
+                const visibleObjects = loadedModelsList.filter(o => o.visible);
+                const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
+                if (intersects.length > 0) {
+                    hitDistance = Math.min(intersects[0].distance, CONTROLLER_LASER_MAX_LENGTH);
+                    hitModel = intersects[0].object;
+                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
+                        hitModel = hitModel.parent;
+                    }
+                }
             }
+
+            const laser = controller.userData.laser;
+            if (laser) {
+                laser.geometry.attributes.position.setZ(1, -hitDistance);
+                laser.geometry.attributes.position.needsUpdate = true;
+            }
+            const dot = controller.userData.laserDot;
+            if (dot) {
+                dot.position.z = -hitDistance;
+                dot.material.color.setHex(hitModel ? 0xffff00 : 0x00ffff);
+                dot.scale.setScalar(hitModel ? 1.5 : 1);
+            }
+
             return hitModel;
         }
 
@@ -959,17 +992,65 @@
         controller2.addEventListener('select', onControllerSelect);
 
         // ---- PICK & PLACE (genggam & alih objek "Boleh Diambil" guna controller) ----
+        // Controller KANAN = gerakkan (translate ikut controller, putaran objek dikekalkan)
+        // Controller KIRI  = pusingkan (rotate secara local, kedudukan objek dikekalkan)
         let grabbedObject = null;
         let grabStartState = null;
+        const _grabTmpVec = new THREE.Vector3();
+        const _grabTmpQuat = new THREE.Quaternion();
+        const _grabTmpQuat2 = new THREE.Quaternion();
 
-        function objectOverlapsSolid(obj) {
-            const box = new THREE.Box3().setFromObject(obj);
-            for (const other of loadedModelsList) {
-                if (other === obj || !other.userData.isSolid || !other.visible) continue;
-                const otherBox = new THREE.Box3().setFromObject(other);
-                if (box.intersectsBox(otherBox)) return true;
+        // GRAVITI — bila objek dilepaskan (mod gerak), ia "jatuh" tegak ke permukaan
+        // pepejal ("Pepejal") yang paling dekat di bawahnya, atau ke lantai (contentRoot)
+        // kalau tiada apa-apa di bawah.
+        const gravityRaycaster = new THREE.Raycaster();
+        function findRestingWorldY(worldX, worldZ, worldYStart, excludeObj) {
+            const solidMeshes = loadedModelsList.filter(o => o !== excludeObj && o.userData.isSolid && o.visible);
+            if (solidMeshes.length > 0) {
+                gravityRaycaster.set(new THREE.Vector3(worldX, worldYStart + 5, worldZ), new THREE.Vector3(0, -1, 0));
+                gravityRaycaster.far = 1000;
+                const hits = gravityRaycaster.intersectObjects(solidMeshes, true);
+                if (hits.length > 0) return hits[0].point.y;
             }
-            return false;
+            const groundPoint = new THREE.Vector3();
+            contentRoot.getWorldPosition(groundPoint);
+            return groundPoint.y;
+        }
+
+        function dropObjectWithGravity(obj) {
+            const box = new THREE.Box3().setFromObject(obj);
+            const worldPos = new THREE.Vector3();
+            obj.getWorldPosition(worldPos);
+            const bottomOffset = worldPos.y - box.min.y;
+
+            const restY = findRestingWorldY(worldPos.x, worldPos.z, worldPos.y, obj);
+            const newWorldPos = new THREE.Vector3(worldPos.x, restY + bottomOffset, worldPos.z);
+
+            obj.parent.worldToLocal(newWorldPos);
+            obj.position.copy(newWorldPos);
+        }
+
+        function updateGrabbedObjectTransform() {
+            const obj = grabbedObject;
+            const st = grabStartState;
+            if (!obj || !st) return;
+            const controller = st.controller;
+
+            if (st.mode === 'rotate') {
+                controller.getWorldQuaternion(_grabTmpQuat);
+                const deltaQuat = st.controllerWorldQuatInvStart.clone().multiply(_grabTmpQuat);
+                const newWorldQuat = st.objWorldQuatStart.clone().multiply(deltaQuat);
+
+                obj.parent.getWorldQuaternion(_grabTmpQuat2);
+                obj.quaternion.copy(_grabTmpQuat2.invert().multiply(newWorldQuat));
+            } else {
+                controller.getWorldPosition(_grabTmpVec);
+                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart);
+                const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
+
+                obj.parent.worldToLocal(newWorldPos);
+                obj.position.copy(newWorldPos);
+            }
         }
 
         function onControllerSelectStart(event) {
@@ -978,14 +1059,29 @@
 
             const controller = event.target;
             const hitModel = getControllerRaycastHit(controller);
-            if (hitModel && hitModel.userData.isGrabbable) {
-                grabbedObject = hitModel;
-                grabStartState = {
-                    position: hitModel.position.clone(),
-                    quaternion: hitModel.quaternion.clone()
-                };
-                controller.attach(hitModel);
-            }
+            if (!hitModel || !hitModel.userData.isGrabbable) return;
+
+            grabbedObject = hitModel;
+            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
+
+            const objWorldPosStart = new THREE.Vector3();
+            const objWorldQuatStart = new THREE.Quaternion();
+            hitModel.getWorldPosition(objWorldPosStart);
+            hitModel.getWorldQuaternion(objWorldQuatStart);
+
+            const controllerWorldPosStart = new THREE.Vector3();
+            const controllerWorldQuatInvStart = new THREE.Quaternion();
+            controller.getWorldPosition(controllerWorldPosStart);
+            controller.getWorldQuaternion(controllerWorldQuatInvStart).invert();
+
+            grabStartState = {
+                mode,
+                controller,
+                objWorldPosStart,
+                objWorldQuatStart,
+                controllerWorldPosStart,
+                controllerWorldQuatInvStart
+            };
         }
 
         // ZON SASARAN — semak sama ada objek yang baru dilepas jatuh dalam mana-mana
@@ -1016,12 +1112,10 @@
             if (!grabbedObject) return;
 
             const obj = grabbedObject;
-            contentRoot.attach(obj);
+            const mode = grabStartState ? grabStartState.mode : 'move';
 
-            if (grabStartState && objectOverlapsSolid(obj)) {
-                obj.position.copy(grabStartState.position);
-                obj.quaternion.copy(grabStartState.quaternion);
-            } else {
+            if (mode === 'move') {
+                dropObjectWithGravity(obj);
                 checkPlacementZones(obj);
             }
 
@@ -1135,11 +1229,17 @@
                 reticle.visible = false;
             }
 
-            if (renderer.xr.isPresenting && !grabbedObject) {
-                const vrHit = getControllerRaycastHit(controller1) || getControllerRaycastHit(controller2);
-                if (vrHit !== hoveredModel) {
-                    hoveredModel = vrHit;
-                    if (hoveredModel) triggerInteraction(hoveredModel, 'onHover');
+            if (renderer.xr.isPresenting) {
+                if (grabbedObject) {
+                    updateGrabbedObjectTransform();
+                } else {
+                    const vrHit1 = getControllerRaycastHit(controller1);
+                    const vrHit2 = getControllerRaycastHit(controller2);
+                    const vrHit = vrHit1 || vrHit2;
+                    if (vrHit !== hoveredModel) {
+                        hoveredModel = vrHit;
+                        if (hoveredModel) triggerInteraction(hoveredModel, 'onHover');
+                    }
                 }
             }
 
