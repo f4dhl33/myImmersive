@@ -2822,6 +2822,8 @@
             waypointPathMeshes = [];
         }
 
+        const WAYPOINT_WORLD_UP = new THREE.Vector3(0, 1, 0);
+
         function rebuildWaypointPath() {
             clearWaypointPath();
 
@@ -2834,9 +2836,21 @@
                 const a = waypoints[i].position;
                 const b = waypoints[i + 1].position;
                 const dx = b.x - a.x;
+                const dy = b.y - a.y;
                 const dz = b.z - a.z;
-                const length = Math.hypot(dx, dz);
+                // Jarak 3D sebenar (bukan hanya X/Z) — supaya laluan boleh condong/naik-turun
+                // ikut tangga, bukan sentiasa rata.
+                const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 if (length < 0.001) continue;
+
+                const forward = new THREE.Vector3(dx, dy, dz).multiplyScalar(1 / length);
+                let right = new THREE.Vector3().crossVectors(forward, WAYPOINT_WORLD_UP);
+                if (right.lengthSq() < 1e-6) {
+                    // "forward" hampir menegak (contoh tangga sangat curam) — guna rujukan lain
+                    right.crossVectors(forward, new THREE.Vector3(1, 0, 0));
+                }
+                right.normalize();
+                const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
                 const segGeometry = new THREE.PlaneGeometry(length, WAYPOINT_PATH_WIDTH);
                 segGeometry.rotateX(-Math.PI / 2);
@@ -2859,8 +2873,9 @@
                 });
 
                 const segMesh = new THREE.Mesh(segGeometry, segMaterial);
-                segMesh.position.set((a.x + b.x) / 2, Math.min(a.y, b.y) + 0.01, (a.z + b.z) / 2);
-                segMesh.rotation.y = Math.atan2(-dz, dx);
+                segMesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+                segMesh.position.addScaledVector(up, 0.01);
+                segMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
                 segMesh.renderOrder = 10;
                 segMesh.userData.isWaypointPathSegment = true;
 
