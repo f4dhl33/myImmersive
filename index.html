@@ -144,6 +144,9 @@
         .bg-picker-input { width: 24px; height: 20px; padding: 0; border: none; cursor: pointer; margin: 0; }
         .btn-apply { width: auto; padding: 2px 8px; margin: 0; font-size: 10px; background: #0e639c; color: white; border: none; border-radius: 3px; cursor: pointer; }
         
+        .top-bar-checkbox { display: flex; align-items: center; gap: 4px; margin: 0; color: #eee; font-size: 11px; font-weight: normal; cursor: pointer; white-space: nowrap; }
+        .top-bar-checkbox input { width: auto; margin: 0; cursor: pointer; }
+
         .btn-ar-top { width: auto; padding: 4px 10px; margin: 0; font-size: 11px; border-radius: 4px; background: #28a745; color: white; font-weight: bold; }
         .btn-ar-top:hover { background: #218838; }
         .btn-exit-preview { background: #d9534f; display: none; width: auto; padding: 4px 10px; margin: 0; font-size: 11px; border-radius: 4px; color: white; font-weight: bold; }
@@ -582,7 +585,7 @@
     <!-- CANVAS TENGAH -->
     <div id="canvas-container">
         <div id="top-bar">
-            <span class="top-bar-text">Editor Mod: <b id="mode-text-label">Penyuntingan Interaktif</b></span>
+            <span class="top-bar-text">Mod: <b id="mode-text-label">Penyuntingan Interaktif</b></span>
 
             <span class="top-bar-text profile-badge">📁 <b id="project-name-label">-</b></span>
             <button id="btn-toggle-public" class="btn-apply" title="Tukar status Awam/Persendirian">🔒 Persendirian</button>
@@ -596,9 +599,9 @@
                 <button id="btn-apply-bg" class="btn-apply">OK</button>
             </div>
 
-            <label class="checkbox-label" style="margin:0;" title="Bila AR dibuka, kandungan terus diletak (1.5m depan) tanpa tunggu pengguna tap permukaan. Sesuai untuk scene waypoint/wayfinding.">
+            <label class="top-bar-checkbox" title="Bila AR dibuka, kandungan terus diletak (1.5m depan) tanpa tunggu pengguna tap permukaan. Sesuai untuk scene waypoint/wayfinding.">
                 <input type="checkbox" id="chk-ar-auto-place">
-                <span>📍 Auto Letak AR (skip tap-to-place)</span>
+                <span>📍 Auto Letak</span>
             </label>
 
             <button id="btn-toggle-preview" class="btn-ar-top">Pratonton WebXR (AR/VR)</button>
