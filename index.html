@@ -445,6 +445,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 </head>
 <body>
 
@@ -788,14 +789,14 @@
                 <span>🙈 Sembunyi Objek Pada Awalnya</span>
             </label>
 
-            <label class="checkbox-label">
+            <label class="checkbox-label" title="Objek ikut fizik: graviti, pelanggaran & lantunan (bounce) semasa Pratonton/AR/VR, dan boleh digenggam guna controller.">
                 <input type="checkbox" id="chk-grabbable">
-                <span>🤏 Boleh Diambil & Alih (Pick & Place)</span>
+                <span>🤏 Boleh Diambil & Alih (Fizik: Graviti/Bounce)</span>
             </label>
 
-            <label class="checkbox-label">
+            <label class="checkbox-label" title="Perengkuh fizik pegun (contoh: lantai, meja) — objek 'Boleh Diambil' akan berlanggar & berlantun di atasnya, tak boleh tembus.">
                 <input type="checkbox" id="chk-solid">
-                <span>🧱 Pepejal (elak objek lain terbenam bila diletak)</span>
+                <span>🧱 Pepejal (perengkuh fizik — elak tembusan)</span>
             </label>
 
             <label>Kawalan Kamera & Pergerakan:</label>
@@ -1286,6 +1287,8 @@
                 controls.enabled = true;
                 controls.update();
             }
+
+            buildPhysicsWorldFromScene();
         }
 
         // Fallback bila hit-test AR tak disokong peranti/browser — letak kandungan
@@ -1298,6 +1301,7 @@
             loadedModelsList.forEach(m => {
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
+            buildPhysicsWorldFromScene();
         }
 
         function placeContentAtReticle() {
@@ -1308,6 +1312,7 @@
             loadedModelsList.forEach(m => {
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
+            buildPhysicsWorldFromScene();
         }
 
         async function setPreviewMode(enable) {
@@ -1361,6 +1366,8 @@
 
                 gridHelper.visible = true;
                 cameraHelper.visible = true;
+
+                teardownPhysicsWorld();
 
                 loadedModelsList.forEach(m => {
                     m.visible = true;
@@ -1493,6 +1500,122 @@
         const contentRoot = new THREE.Group();
         contentRoot.name = 'ContentRoot';
         scene.add(contentRoot);
+
+        // ---- FIZIK RINGKAS (graviti, pelanggaran, bounce) — guna cannon.js ----
+        // Simulasi berjalan dalam ruang LOKAL contentRoot (bukan dunia sebenar) — position/
+        // quaternion badan fizik terus sepadan dengan position/quaternion objek THREE (anak
+        // contentRoot), sama macam Zon Sasaran. Ini elak masalah penjajaran bila contentRoot
+        // sendiri berpindah (tap-to-place AR) — graviti "bawah tempatan" cukup tepat sebab
+        // contentRoot AR biasanya rata/hampir mengufuk.
+        const physicsWorld = new CANNON.World();
+        physicsWorld.gravity.set(0, -9.82, 0);
+        physicsWorld.broadphase = new CANNON.NaiveBroadphase();
+        physicsWorld.solver.iterations = 10;
+
+        const physicsDefaultMaterial = new CANNON.Material('default');
+        const physicsContactMaterial = new CANNON.ContactMaterial(physicsDefaultMaterial, physicsDefaultMaterial, {
+            friction: 0.4,
+            restitution: 0.4
+        });
+        physicsWorld.addContactMaterial(physicsContactMaterial);
+        physicsWorld.defaultContactMaterial = physicsContactMaterial;
+
+        let physicsBodies = []; // [{ mesh, body }]
+        let physicsActive = false;
+
+        // Kira "kotak sempadan lokal" objek (saiz + offset pusat berbanding position-nya) —
+        // guna bila primitif bukan kotak/sfera ringkas (contoh model GLTF, satah teks, dll).
+        function computeLocalBoxHalfExtentsAndOffset(mesh) {
+            const savedQuat = mesh.quaternion.clone();
+            const savedPos = mesh.position.clone();
+            mesh.quaternion.identity();
+            mesh.position.set(0, 0, 0);
+            mesh.updateMatrixWorld(true);
+
+            const box = new THREE.Box3().setFromObject(mesh);
+            const size = new THREE.Vector3();
+            const center = new THREE.Vector3();
+            box.getSize(size);
+            box.getCenter(center);
+
+            mesh.quaternion.copy(savedQuat);
+            mesh.position.copy(savedPos);
+            mesh.updateMatrixWorld(true);
+
+            size.x = Math.max(size.x, 0.02);
+            size.y = Math.max(size.y, 0.02);
+            size.z = Math.max(size.z, 0.02);
+            return { halfExtents: size.multiplyScalar(0.5), offset: center };
+        }
+
+        function buildPhysicsShapeForMesh(mesh) {
+            const primType = mesh.userData.primType;
+
+            if (primType === 'sphere') {
+                const radius = 0.6 * ((mesh.scale.x + mesh.scale.y + mesh.scale.z) / 3);
+                return { shape: new CANNON.Sphere(Math.max(radius, 0.02)), offset: new CANNON.Vec3(0, 0, 0) };
+            }
+            if (primType === 'box') {
+                const hx = Math.max(0.5 * mesh.scale.x, 0.02);
+                const hy = Math.max(0.5 * mesh.scale.y, 0.02);
+                const hz = Math.max(0.5 * mesh.scale.z, 0.02);
+                return { shape: new CANNON.Box(new CANNON.Vec3(hx, hy, hz)), offset: new CANNON.Vec3(0, 0, 0) };
+            }
+
+            const { halfExtents, offset } = computeLocalBoxHalfExtentsAndOffset(mesh);
+            return {
+                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, halfExtents.y, halfExtents.z)),
+                offset: new CANNON.Vec3(offset.x, offset.y, offset.z)
+            };
+        }
+
+        function createPhysicsBodyForMesh(mesh) {
+            const isDynamic = !!mesh.userData.isGrabbable;
+            const { shape, offset } = buildPhysicsShapeForMesh(mesh);
+
+            const body = new CANNON.Body({
+                mass: isDynamic ? 1 : 0,
+                material: physicsDefaultMaterial,
+                linearDamping: 0.2,
+                angularDamping: 0.4
+            });
+            body.addShape(shape, offset);
+
+            body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
+            body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
+            if (!isDynamic) body.type = CANNON.Body.STATIC;
+
+            return body;
+        }
+
+        // Bina semula dunia fizik daripada kedudukan SEMASA setiap objek "Boleh Diambil"
+        // (badan dinamik — kena graviti, boleh melantun) & "Pepejal" (badan statik — perengkuh).
+        // Dipanggil setiap kali Pratonton/VR/AR dimasuki, atau bila scene ditukar semasa aktif.
+        function buildPhysicsWorldFromScene() {
+            physicsBodies.forEach(pb => physicsWorld.removeBody(pb.body));
+            physicsBodies = [];
+
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return; // zon bukan objek fizikal
+                if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
+
+                const body = createPhysicsBodyForMesh(mesh);
+                physicsWorld.addBody(body);
+                physicsBodies.push({ mesh, body });
+                mesh.userData._physicsBody = body;
+            });
+
+            physicsActive = true;
+        }
+
+        function teardownPhysicsWorld() {
+            physicsActive = false;
+            physicsBodies.forEach(pb => {
+                physicsWorld.removeBody(pb.body);
+                delete pb.mesh.userData._physicsBody;
+            });
+            physicsBodies = [];
+        }
 
         // RETICLE (penunjuk tap-to-place semasa AR)
         const reticleGeometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
@@ -3310,42 +3433,19 @@
         const _grabTmpQuat = new THREE.Quaternion();
         const _grabTmpQuat2 = new THREE.Quaternion();
 
-        // GRAVITI — bila objek dilepaskan (mod gerak), ia "jatuh" tegak ke permukaan
-        // pepejal ("Pepejal") yang paling dekat di bawahnya, atau ke lantai (contentRoot)
-        // kalau tiada apa-apa di bawah. Ini gantikan cara lama yang sekadar tolak balik
-        // objek ke kedudukan asal bila kotak sempadan bersentuhan (sebab tu "place" asyik gagal).
-        const gravityRaycaster = new THREE.Raycaster();
-        function findRestingWorldY(worldX, worldZ, worldYStart, excludeObj) {
-            const solidMeshes = loadedModelsList.filter(o => o !== excludeObj && o.userData.isSolid && o.visible);
-            if (solidMeshes.length > 0) {
-                gravityRaycaster.set(new THREE.Vector3(worldX, worldYStart + 5, worldZ), new THREE.Vector3(0, -1, 0));
-                gravityRaycaster.far = 1000;
-                const hits = gravityRaycaster.intersectObjects(solidMeshes, true);
-                if (hits.length > 0) return hits[0].point.y;
-            }
-            const groundPoint = new THREE.Vector3();
-            contentRoot.getWorldPosition(groundPoint);
-            return groundPoint.y;
-        }
-
-        function dropObjectWithGravity(obj) {
-            const box = new THREE.Box3().setFromObject(obj);
-            const worldPos = new THREE.Vector3();
-            obj.getWorldPosition(worldPos);
-            const bottomOffset = worldPos.y - box.min.y;
-
-            const restY = findRestingWorldY(worldPos.x, worldPos.z, worldPos.y, obj);
-            const newWorldPos = new THREE.Vector3(worldPos.x, restY + bottomOffset, worldPos.z);
-
-            obj.parent.worldToLocal(newWorldPos);
-            obj.position.copy(newWorldPos);
-        }
-
-        function updateGrabbedObjectTransform() {
+        // GENGGAM + FIZIK — bila objek "Boleh Diambil" digenggam, ia SENTIASA kekal sebagai
+        // badan dinamik cannon.js (bukan diteleport terus) — mod gerak halakan velocity
+        // badan ke arah sasaran (P-controller dipotong had laju), supaya cuba tarik objek
+        // menembusi objek "Pepejal" akan disekat oleh pelanggaran fizik sebenar, bukan tembus
+        // terus. Bila dilepas, graviti + pelanggaran + bounce (cannon.js) ambil alih terus —
+        // tiada lagi "snap ke kedudukan asal" macam dulu.
+        const GRAB_MAX_SPEED = 6; // meter/saat
+        function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;
             if (!obj || !st) return;
             const controller = st.controller;
+            const body = obj.userData._physicsBody;
 
             if (st.mode === 'rotate') {
                 controller.getWorldQuaternion(_grabTmpQuat);
@@ -3354,13 +3454,30 @@
 
                 obj.parent.getWorldQuaternion(_grabTmpQuat2);
                 obj.quaternion.copy(_grabTmpQuat2.invert().multiply(newWorldQuat));
+
+                if (body) {
+                    body.quaternion.set(obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w);
+                    body.velocity.set(0, 0, 0);
+                    body.angularVelocity.set(0, 0, 0);
+                }
             } else {
                 controller.getWorldPosition(_grabTmpVec);
                 const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart);
                 const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
-
                 obj.parent.worldToLocal(newWorldPos);
-                obj.position.copy(newWorldPos);
+
+                if (body) {
+                    const dtSafe = Math.max(delta || 1 / 60, 1 / 120);
+                    const vx = (newWorldPos.x - body.position.x) / dtSafe;
+                    const vy = (newWorldPos.y - body.position.y) / dtSafe;
+                    const vz = (newWorldPos.z - body.position.z) / dtSafe;
+                    const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+                    const scale = speed > GRAB_MAX_SPEED ? GRAB_MAX_SPEED / speed : 1;
+                    body.velocity.set(vx * scale, vy * scale, vz * scale);
+                    body.angularVelocity.set(0, 0, 0);
+                } else {
+                    obj.position.copy(newWorldPos);
+                }
             }
         }
 
@@ -3374,6 +3491,17 @@
 
             grabbedObject = hitModel;
             const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
+
+            // Kalau objek ni pernah "terdok" dalam Zon Sasaran (jadi badan statik), hidupkan
+            // semula jadi dinamik supaya boleh digenggam & digerakkan sekali lagi.
+            const bodyToWake = hitModel.userData._physicsBody;
+            if (bodyToWake && bodyToWake.type === CANNON.Body.STATIC) {
+                bodyToWake.type = CANNON.Body.DYNAMIC;
+                bodyToWake.mass = 1;
+                bodyToWake.updateMassProperties();
+                bodyToWake.velocity.set(0, 0, 0);
+                bodyToWake.angularVelocity.set(0, 0, 0);
+            }
 
             const objWorldPosStart = new THREE.Vector3();
             const objWorldQuatStart = new THREE.Quaternion();
@@ -3423,6 +3551,20 @@
 
                 droppedObject.position.copy(zoneObj.position);
                 droppedObject.quaternion.copy(zoneObj.quaternion);
+
+                // Objek "terdok" dalam zon — kunci badan fiziknya jadi statik supaya ia
+                // kekal di situ (tak jatuh/terlantun lagi disebabkan graviti/pelanggaran).
+                const dockedBody = droppedObject.userData._physicsBody;
+                if (dockedBody) {
+                    dockedBody.position.set(zoneObj.position.x, zoneObj.position.y, zoneObj.position.z);
+                    dockedBody.quaternion.set(zoneObj.quaternion.x, zoneObj.quaternion.y, zoneObj.quaternion.z, zoneObj.quaternion.w);
+                    dockedBody.velocity.set(0, 0, 0);
+                    dockedBody.angularVelocity.set(0, 0, 0);
+                    dockedBody.type = CANNON.Body.STATIC;
+                    dockedBody.mass = 0;
+                    dockedBody.updateMassProperties();
+                }
+
                 triggerInteraction(zoneObj, 'onPlaceInZone');
             });
         }
@@ -3458,7 +3600,6 @@
             const mode = grabStartState ? grabStartState.mode : 'move';
 
             if (mode === 'move') {
-                dropObjectWithGravity(obj);
                 checkPlacementZones(obj);
             }
 
@@ -4334,7 +4475,7 @@
             // (gerak/pusing) sebaliknya.
             if (renderer.xr.isPresenting && isPreviewMode) {
                 if (grabbedObject) {
-                    updateGrabbedObjectTransform();
+                    updateGrabbedObjectTransform(delta);
                 } else {
                     const vrHit1 = getControllerRaycastHit(controller1);
                     const vrHit2 = getControllerRaycastHit(controller2);
@@ -4346,6 +4487,19 @@
                         }
                     }
                 }
+            }
+
+            // FIZIK (graviti/pelanggaran/bounce) — hanya jalan bila Pratonton aktif, dan
+            // dalam AR tunggu content diletak dulu (elak simulasi "tak nampak" berjalan
+            // sebelum pengguna tap-to-place).
+            if (physicsActive && isPreviewMode && (!isARSession || isPlaced)) {
+                physicsWorld.step(1 / 60, delta, 10);
+                physicsBodies.forEach(pb => {
+                    if (pb.body.type !== CANNON.Body.STATIC) {
+                        pb.mesh.position.copy(pb.body.position);
+                        pb.mesh.quaternion.copy(pb.body.quaternion);
+                    }
+                });
             }
 
             // SINKRONIKAN SCRUBBER MODAL JIKA UTILITY MODAL SEDANG DIBUKA
