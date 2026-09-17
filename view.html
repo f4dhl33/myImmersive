@@ -697,7 +697,7 @@
 
         function applyVisibilityAndCamera() {
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
 
             if (renderer.xr.isPresenting) {
@@ -726,7 +726,7 @@
             isPlaced = true;
             reticle.visible = false;
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
         }
 
@@ -736,7 +736,7 @@
             isPlaced = true;
             reticle.visible = false;
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
         }
 
@@ -1203,9 +1203,15 @@
                 );
                 if (matches.length === 0) return;
 
-                const zoneRadius = Math.max(zoneObj.scale.x, zoneObj.scale.y, zoneObj.scale.z) * 0.5;
-                const distance = zoneObj.position.distanceTo(droppedObject.position);
-                if (distance > zoneRadius) return;
+                const zoneBox = new THREE.Box3().setFromObject(zoneObj);
+                const objBox = new THREE.Box3().setFromObject(droppedObject);
+                const isColliding = zoneBox.intersectsBox(objBox);
+                const isFullyInside = isColliding && zoneBox.containsBox(objBox);
+
+                const satisfied = matches.some(act =>
+                    act.zoneTriggerMode === 'fullyInside' ? isFullyInside : isColliding
+                );
+                if (!satisfied) return;
 
                 droppedObject.position.copy(zoneObj.position);
                 droppedObject.quaternion.copy(zoneObj.quaternion);

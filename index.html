@@ -663,6 +663,12 @@
                     <label for="select-watch-objects">Pilih Objek Yang Dipantau (Boleh Diambil):</label>
                     <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
                     <select id="select-watch-objects" multiple size="4"></select>
+
+                    <label for="select-zone-trigger-mode" style="margin-top:8px;">Syarat Trigger Zon:</label>
+                    <select id="select-zone-trigger-mode">
+                        <option value="collision">Bersentuh/Bertindih Dengan Zon (Collision)</option>
+                        <option value="fullyInside">Seluruh Objek Perlu Berada Dalam Zon (Fully Inside)</option>
+                    </select>
                 </div>
 
                 <label for="select-action">Tindakan (Action Effect):</label>
@@ -1250,7 +1256,7 @@
         // pratonton/VR/AR sedang aktif (macam "portal" ke scene lain).
         function applyPreviewVisibilityAndCamera() {
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
 
             if (renderer.xr.isPresenting) {
@@ -1284,7 +1290,7 @@
             isPlaced = true;
             reticle.visible = false;
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
         }
 
@@ -1294,7 +1300,7 @@
             isPlaced = true;
             reticle.visible = false;
             loadedModelsList.forEach(m => {
-                m.visible = (m.userData.initialVisibility !== false);
+                m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
         }
 
@@ -3375,10 +3381,11 @@
             };
         }
 
-        // ZON SASARAN — semak sama ada objek yang baru dilepas jatuh dalam mana-mana
-        // zon yang memantaunya. Zon & objek sama-sama anak terus contentRoot, jadi
-        // boleh banding position/quaternion terus (ruang lokal sama), tak perlu tukar
-        // ke koordinat dunia.
+        // ZON SASARAN — semak sama ada objek yang baru dilepas bertindih/berada dalam
+        // mana-mana zon yang memantaunya, guna kotak sempadan (Box3) sebenar bukan
+        // anggaran jarak-ke-radius. Setiap tindakan boleh pilih syarat sendiri:
+        // "collision" (bersentuh/bertindih sahaja) atau "fullyInside" (objek perlu
+        // sepenuhnya berada dalam zon).
         function checkPlacementZones(droppedObject) {
             loadedModelsList.forEach(zoneObj => {
                 if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
@@ -3390,9 +3397,15 @@
                 );
                 if (matches.length === 0) return;
 
-                const zoneRadius = Math.max(zoneObj.scale.x, zoneObj.scale.y, zoneObj.scale.z) * 0.5;
-                const distance = zoneObj.position.distanceTo(droppedObject.position);
-                if (distance > zoneRadius) return;
+                const zoneBox = new THREE.Box3().setFromObject(zoneObj);
+                const objBox = new THREE.Box3().setFromObject(droppedObject);
+                const isColliding = zoneBox.intersectsBox(objBox);
+                const isFullyInside = isColliding && zoneBox.containsBox(objBox);
+
+                const satisfied = matches.some(act =>
+                    act.zoneTriggerMode === 'fullyInside' ? isFullyInside : isColliding
+                );
+                if (!satisfied) return;
 
                 droppedObject.position.copy(zoneObj.position);
                 droppedObject.quaternion.copy(zoneObj.quaternion);
@@ -3816,7 +3829,8 @@
                 stepMode: sMode,
                 targetSceneId: targetSceneId,
                 targetObjectIds: selectedTargets.length > 0 ? selectedTargets : ['self'],
-                watchObjectIds: trigger === 'onPlaceInZone' ? selectedWatchObjects : []
+                watchObjectIds: trigger === 'onPlaceInZone' ? selectedWatchObjects : [],
+                zoneTriggerMode: trigger === 'onPlaceInZone' ? document.getElementById('select-zone-trigger-mode').value : 'collision'
             };
 
             if (!selectedModel.userData.interactions) {
