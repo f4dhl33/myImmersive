@@ -1221,6 +1221,30 @@
             });
         }
 
+        // ZON KEHADIRAN PENGGUNA — semak setiap bingkai sama ada kamera (pengguna sendiri)
+        // baru masuk ke dalam mana-mana Zon Sasaran yang ada trigger "onUserEnterZone"
+        // (wayfinding: pengguna sampai satu blok/titik -> tukar scene). Dicetus SEKALI
+        // sahaja pada peralihan luar->dalam (edge-triggered).
+        function checkUserZoneEntryTriggers() {
+            const camPos = new THREE.Vector3();
+            mainCamera.getWorldPosition(camPos);
+
+            loadedModelsList.forEach(zoneObj => {
+                if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
+                const hasEnterTrigger = zoneObj.userData.interactions.some(act => act.trigger === 'onUserEnterZone');
+                if (!hasEnterTrigger) return;
+
+                const zoneBox = new THREE.Box3().setFromObject(zoneObj);
+                const isInside = zoneBox.containsPoint(camPos);
+                const wasInside = !!zoneObj.userData._userInsideZone;
+                zoneObj.userData._userInsideZone = isInside;
+
+                if (isInside && !wasInside) {
+                    triggerInteraction(zoneObj, 'onUserEnterZone');
+                }
+            });
+        }
+
         function onControllerSelectEnd(event) {
             if (!grabbedObject) return;
 
@@ -1305,6 +1329,8 @@
             if (waypointPathMeshes.length > 0) {
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
+
+            checkUserZoneEntryTriggers();
 
             // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi.
             // Scene boleh tanda "Auto Letak AR" (arAutoPlace) untuk skip terus tanpa tunggu tap.

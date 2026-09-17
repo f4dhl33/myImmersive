@@ -662,6 +662,7 @@
                     <option value="onClick">Pengguna Klik Objek (On Click)</option>
                     <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
                     <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
+                    <option value="onUserEnterZone">Pengguna Masuk Zon Ini (Proximity/Wayfinding)</option>
                 </select>
 
                 <div id="watch-obj-container" class="display-none">
@@ -1328,6 +1329,10 @@
                 deselectObject();
                 gridHelper.visible = false;
                 cameraHelper.visible = false;
+
+                // Reset status "pengguna dalam zon" supaya trigger onUserEnterZone boleh
+                // tercetus semula dari awal setiap kali Pratonton dimasuki.
+                loadedModelsList.forEach(m => { m.userData._userInsideZone = false; });
 
                 if (!renderer.xr.isPresenting) {
                     editorCameraState.position.copy(mainCamera.position);
@@ -3422,6 +3427,30 @@
             });
         }
 
+        // ZON KEHADIRAN PENGGUNA — semak setiap bingkai sama ada kamera (pengguna sendiri,
+        // bukan sesuatu objek) baru masuk ke dalam mana-mana Zon Sasaran yang ada trigger
+        // "onUserEnterZone" (untuk wayfinding: pengguna sampai satu blok/titik -> tukar scene).
+        // Dicetus SEKALI sahaja pada peralihan luar->dalam (edge-triggered), bukan setiap bingkai.
+        function checkUserZoneEntryTriggers() {
+            const camPos = new THREE.Vector3();
+            mainCamera.getWorldPosition(camPos);
+
+            loadedModelsList.forEach(zoneObj => {
+                if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
+                const hasEnterTrigger = zoneObj.userData.interactions.some(act => act.trigger === 'onUserEnterZone');
+                if (!hasEnterTrigger) return;
+
+                const zoneBox = new THREE.Box3().setFromObject(zoneObj);
+                const isInside = zoneBox.containsPoint(camPos);
+                const wasInside = !!zoneObj.userData._userInsideZone;
+                zoneObj.userData._userInsideZone = isInside;
+
+                if (isInside && !wasInside) {
+                    triggerInteraction(zoneObj, 'onUserEnterZone');
+                }
+            });
+        }
+
         function onControllerSelectEnd(event) {
             if (!grabbedObject) return;
 
@@ -3791,6 +3820,11 @@
 
             if (trigger === 'onPlaceInZone' && selectedWatchObjects.length === 0) {
                 alert("Sila pilih sekurang-kurangnya satu objek 'Boleh Diambil' untuk dipantau oleh zon ini!");
+                return;
+            }
+
+            if ((trigger === 'onPlaceInZone' || trigger === 'onUserEnterZone') && selectedModel.userData.primType !== 'zone') {
+                alert("Trigger ini hanya boleh digunakan pada objek 'Zon Sasaran' (🎯)! Cipta/pilih Zon Sasaran dahulu.");
                 return;
             }
 
@@ -4245,6 +4279,10 @@
             // semua segmen serentak (nampak macam anak panah mengalir ke arah destinasi).
             if (waypointPathMeshes.length > 0) {
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
+            }
+
+            if (isPreviewMode) {
+                checkUserZoneEntryTriggers();
             }
 
             // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi.
