@@ -537,8 +537,11 @@
                         kind: 'model',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
+                        initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
+                        returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -590,8 +593,11 @@
                         kind: 'image',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
+                        initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
+                        returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -764,8 +770,11 @@
                 primType: type,
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
+                initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
+                initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
                 isGrabbable: objData.isGrabbable || false,
                 isSolid: objData.isSolid || false,
+                returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -1312,6 +1321,8 @@
         // zon yang memantaunya (zon & objek sama-sama anak terus contentRoot, jadi
         // position/quaternion boleh dibanding terus, tak perlu tukar ruang koordinat).
         function checkPlacementZones(droppedObject) {
+            let docked = false;
+
             loadedModelsList.forEach(zoneObj => {
                 if (zoneObj.userData.primType !== 'zone' || !zoneObj.userData.interactions) return;
 
@@ -1347,7 +1358,24 @@
                 }
 
                 triggerInteraction(zoneObj, 'onPlaceInZone');
+                docked = true;
             });
+
+            return docked;
+        }
+
+        // KEMBALIKAN OBJEK KE KEDUDUKAN/PUTARAN ASAL (bila "returnToOriginalOnRelease").
+        function returnObjectToOriginalTransform(obj) {
+            obj.position.copy(obj.userData.initialPosition);
+            obj.quaternion.setFromEuler(obj.userData.initialRotation);
+
+            const body = obj.userData._physicsBody;
+            if (body) {
+                body.position.set(obj.position.x, obj.position.y, obj.position.z);
+                body.quaternion.set(obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w);
+                body.velocity.set(0, 0, 0);
+                body.angularVelocity.set(0, 0, 0);
+            }
         }
 
         // ZON KEHADIRAN PENGGUNA — semak setiap bingkai sama ada kamera (pengguna sendiri)
@@ -1380,8 +1408,13 @@
             const obj = grabbedObject;
             const mode = grabStartState ? grabStartState.mode : 'move';
 
+            let docked = false;
             if (mode === 'move') {
-                checkPlacementZones(obj);
+                docked = checkPlacementZones(obj);
+            }
+
+            if (!docked && obj.userData.returnToOriginalOnRelease) {
+                returnObjectToOriginalTransform(obj);
             }
 
             grabbedObject = null;
