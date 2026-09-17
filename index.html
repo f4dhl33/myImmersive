@@ -595,6 +595,11 @@
                 <button id="btn-apply-bg" class="btn-apply">OK</button>
             </div>
 
+            <label class="checkbox-label" style="margin:0;" title="Bila AR dibuka, kandungan terus diletak (1.5m depan) tanpa tunggu pengguna tap permukaan. Sesuai untuk scene waypoint/wayfinding.">
+                <input type="checkbox" id="chk-ar-auto-place">
+                <span>📍 Auto Letak AR (skip tap-to-place)</span>
+            </label>
+
             <button id="btn-toggle-preview" class="btn-ar-top">Pratonton WebXR (AR/VR)</button>
             <button id="btn-exit-preview" class="btn-exit-preview">✕ Keluar Pratonton</button>
         </div>
@@ -1617,6 +1622,7 @@
         function getDefaultSceneData() {
             return {
                 bgColor: '#87ceeb',
+                arAutoPlace: false,
                 camera: {
                     position: [0, 2, 6],
                     rotation: [0, 0, 0],
@@ -1654,6 +1660,7 @@
 
             return {
                 bgColor: bgColorPicker.value,
+                arAutoPlace: chkArAutoPlace.checked,
                 camera: {
                     position: previewCameraMarker.position.toArray(),
                     rotation: [previewCameraMarker.rotation.x, previewCameraMarker.rotation.y, previewCameraMarker.rotation.z],
@@ -1680,6 +1687,7 @@
                     id: meta.id,
                     name: meta.name,
                     bgColor: sd.bgColor,
+                    arAutoPlace: sd.arAutoPlace || false,
                     camera: sd.camera,
                     objects: sd.objects
                 };
@@ -1799,6 +1807,7 @@
             const bg = (sceneData && sceneData.bgColor) || '#87ceeb';
             scene.background = new THREE.Color(bg);
             bgColorPicker.value = bg;
+            chkArAutoPlace.checked = !!(sceneData && sceneData.arAutoPlace);
 
             const cam = (sceneData && sceneData.camera) || getDefaultSceneData().camera;
             previewCameraMarker.position.fromArray(cam.position);
@@ -4238,8 +4247,12 @@
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
-            // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi
-            if (renderer.xr.isPresenting && isPreviewMode && isARSession && !isPlaced && frame) {
+            // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi.
+            // Scene boleh pilih untuk skip langkah ni terus ("Auto Letak AR") — sesuai untuk
+            // scene waypoint/wayfinding yang tak perlukan pengguna tap permukaan dulu.
+            if (renderer.xr.isPresenting && isPreviewMode && isARSession && !isPlaced && chkArAutoPlace.checked) {
+                placeContentAtDefault();
+            } else if (renderer.xr.isPresenting && isPreviewMode && isARSession && !isPlaced && frame) {
                 const referenceSpace = renderer.xr.getReferenceSpace();
                 const session = renderer.xr.getSession();
 
@@ -4379,9 +4392,14 @@
         // TUKAR WARNA BACKGROUND
         const btnApplyBg = document.getElementById('btn-apply-bg');
         const bgColorPicker = document.getElementById('bg-color-picker');
+        const chkArAutoPlace = document.getElementById('chk-ar-auto-place');
 
         btnApplyBg.addEventListener('click', () => {
             scene.background = new THREE.Color(bgColorPicker.value);
+            scheduleAutoSave();
+        });
+
+        chkArAutoPlace.addEventListener('change', () => {
             scheduleAutoSave();
         });
 

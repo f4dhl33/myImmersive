@@ -327,6 +327,7 @@
         let isPlaced = false;
         let hitTestSource = null;
         let hitTestSourceRequested = false;
+        let arAutoPlace = false;
 
         const clock = new THREE.Clock();
         const raycaster = new THREE.Raycaster();
@@ -743,6 +744,7 @@
         async function applySceneDataToViewport(sceneObj) {
             scene.background = new THREE.Color(sceneObj.bgColor || '#87ceeb');
             sceneCameraData = sceneObj.camera || { position: [0, 2, 6], rotation: [0, 0, 0] };
+            arAutoPlace = !!sceneObj.arAutoPlace;
 
             for (const objData of (sceneObj.objects || [])) {
                 if (objData.kind === 'model') {
@@ -1304,8 +1306,11 @@
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
-            // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi
-            if (renderer.xr.isPresenting && isARSession && !isPlaced && frame) {
+            // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi.
+            // Scene boleh tanda "Auto Letak AR" (arAutoPlace) untuk skip terus tanpa tunggu tap.
+            if (renderer.xr.isPresenting && isARSession && !isPlaced && arAutoPlace) {
+                placeContentAtDefault();
+            } else if (renderer.xr.isPresenting && isARSession && !isPlaced && frame) {
                 const referenceSpace = renderer.xr.getReferenceSpace();
                 const session = renderer.xr.getSession();
 
