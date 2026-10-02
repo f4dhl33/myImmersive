@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -456,37 +456,37 @@
     <!-- PINTU MASUK: SIGN IN / DAFTAR AKAUN -->
     <div id="auth-gate" class="app-gate">
         <div class="gate-box">
-            <h2>🔐 Log Masuk / Daftar Akaun</h2>
-            <p>Sign in untuk simpan & urus projek korang di cloud.</p>
+            <h2>🔐 Sign In / Create Account</h2>
+            <p>Sign in to save and manage your projects in the cloud.</p>
 
             <div class="auth-tabs">
-                <button type="button" id="tab-signin" class="auth-tab-btn active">Log Masuk</button>
-                <button type="button" id="tab-signup" class="auth-tab-btn">Daftar Akaun</button>
+                <button type="button" id="tab-signin" class="auth-tab-btn active">Sign In</button>
+                <button type="button" id="tab-signup" class="auth-tab-btn">Sign Up</button>
             </div>
 
             <div id="auth-normal-fields">
-                <input type="email" id="auth-email" placeholder="Emel" autocomplete="username">
-                <input type="password" id="auth-password" placeholder="Kata Laluan (min 6 aksara)" autocomplete="current-password">
+                <input type="email" id="auth-email" placeholder="Email" autocomplete="username">
+                <input type="password" id="auth-password" placeholder="Password (min 6 characters)" autocomplete="current-password">
                 <div style="text-align:right; margin-top:-6px; margin-bottom:10px;">
-                    <a href="#" id="link-forgot-password" style="font-size:11px; color:#007acc; text-decoration:none;">Lupa Kata Laluan?</a>
+                    <a href="#" id="link-forgot-password" style="font-size:11px; color:#007acc; text-decoration:none;">Forgot Password?</a>
                 </div>
                 <div id="auth-error" class="gate-error-text"></div>
-                <button type="button" id="auth-submit-btn">Log Masuk</button>
+                <button type="button" id="auth-submit-btn">Sign In</button>
             </div>
 
             <div id="auth-forgot-fields" style="display:none;">
-                <p style="margin-top:-8px;">Masukkan emel akaun korang — kami hantar link reset kata laluan.</p>
-                <input type="email" id="forgot-email" placeholder="Emel">
+                <p style="margin-top:-8px;">Enter your account email — we'll send a password reset link.</p>
+                <input type="email" id="forgot-email" placeholder="Email">
                 <div id="forgot-error" class="gate-error-text"></div>
-                <button type="button" id="btn-send-reset">Hantar Link Reset</button>
-                <button type="button" id="btn-back-to-signin" class="btn-secondary" style="margin-top:8px; padding:8px;">Kembali</button>
+                <button type="button" id="btn-send-reset">Send Reset Link</button>
+                <button type="button" id="btn-back-to-signin" class="btn-secondary" style="margin-top:8px; padding:8px;">Back</button>
             </div>
 
             <div id="auth-newpass-fields" style="display:none;">
-                <p style="margin-top:-8px;">Tetapkan kata laluan baharu untuk akaun korang.</p>
-                <input type="password" id="new-password-input" placeholder="Kata Laluan Baharu (min 6 aksara)">
+                <p style="margin-top:-8px;">Set a new password for your account.</p>
+                <input type="password" id="new-password-input" placeholder="New Password (min 6 characters)">
                 <div id="newpass-error" class="gate-error-text"></div>
-                <button type="button" id="btn-set-new-password">Tetapkan Kata Laluan</button>
+                <button type="button" id="btn-set-new-password">Set Password</button>
             </div>
         </div>
     </div>
@@ -494,18 +494,18 @@
     <!-- PINTU MASUK: SENARAI PROJEK -->
     <div id="project-gate" class="app-gate" style="display:none;">
         <div class="gate-box">
-            <h2>📁 Projek Saya</h2>
-            <p>Pilih projek sedia ada atau cipta baharu.</p>
-            <p style="font-size:11px; color:#888; margin-top:-6px;">Log masuk sebagai: <b id="gate-email-display" style="color:#ccc;">-</b></p>
+            <h2>📁 My Projects</h2>
+            <p>Select an existing project or create a new one.</p>
+            <p style="font-size:11px; color:#888; margin-top:-6px;">Signed in as: <b id="gate-email-display" style="color:#ccc;">-</b></p>
 
             <ul id="project-gate-list"></ul>
 
-            <input type="text" id="new-project-name-input" placeholder="Nama Projek Baharu">
+            <input type="text" id="new-project-name-input" placeholder="New Project Name">
             <div id="project-gate-error" class="gate-error-text"></div>
-            <button type="button" id="btn-create-project">+ Cipta Projek Baharu</button>
+            <button type="button" id="btn-create-project">+ Create New Project</button>
             <div class="btn-action-group" style="margin-top:10px;">
-                <button type="button" id="btn-open-account-settings" class="btn-secondary" style="padding:8px;">⚙️ Akaun Saya</button>
-                <button type="button" id="btn-gate-sign-out" class="btn-secondary" style="padding:8px;">Log Keluar</button>
+                <button type="button" id="btn-open-account-settings" class="btn-secondary" style="padding:8px;">⚙️ My Account</button>
+                <button type="button" id="btn-gate-sign-out" class="btn-secondary" style="padding:8px;">Sign Out</button>
             </div>
         </div>
     </div>
@@ -513,101 +513,101 @@
     <!-- MODAL TETAPAN AKAUN -->
     <div id="account-settings-modal" class="app-gate" style="display:none;">
         <div class="gate-box" style="width:320px;">
-            <h2>⚙️ Akaun Saya</h2>
-            <p>Emel: <b id="account-email-display">-</b></p>
+            <h2>⚙️ My Account</h2>
+            <p>Email: <b id="account-email-display">-</b></p>
 
-            <label style="font-size:11px; color:#ccc; display:block; text-align:left; margin-bottom:5px;">Tukar Kata Laluan</label>
-            <input type="password" id="account-new-password" placeholder="Kata Laluan Baharu (min 6 aksara)">
-            <input type="password" id="account-confirm-password" placeholder="Sahkan Kata Laluan Baharu">
+            <label style="font-size:11px; color:#ccc; display:block; text-align:left; margin-bottom:5px;">Change Password</label>
+            <input type="password" id="account-new-password" placeholder="New Password (min 6 characters)">
+            <input type="password" id="account-confirm-password" placeholder="Confirm New Password">
             <div id="account-password-status" class="gate-error-text"></div>
-            <button type="button" id="btn-change-password">Tukar Kata Laluan</button>
+            <button type="button" id="btn-change-password">Change Password</button>
 
             <hr style="border-color:#333; margin:16px 0;">
 
-            <label style="font-size:11px; color:#d9534f; display:block; text-align:left; margin-bottom:5px;">Zon Bahaya</label>
-            <p style="color:#d9534f; font-size:10px;">Padam semua projek, scene, dan fail (model/gambar/audio) akaun ini secara KEKAL. Tindakan ini tidak boleh dibuat asal.</p>
-            <input type="text" id="account-delete-confirm-input" placeholder='Taip "PADAM" untuk sahkan'>
+            <label style="font-size:11px; color:#d9534f; display:block; text-align:left; margin-bottom:5px;">Danger Zone</label>
+            <p style="color:#d9534f; font-size:10px;">Permanently delete all projects, scenes, and files (models/images/audio) for this account. This action cannot be undone.</p>
+            <input type="text" id="account-delete-confirm-input" placeholder='Type "DELETE" to confirm'>
             <div id="account-delete-status" class="gate-error-text"></div>
-            <button type="button" id="btn-delete-account" style="background:#d9534f;">🗑️ Padam Akaun & Semua Data</button>
+            <button type="button" id="btn-delete-account" style="background:#d9534f;">🗑️ Delete Account & All Data</button>
 
-            <button type="button" id="btn-close-account-settings" class="btn-secondary" style="margin-top:12px; padding:8px;">Tutup</button>
+            <button type="button" id="btn-close-account-settings" class="btn-secondary" style="margin-top:12px; padding:8px;">Close</button>
         </div>
     </div>
 
     <!-- PANEL KIRI -->
     <div id="left-panel">
-        <h3>🎬 Scene Projek</h3>
+        <h3>🎬 Project Scenes</h3>
         <div class="section-box">
-            <label>🎬 Senarai Scene (dalam projek ni):</label>
+            <label>🎬 Scene List (in this project):</label>
             <ul id="scenes-list" class="hierarchy-list"></ul>
-            <button id="btn-add-scene" class="btn-secondary btn-full" style="margin-top:5px;">+ Scene Baharu</button>
+            <button id="btn-add-scene" class="btn-secondary btn-full" style="margin-top:5px;">+ New Scene</button>
         </div>
 
-        <h3>1. Pustaka & Import</h3>
+        <h3>1. Library & Import</h3>
         <div class="section-box">
-            <label for="file-input">Muat Naik Model (.glb, .gltf, .fbx)</label>
+            <label for="file-input">Upload Model (.glb, .gltf, .fbx)</label>
             <input type="file" id="file-input" accept=".glb,.gltf,.fbx" multiple>
-            <div id="loading-text">Sedang memuat naik fail 3D...</div>
+            <div id="loading-text">Uploading 3D file...</div>
         </div>
 
         <div class="section-box">
-            <label>🧊 Bentuk Asas & Teks:</label>
+            <label>🧊 Basic Shapes & Text:</label>
             <div class="btn-grid">
-                <button id="btn-add-box" class="btn-secondary">+ Kubus</button>
-                <button id="btn-add-sphere" class="btn-secondary">+ Sfera</button>
-                <button id="btn-add-cylinder" class="btn-secondary">+ Silinder</button>
-                <button id="btn-add-plane" class="btn-secondary">+ Satah</button>
-                <button id="btn-add-text" class="btn-secondary btn-full btn-text-panel">🔤 + Papan Teks</button>
-                <button id="btn-add-zone" class="btn-secondary btn-full" style="background:#005999;">🎯 + Zon Sasaran (Trigger Zone)</button>
-                <button id="btn-add-waypoint" class="btn-secondary btn-full" style="background:#0d47a1;">📍 + Waypoint (Laluan Pandu Arah)</button>
+                <button id="btn-add-box" class="btn-secondary">+ Cube</button>
+                <button id="btn-add-sphere" class="btn-secondary">+ Sphere</button>
+                <button id="btn-add-cylinder" class="btn-secondary">+ Cylinder</button>
+                <button id="btn-add-plane" class="btn-secondary">+ Plane</button>
+                <button id="btn-add-text" class="btn-secondary btn-full btn-text-panel">🔤 + Text Panel</button>
+                <button id="btn-add-zone" class="btn-secondary btn-full" style="background:#005999;">🎯 + Trigger Zone</button>
+                <button id="btn-add-waypoint" class="btn-secondary btn-full" style="background:#0d47a1;">📍 + Waypoint (Directional Path)</button>
             </div>
         </div>
 
         <div class="section-box">
-            <label for="audio-input">Muat Naik Audio (.mp3, .wav, .ogg)</label>
+            <label for="audio-input">Upload Audio (.mp3, .wav, .ogg)</label>
             <input type="file" id="audio-input" accept=".mp3,.wav,.ogg" multiple>
         </div>
 
         <div class="section-box">
-            <label for="image-input">Muat Naik Gambar 2D (.jpg, .png, .webp, .gif)</label>
+            <label for="image-input">Upload 2D Image (.jpg, .png, .webp, .gif)</label>
             <input type="file" id="image-input" accept=".jpg,.jpeg,.png,.webp,.gif" multiple>
         </div>
 
         <div class="section-box">
             <label>🎵 Media & Audio:</label>
             <ul id="hierarchy-tree-media" class="hierarchy-list">
-                <li class="hierarchy-empty-msg">Tiada fail media diimport</li>
+                <li class="hierarchy-empty-msg">No media files imported</li>
             </ul>
         </div>
     </div>
 
-    <div class="resize-handle resize-handle-v" id="resize-left-panel" title="Seret untuk ubah saiz panel kiri"></div>
+    <div class="resize-handle resize-handle-v" id="resize-left-panel" title="Drag to resize left panel"></div>
 
     <div id="center-column">
     <!-- CANVAS TENGAH -->
     <div id="canvas-container">
         <div id="top-bar">
-            <span class="top-bar-text">Mod: <b id="mode-text-label">Penyuntingan Interaktif</b></span>
+            <span class="top-bar-text">Mode: <b id="mode-text-label">Interactive Editing</b></span>
 
             <span class="top-bar-text profile-badge">📁 <b id="project-name-label">-</b></span>
-            <button id="btn-toggle-public" class="btn-apply" title="Tukar status Awam/Persendirian">🔒 Persendirian</button>
-            <button id="btn-share-project" class="btn-apply" title="Dapatkan Link/QR Pratonton AR/VR">🔗 Kongsi</button>
-            <button id="btn-my-projects" class="btn-apply" title="Kembali ke Senarai Projek">Projek Saya</button>
+            <button id="btn-toggle-public" class="btn-apply" title="Toggle Public/Private status">🔒 Private</button>
+            <button id="btn-share-project" class="btn-apply" title="Get AR/VR Preview Link/QR">🔗 Share</button>
+            <button id="btn-my-projects" class="btn-apply" title="Back to Project List">My Projects</button>
             <span id="save-status-text" class="save-status-text"></span>
 
             <div class="bg-picker-group">
-                <label for="bg-color-picker" class="bg-picker-label">Latar:</label>
+                <label for="bg-color-picker" class="bg-picker-label">Background:</label>
                 <input type="color" id="bg-color-picker" value="#87ceeb" class="bg-picker-input">
                 <button id="btn-apply-bg" class="btn-apply">OK</button>
             </div>
 
-            <label class="top-bar-checkbox" title="Bila AR dibuka, kandungan terus diletak (1.5m depan) tanpa tunggu pengguna tap permukaan. Sesuai untuk scene waypoint/wayfinding.">
+            <label class="top-bar-checkbox" title="When AR opens, content is placed immediately (1.5m ahead) without waiting for the user to tap a surface. Useful for waypoint/wayfinding scenes.">
                 <input type="checkbox" id="chk-ar-auto-place">
-                <span>📍 Auto Letak</span>
+                <span>📍 Auto Place</span>
             </label>
 
-            <button id="btn-toggle-preview" class="btn-ar-top">Pratonton WebXR (AR/VR)</button>
-            <button id="btn-exit-preview" class="btn-exit-preview">✕ Keluar Pratonton</button>
+            <button id="btn-toggle-preview" class="btn-ar-top">Preview WebXR (AR/VR)</button>
+            <button id="btn-exit-preview" class="btn-exit-preview">✕ Exit Preview</button>
         </div>
 
         <!-- MODAL PRATONTON & INSPECTOR MASA ANIMASI -->
@@ -621,15 +621,15 @@
                 <span id="anim-time-display" class="time-counter">0.00s / 0.00s</span>
             </div>
             <div class="anim-modal-grid">
-                <button id="anim-btn-play-pause" style="flex:1;">⏸ Jeda</button>
+                <button id="anim-btn-play-pause" style="flex:1;">⏸ Pause</button>
                 <select id="anim-speed-select" style="flex:1.5;">
-                    <option value="0.25">0.25x (Sangat Perlahan)</option>
-                    <option value="0.5">0.5x (Perlahan)</option>
+                    <option value="0.25">0.25x (Very Slow)</option>
+                    <option value="0.5">0.5x (Slow)</option>
                     <option value="1" selected>1.0x (Normal)</option>
-                    <option value="2">2.0x (Laju)</option>
+                    <option value="2">2.0x (Fast)</option>
                 </select>
-                <button id="anim-btn-set-start" style="flex:1.5; background:#0e639c;">Guna Masa Mula</button>
-                <button id="anim-btn-set-end" style="flex:1.5; background:#28a745;">Guna Masa Tamat</button>
+                <button id="anim-btn-set-start" style="flex:1.5; background:#0e639c;">Use Start Time</button>
+                <button id="anim-btn-set-end" style="flex:1.5; background:#28a745;">Use End Time</button>
             </div>
         </div>
 
@@ -639,198 +639,198 @@
     <!-- MODAL KONGSI LINK/QR VIEWER AR/VR -->
     <div id="share-modal" class="app-gate" style="display:none;">
         <div class="gate-box" style="width:300px;">
-            <h2>🔗 Kongsi Pratonton AR/VR</h2>
-            <p id="share-modal-status">Projek mesti ditanda "🌐 Awam" dahulu supaya pengguna lain boleh akses tanpa log masuk.</p>
+            <h2>🔗 Share AR/VR Preview</h2>
+            <p id="share-modal-status">The project must be marked "🌐 Public" first so other users can access it without signing in.</p>
             <div id="share-qr-code" style="display:flex; justify-content:center; margin:12px 0;"></div>
             <input type="text" id="share-link-input" readonly style="font-size:10px;" onclick="this.select()">
-            <button type="button" id="btn-copy-share-link">📋 Salin Link</button>
-            <button type="button" id="btn-close-share-modal" class="btn-secondary" style="margin-top:8px; padding:8px;">Tutup</button>
+            <button type="button" id="btn-copy-share-link">📋 Copy Link</button>
+            <button type="button" id="btn-close-share-modal" class="btn-secondary" style="margin-top:8px; padding:8px;">Close</button>
         </div>
     </div>
 
-    <div class="resize-handle resize-handle-h" id="resize-bottom-panel" title="Seret untuk ubah saiz panel bawah"></div>
+    <div class="resize-handle resize-handle-h" id="resize-bottom-panel" title="Drag to resize bottom panel"></div>
 
     <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja -->
     <div id="bottom-panel">
         <div id="bottom-panel-col-objects">
-            <h3>📦 Objek 3D & Kamera</h3>
+            <h3>📦 3D Objects & Camera</h3>
             <div class="section-box">
                 <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
-                <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Nyah-Pilih Objek (Deselect All)</button>
+                <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Deselect Object (Deselect All)</button>
             </div>
         </div>
 
         <div id="bottom-panel-col-left">
-            <h3>3. Panel Interaksi</h3>
+            <h3>3. Interaction Panel</h3>
             <div class="section-box">
-                <label for="select-trigger">Pemicu (Trigger Event):</label>
+                <label for="select-trigger">Trigger Event:</label>
                 <select id="select-trigger">
-                    <option value="onStart">Sebaik Scene Dimulakan (On Start)</option>
-                    <option value="onClick">Pengguna Klik Objek (On Click)</option>
-                    <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
-                    <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
-                    <option value="onUserEnterZone">Pengguna Masuk Zon Ini (Proximity/Wayfinding)</option>
+                    <option value="onStart">As Soon As Scene Starts (On Start)</option>
+                    <option value="onClick">User Clicks Object (On Click)</option>
+                    <option value="onHover">User Hovers Mouse (On Hover)</option>
+                    <option value="onPlaceInZone">Object Placed In This Zone (Pick &amp; Place)</option>
+                    <option value="onUserEnterZone">User Enters This Zone (Proximity/Wayfinding)</option>
                 </select>
 
                 <div id="watch-obj-container" class="display-none">
-                    <label for="select-watch-objects">Pilih Objek Yang Dipantau (Boleh Diambil):</label>
-                    <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                    <label for="select-watch-objects">Select Monitored Objects (Grabbable):</label>
+                    <span class="hint-text">(Hold Ctrl / Cmd + Click to select multiple)</span>
                     <select id="select-watch-objects" multiple size="4"></select>
 
-                    <label for="select-zone-trigger-mode" style="margin-top:8px;">Syarat Trigger Zon:</label>
+                    <label for="select-zone-trigger-mode" style="margin-top:8px;">Zone Trigger Condition:</label>
                     <select id="select-zone-trigger-mode">
-                        <option value="collision">Bersentuh/Bertindih Dengan Zon (Collision)</option>
-                        <option value="fullyInside">Seluruh Objek Perlu Berada Dalam Zon (Fully Inside)</option>
+                        <option value="collision">Touching/Overlapping The Zone (Collision)</option>
+                        <option value="fullyInside">Entire Object Must Be Inside The Zone (Fully Inside)</option>
                     </select>
                 </div>
 
-                <label for="select-action">Tindakan (Action Effect):</label>
+                <label for="select-action">Action (Action Effect):</label>
                 <select id="select-action">
-                    <option value="popInfo">Paparkan Teks / Informasi</option>
-                    <option value="toggleModelAnim">Mula / Henti Animasi Model (Play/Pause Animasi)</option>
-                    <option value="stepMove">Pergerakan Langkah / Shift (Step Move)</option>
-                    <option value="toggleTargetVisibility">Sembunyi / Tunjuk Objek (Toggle Visibility)</option>
-                    <option value="playSound">Mainkan Audio / Bunyi</option>
-                    <option value="changeColor">Tukar Warna Material</option>
-                    <option value="rotateAnim">Putaran Objek Manual (Simple Spin)</option>
-                    <option value="changeScene">🎬 Tukar ke Scene Lain (Change Scene)</option>
+                    <option value="popInfo">Show Text / Information</option>
+                    <option value="toggleModelAnim">Play / Pause Model Animation</option>
+                    <option value="stepMove">Step Movement / Shift (Step Move)</option>
+                    <option value="toggleTargetVisibility">Hide / Show Object (Toggle Visibility)</option>
+                    <option value="playSound">Play Audio / Sound</option>
+                    <option value="changeColor">Change Material Color</option>
+                    <option value="rotateAnim">Manual Object Rotation (Simple Spin)</option>
+                    <option value="changeScene">🎬 Switch To Another Scene (Change Scene)</option>
                 </select>
 
                 <!-- PILIHAN MULTI-TARGET OBJEK -->
                 <div id="target-obj-container" class="display-none">
-                    <label for="select-target-objects">Pilih Objek Sasaran Tindakan:</label>
-                    <span class="hint-text">(Tahan Ctrl / Cmd + Klik untuk pilih banyak)</span>
+                    <label for="select-target-objects">Select Action Target Object(s):</label>
+                    <span class="hint-text">(Hold Ctrl / Cmd + Click to select multiple)</span>
                     <select id="select-target-objects" multiple size="4"></select>
                 </div>
 
                 <!-- KAWALAN ANIMASI LANJUTAN -->
                 <div id="anim-mode-container" class="display-none">
-                    <button type="button" id="btn-open-anim-modal" class="btn-secondary" style="background:#007acc; font-weight:bold; margin-bottom:10px;">🎬 Buka Pemotong Masa Animasi</button>
+                    <button type="button" id="btn-open-anim-modal" class="btn-secondary" style="background:#007acc; font-weight:bold; margin-bottom:10px;">🎬 Open Animation Time Trimmer</button>
 
-                    <label for="select-anim-mode">Mod Mainan Animasi:</label>
+                    <label for="select-anim-mode">Animation Playback Mode:</label>
                     <select id="select-anim-mode">
-                        <option value="once">Sekali Sahaja (Play Once & Stop)</option>
-                        <option value="toggleReverse">Klik 1: Buka / Klik 2: Tutup (Toggle Reverse)</option>
-                        <option value="loop">Berulang (Loop)</option>
+                        <option value="once">Once Only (Play Once & Stop)</option>
+                        <option value="toggleReverse">Click 1: Open / Click 2: Close (Toggle Reverse)</option>
+                        <option value="loop">Repeat (Loop)</option>
                     </select>
 
-                    <label for="select-anim-dir">Arah Animasi Permulaan:</label>
+                    <label for="select-anim-dir">Initial Animation Direction:</label>
                     <select id="select-anim-dir">
-                        <option value="forward">Ke Hadapan (Forward)</option>
-                        <option value="reverse">Berpatah Balik (Reverse)</option>
-                        <option value="pingpong">Ping-Pong (Mula ↔ Akhir)</option>
+                        <option value="forward">Forward</option>
+                        <option value="reverse">Reverse</option>
+                        <option value="pingpong">Ping-Pong (Start ↔ End)</option>
                     </select>
 
-                    <label>Julat Masa Animasi (Saat):</label>
+                    <label>Animation Time Range (Seconds):</label>
                     <div class="input-inline-group">
-                        <input type="number" id="input-anim-starttime" step="0.1" min="0" value="0" placeholder="Mula (0s)">
-                        <input type="number" id="input-anim-endtime" step="0.1" min="0" value="0" placeholder="Tamat (0=Full)">
+                        <input type="number" id="input-anim-starttime" step="0.1" min="0" value="0" placeholder="Start (0s)">
+                        <input type="number" id="input-anim-endtime" step="0.1" min="0" value="0" placeholder="End (0=Full)">
                     </div>
                 </div>
 
                 <!-- KAWALAN PERGERAKAN LANGKAH (STEP MOVE / SHIFT) -->
                 <div id="step-move-container" class="display-none">
-                    <label>Unit Pergerakan Langkah (Offset X, Y, Z):</label>
+                    <label>Step Movement Units (Offset X, Y, Z):</label>
                     <div class="input-inline-group">
                         <input type="number" id="input-step-x" step="0.5" value="0" placeholder="X">
                         <input type="number" id="input-step-y" step="0.5" value="0" placeholder="Y">
                         <input type="number" id="input-step-z" step="0.5" value="2" placeholder="Z">
                     </div>
 
-                    <label for="select-step-mode" style="margin-top: 5px;">Mod Langkah:</label>
+                    <label for="select-step-mode" style="margin-top: 5px;">Step Mode:</label>
                     <select id="select-step-mode">
-                        <option value="accumulate">Bergerak Ke Depan Berterusan (+Step)</option>
-                        <option value="toggle">Klik 1: Ke Depan / Klik 2: Kembali Asal</option>
+                        <option value="accumulate">Keep Moving Forward (+Step)</option>
+                        <option value="toggle">Click 1: Move Forward / Click 2: Return to Original</option>
                     </select>
                 </div>
 
                 <div id="audio-select-container" class="display-none">
-                    <label for="select-audio-file">Pilih Fail Audio:</label>
+                    <label for="select-audio-file">Select Audio File:</label>
                     <select id="select-audio-file">
-                        <option value="">-- Tiada Fail Audio Muat Naik --</option>
+                        <option value="">-- No Audio File Uploaded --</option>
                     </select>
                 </div>
 
                 <div id="scene-select-container" class="display-none">
-                    <label for="select-target-scene">Pilih Scene Sasaran:</label>
+                    <label for="select-target-scene">Select Target Scene:</label>
                     <select id="select-target-scene"></select>
-                    <span class="hint-text">Objek ini bila diklik/hover akan "teleport" pengguna ke scene lain.</span>
+                    <span class="hint-text">When this object is clicked/hovered, it will "teleport" the user to another scene.</span>
                 </div>
 
                 <div id="note-input-container">
-                    <label for="input-note-title">Tajuk Mesej:</label>
-                    <input type="text" id="input-note-title" placeholder="Contoh: Enjin Utama">
-                    <label for="input-note">Kandungan Mesej / Informasi:</label>
-                    <input type="text" id="input-note" placeholder="Contoh: Komponen Enjin Utama v2.0">
+                    <label for="input-note-title">Message Title:</label>
+                    <input type="text" id="input-note-title" placeholder="Example: Main Engine">
+                    <label for="input-note">Message / Information Content:</label>
+                    <input type="text" id="input-note" placeholder="Example: Main Engine Component v2.0">
                 </div>
 
-                <button type="button" id="btn-save-interaction" class="btn-save-interaction">+ Tambah Tindakan Ke Senarai</button>
+                <button type="button" id="btn-save-interaction" class="btn-save-interaction">+ Add Action To List</button>
             </div>
         </div>
 
         <div id="bottom-panel-col-right">
-            <h3>📋 Senarai Tindakan</h3>
+            <h3>📋 Action List</h3>
             <!-- SENARAI TINDAKAN AKTIF TERDAFTAR -->
             <div class="section-box">
-                <label>📋 Senarai Tindakan Didaftarkan:</label>
+                <label>📋 Registered Actions:</label>
                 <ul id="saved-actions-list" class="hierarchy-list">
-                    <li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>
+                    <li class="hierarchy-empty-msg">No actions registered</li>
                 </ul>
             </div>
         </div>
     </div>
     </div> <!-- /#center-column -->
 
-    <div class="resize-handle resize-handle-v" id="resize-right-panel" title="Seret untuk ubah saiz panel kanan"></div>
+    <div class="resize-handle resize-handle-v" id="resize-right-panel" title="Drag to resize right panel"></div>
 
     <!-- PANEL KANAN -->
     <div id="right-panel">
-        <h3>2. Transform Objek</h3>
+        <h3>2. Object Transform</h3>
 
         <div class="section-box">
-            <div id="selected-object-name" class="selected-object-badge">Tiada Objek Dipilih</div>
+            <div id="selected-object-name" class="selected-object-badge">No Object Selected</div>
 
             <label class="checkbox-label">
                 <input type="checkbox" id="chk-initial-hidden">
-                <span>🙈 Sembunyi Objek Pada Awalnya</span>
+                <span>🙈 Hide Object Initially</span>
             </label>
 
-            <label class="checkbox-label" title="Objek ikut fizik: graviti, pelanggaran & lantunan (bounce) semasa Pratonton/AR/VR, dan boleh digenggam guna controller.">
+            <label class="checkbox-label" title="Object follows physics: gravity, collision & bounce during Preview/AR/VR, and can be grabbed using a controller.">
                 <input type="checkbox" id="chk-grabbable">
-                <span>🤏 Boleh Diambil & Alih (Fizik: Graviti/Bounce)</span>
+                <span>🤏 Grabbable & Movable (Physics: Gravity/Bounce)</span>
             </label>
 
-            <label class="checkbox-label" title="Perengkuh fizik pegun (contoh: lantai, meja) — objek 'Boleh Diambil' akan berlanggar & berlantun di atasnya, tak boleh tembus.">
+            <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
                 <input type="checkbox" id="chk-solid">
-                <span>🧱 Pepejal (perengkuh fizik — elak tembusan)</span>
+                <span>🧱 Solid (physics collider — prevents pass-through)</span>
             </label>
 
-            <label class="checkbox-label" title="Bila dilepas (dan tak berjaya masuk mana-mana Zon Sasaran), objek terus kembali ke kedudukan/putaran asal ia diletak dalam editor.">
+            <label class="checkbox-label" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor.">
                 <input type="checkbox" id="chk-return-on-release">
-                <span>🔄 Kembali ke Asal Bila Dilepas</span>
+                <span>🔄 Return to Original on Release</span>
             </label>
 
-            <label>Kawalan Kamera & Pergerakan:</label>
+            <label>Camera Controls & Movement:</label>
             <div class="btn-action-group">
                 <button id="btn-undo" class="btn-secondary">↶ Undo</button>
                 <button id="btn-redo" class="btn-secondary">↷ Redo</button>
-                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Fokus Kamera pada Objek Dipilih">🔍 Fokus</button>
+                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Focus Camera on Selected Object">🔍 Focus</button>
             </div>
 
-            <label style="margin-top: 10px;">Mod Kawalan Objek:</label>
+            <label style="margin-top: 10px;">Object Control Mode:</label>
             <div class="btn-grid">
-                <button id="btn-mode-translate" class="btn-mode active">Gerak (Move)</button>
-                <button id="btn-mode-rotate" class="btn-mode">Pusing (Rotate)</button>
-                <button id="btn-mode-scale" class="btn-mode btn-full">Saiz (Scale)</button>
+                <button id="btn-mode-translate" class="btn-mode active">Move</button>
+                <button id="btn-mode-rotate" class="btn-mode">Rotate</button>
+                <button id="btn-mode-scale" class="btn-mode btn-full">Scale</button>
             </div>
 
-            <label style="margin-top: 10px;">Ruang Paksi (Space):</label>
+            <label style="margin-top: 10px;">Axis Space:</label>
             <div class="btn-grid">
-                <button id="btn-space-local" class="btn-mode active">Tempatan (Local)</button>
-                <button id="btn-space-world" class="btn-mode">Global (World)</button>
+                <button id="btn-space-local" class="btn-mode active">Local</button>
+                <button id="btn-space-world" class="btn-mode">World</button>
             </div>
 
-            <label style="margin-top: 10px;">📐 Transform Tepat:</label>
+            <label style="margin-top: 10px;">📐 Precise Transform:</label>
             <div class="transform-numeric-row">
                 <span class="transform-axis-label">Pos</span>
                 <input type="number" id="input-pos-x" step="0.01" placeholder="X">
@@ -844,17 +844,17 @@
                 <input type="number" id="input-rot-z" step="1" placeholder="Z">
             </div>
             <div class="transform-numeric-row">
-                <span class="transform-axis-label">Skala</span>
+                <span class="transform-axis-label">Scale</span>
                 <input type="number" id="input-scale-x" step="0.01" placeholder="X">
                 <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
                 <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
             </div>
 
-            <label style="margin-top: 10px;">Reset Berasingan:</label>
-            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Kedudukan (Position)</button>
-            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Putaran (Rotation)</button>
-            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Skala (Scale)</button>
-            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Keseluruhan Objek</button>
+            <label style="margin-top: 10px;">Reset Individually:</label>
+            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Position</button>
+            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Rotation</button>
+            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Scale</button>
+            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Entire Object</button>
         </div>
     </div>
 
@@ -1014,7 +1014,7 @@
         previewCameraMarker.position.set(0, 2, 6);
         previewCameraMarker.userData = {
             id: 'default_preview_camera',
-            fileName: '📷 Kedudukan Awal Kamera',
+            fileName: '📷 Initial Camera Position',
             initialPosition: new THREE.Vector3(0, 2, 6),
             initialRotation: new THREE.Euler(0, 0, 0),
             initialScale: new THREE.Vector3(1, 1, 1),
@@ -1355,7 +1355,7 @@
                 document.body.classList.add('preview-mode');
                 btnTogglePreview.style.display = 'none';
                 btnExitPreview.style.display = 'block';
-                modeTextLabel.innerText = "Pratonton Pengguna (Interactive Mode)";
+                modeTextLabel.innerText = "User Preview (Interactive Mode)";
 
                 deselectObject();
                 gridHelper.visible = false;
@@ -1388,7 +1388,7 @@
                 document.body.classList.remove('preview-mode');
                 btnTogglePreview.style.display = 'block';
                 btnExitPreview.style.display = 'none';
-                modeTextLabel.innerText = "Penyuntingan Interaktif";
+                modeTextLabel.innerText = "Interactive Editing";
 
                 gridHelper.visible = true;
                 cameraHelper.visible = true;
@@ -1466,7 +1466,7 @@
         // FUNGSI FOKUS KAMERA
         document.getElementById('btn-focus-obj').addEventListener('click', () => {
             if (!selectedModel) {
-                alert("Sila pilih satu objek 3D atau Kamera terlebih dahulu!");
+                alert("Please select a 3D object or Camera first!");
                 return;
             }
 
@@ -1700,7 +1700,7 @@
 
         // ---- STORAGE (fail model/gambar/audio) ----
         async function uploadAssetToStorage(file) {
-            if (!currentUser) throw new Error('Sila log masuk dahulu.');
+            if (!currentUser) throw new Error('Please sign in first.');
             const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
 
@@ -1775,7 +1775,7 @@
 
         function scheduleAutoSave() {
             if (isRestoringProject || !activeProjectId) return;
-            setSaveStatusText('⏳ Menyimpan...');
+            setSaveStatusText('⏳ Saving...');
             clearTimeout(autoSaveTimer);
             autoSaveTimer = setTimeout(() => {
                 saveCurrentProject();
@@ -1870,10 +1870,10 @@
             try {
                 await saveProjectRow(activeProjectId, dataObj);
                 const now = new Date();
-                setSaveStatusText('💾 Disimpan ' + now.toLocaleTimeString());
+                setSaveStatusText('💾 Saved ' + now.toLocaleTimeString());
             } catch (err) {
                 console.error('Auto-save gagal:', err);
-                setSaveStatusText('⚠️ Gagal simpan!');
+                setSaveStatusText('⚠️ Save failed!');
             }
         }
 
@@ -2007,7 +2007,7 @@
 
         async function loadProjectIntoEditor(projectId) {
             isRestoringProject = true;
-            setSaveStatusText('⏳ Memuatkan projek...');
+            setSaveStatusText('⏳ Loading project...');
 
             try {
                 const row = await loadProjectRow(projectId);
@@ -2032,7 +2032,7 @@
                     renderScenesList();
                     renderObjectsList();
                     deselectObject();
-                    setSaveStatusText('Projek baharu.');
+                    setSaveStatusText('New project.');
                     return;
                 }
 
@@ -2056,7 +2056,7 @@
                 renderScenesList();
                 renderObjectsList();
                 deselectObject();
-                setSaveStatusText('💾 Projek dimuatkan.');
+                setSaveStatusText('💾 Project loaded.');
             } finally {
                 isRestoringProject = false;
             }
@@ -2115,7 +2115,7 @@
         }
 
         function addNewScene() {
-            const name = prompt('Nama Scene Baharu:', 'Scene ' + (projectScenesMeta.length + 1));
+            const name = prompt('New Scene Name:', 'Scene ' + (projectScenesMeta.length + 1));
             if (!name) return;
 
             const newId = 'scene_' + (Date.now() + Math.random());
@@ -2128,7 +2128,7 @@
             const meta = projectScenesMeta.find(s => s.id === sceneId);
             if (!meta) return;
 
-            const newName = prompt('Nama baharu untuk scene ni:', meta.name);
+            const newName = prompt('New name for this scene:', meta.name);
             if (!newName) return;
 
             meta.name = newName;
@@ -2138,13 +2138,13 @@
 
         function deleteSceneUI(sceneId) {
             if (projectScenesMeta.length <= 1) {
-                alert('Tidak boleh dipadam — projek mesti ada sekurang-kurangnya satu scene.');
+                alert('Cannot delete — the project must have at least one scene.');
                 return;
             }
             const meta = projectScenesMeta.find(s => s.id === sceneId);
             if (!meta) return;
 
-            if (!confirm(`Padam scene "${meta.name}"?\n\nSemua objek & tindakan dalam scene ni akan hilang. Tindakan ini tidak boleh dibuat asal (undo).`)) return;
+            if (!confirm(`Delete scene "${meta.name}"?\n\nAll objects & actions in this scene will be lost. This action cannot be undone.`)) return;
 
             const wasActive = sceneId === activeSceneId;
             projectScenesMeta = projectScenesMeta.filter(s => s.id !== sceneId);
@@ -2178,7 +2178,7 @@
             list.innerHTML = '';
 
             if (projectScenesMeta.length === 0) {
-                list.innerHTML = '<li class="hierarchy-empty-msg">Tiada scene lagi</li>';
+                list.innerHTML = '<li class="hierarchy-empty-msg">No scenes yet</li>';
                 return;
             }
 
@@ -2192,8 +2192,8 @@
                 li.innerHTML = `
                     <span class="media-title-text">⠿ 🎬 ${meta.name}${firstBadge}</span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-vis-obj" title="Tukar Nama Scene">✏️</button>
-                        <button class="btn-delete-obj" title="Padam Scene Ini">✕</button>
+                        <button class="btn-vis-obj" title="Rename Scene">✏️</button>
+                        <button class="btn-delete-obj" title="Delete This Scene">✕</button>
                     </div>
                 `;
 
@@ -2265,10 +2265,10 @@
         function updatePublicToggleButton() {
             const btn = document.getElementById('btn-toggle-public');
             if (activeProjectIsPublic) {
-                btn.textContent = '🌐 Awam';
+                btn.textContent = '🌐 Public';
                 btn.style.background = '#28a745';
             } else {
-                btn.textContent = '🔒 Persendirian';
+                btn.textContent = '🔒 Private';
                 btn.style.background = '';
             }
         }
@@ -2288,12 +2288,12 @@
 
         async function renderProjectGateList() {
             const list = document.getElementById('project-gate-list');
-            list.innerHTML = '<li style="cursor:default; color:#666;">Memuatkan...</li>';
+            list.innerHTML = '<li style="cursor:default; color:#666;">Loading...</li>';
 
             const projects = await fetchMyProjects();
 
             if (projects.length === 0) {
-                list.innerHTML = '<li style="cursor:default; color:#666; font-style:italic;">Tiada projek lagi — cipta satu di bawah.</li>';
+                list.innerHTML = '<li style="cursor:default; color:#666; font-style:italic;">No projects yet — create one below.</li>';
                 return;
             }
 
@@ -2302,10 +2302,10 @@
                 const li = document.createElement('li');
                 const updated = p.updated_at ? new Date(p.updated_at).toLocaleString() : '';
                 li.innerHTML = `
-                    <span class="media-title-text" style="max-width:180px;">📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Kemas kini: ${updated}</span></span>
+                    <span class="media-title-text" style="max-width:180px;">📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Updated: ${updated}</span></span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-vis-obj" title="Tukar Nama Projek">✏️</button>
-                        <button class="btn-delete-obj" title="Padam Projek">✕</button>
+                        <button class="btn-vis-obj" title="Rename Project">✏️</button>
+                        <button class="btn-delete-obj" title="Delete Project">✕</button>
                     </div>
                 `;
 
@@ -2317,7 +2317,7 @@
                 const btnRename = li.querySelector('.btn-vis-obj');
                 btnRename.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    const newName = prompt('Nama baharu untuk projek ni:', p.name);
+                    const newName = prompt('New name for this project:', p.name);
                     if (!newName || newName.trim() === '') return;
                     await renameProjectRow(p.id, newName.trim());
                     renderProjectGateList();
@@ -2326,7 +2326,7 @@
                 const btnDel = li.querySelector('.btn-delete-obj');
                 btnDel.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    if (!confirm(`Padam projek "${p.name}"?\n\nSemua scene & fail dalam projek ni akan hilang. Tindakan ini tidak boleh dibuat asal.`)) return;
+                    if (!confirm(`Delete project "${p.name}"?\n\nAll scenes & files in this project will be lost. This action cannot be undone.`)) return;
                     await deleteProjectRow(p.id);
                     renderProjectGateList();
                 });
@@ -2352,7 +2352,7 @@
             authMode = 'signin';
             tabSignIn.classList.add('active');
             tabSignUp.classList.remove('active');
-            authSubmitBtn.textContent = 'Log Masuk';
+            authSubmitBtn.textContent = 'Sign In';
             authErrorEl.textContent = '';
             showAuthNormalFields();
         });
@@ -2360,7 +2360,7 @@
             authMode = 'signup';
             tabSignUp.classList.add('active');
             tabSignIn.classList.remove('active');
-            authSubmitBtn.textContent = 'Daftar Akaun';
+            authSubmitBtn.textContent = 'Sign Up';
             authErrorEl.textContent = '';
             showAuthNormalFields();
         });
@@ -2385,7 +2385,7 @@
             errorEl.textContent = '';
 
             if (!email) {
-                errorEl.textContent = 'Sila isi emel.';
+                errorEl.textContent = 'Please enter your email.';
                 return;
             }
 
@@ -2394,9 +2394,9 @@
                 const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
                 if (error) throw error;
                 errorEl.style.color = '#8fd18f';
-                errorEl.textContent = 'Link reset dihantar! Sila semak emel korang (termasuk folder spam).';
+                errorEl.textContent = 'Reset link sent! Please check your email (including spam folder).';
             } catch (err) {
-                errorEl.textContent = err.message || 'Gagal hantar link reset.';
+                errorEl.textContent = err.message || 'Failed to send reset link.';
             }
         });
 
@@ -2407,7 +2407,7 @@
             errorEl.textContent = '';
 
             if (!newPassword || newPassword.length < 6) {
-                errorEl.textContent = 'Kata laluan mesti sekurang-kurangnya 6 aksara.';
+                errorEl.textContent = 'Password must be at least 6 characters.';
                 return;
             }
 
@@ -2415,13 +2415,13 @@
                 const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
                 if (error) throw error;
                 errorEl.style.color = '#8fd18f';
-                errorEl.textContent = 'Kata laluan berjaya ditukar! Sila log masuk semula.';
+                errorEl.textContent = 'Password changed successfully! Please sign in again.';
                 setTimeout(() => {
                     showAuthNormalFields();
                     showAuthGate();
                 }, 1500);
             } catch (err) {
-                errorEl.textContent = err.message || 'Gagal tetapkan kata laluan baharu.';
+                errorEl.textContent = err.message || 'Failed to set new password.';
             }
         });
 
@@ -2432,7 +2432,7 @@
             authErrorEl.textContent = '';
 
             if (!email || !password) {
-                authErrorEl.textContent = 'Sila isi emel & kata laluan.';
+                authErrorEl.textContent = 'Please enter email & password.';
                 return;
             }
 
@@ -2441,7 +2441,7 @@
                 if (authMode === 'signup') {
                     await signUpUser(email, password);
                     authErrorEl.style.color = '#8fd18f';
-                    authErrorEl.textContent = 'Akaun didaftar! Sila log masuk.';
+                    authErrorEl.textContent = 'Account registered! Please sign in.';
                     tabSignIn.click();
                 } else {
                     const result = await signInUser(email, password);
@@ -2450,7 +2450,7 @@
                 }
             } catch (err) {
                 authErrorEl.style.color = '#d9534f';
-                authErrorEl.textContent = err.message || 'Ralat berlaku.';
+                authErrorEl.textContent = err.message || 'An error occurred.';
             } finally {
                 authSubmitBtn.disabled = false;
             }
@@ -2464,7 +2464,7 @@
             errorEl.textContent = '';
 
             if (!name) {
-                errorEl.textContent = 'Sila isi nama projek.';
+                errorEl.textContent = 'Please enter a project name.';
                 return;
             }
 
@@ -2473,7 +2473,7 @@
                 nameInput.value = '';
                 await openProjectById(row.id, row.name, row.is_public);
             } catch (err) {
-                errorEl.textContent = err.message || 'Gagal cipta projek.';
+                errorEl.textContent = err.message || 'Failed to create project.';
             }
         });
 
@@ -2526,7 +2526,7 @@
                 return;
             }
             if (newPassword !== confirmPassword) {
-                statusEl.textContent = 'Kata laluan tidak sepadan.';
+                statusEl.textContent = 'Passwords do not match.';
                 return;
             }
 
@@ -2534,11 +2534,11 @@
                 const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
                 if (error) throw error;
                 statusEl.style.color = '#8fd18f';
-                statusEl.textContent = 'Kata laluan berjaya ditukar!';
+                statusEl.textContent = 'Password changed successfully!';
                 document.getElementById('account-new-password').value = '';
                 document.getElementById('account-confirm-password').value = '';
             } catch (err) {
-                statusEl.textContent = err.message || 'Gagal tukar kata laluan.';
+                statusEl.textContent = err.message || 'Failed to change password.';
             }
         });
 
@@ -2548,22 +2548,22 @@
             statusEl.style.color = '#d9534f';
             statusEl.textContent = '';
 
-            if (confirmInput.value.trim().toUpperCase() !== 'PADAM') {
-                statusEl.textContent = 'Sila taip "PADAM" (huruf besar) untuk sahkan.';
+            if (confirmInput.value.trim().toUpperCase() !== 'DELETE') {
+                statusEl.textContent = 'Please type "DELETE" (uppercase) to confirm.';
                 return;
             }
 
-            if (!confirm('Ini tindakan TERAKHIR. Semua projek & fail anda akan dipadam KEKAL. Teruskan?')) return;
+            if (!confirm('This is FINAL. All your projects & files will be permanently deleted. Continue?')) return;
 
             statusEl.style.color = '#ffcc00';
-            statusEl.textContent = 'Memadam data...';
+            statusEl.textContent = 'Deleting data...';
 
             try {
                 await deleteAllUserStorageFiles();
                 await deleteAllUserProjects();
 
                 statusEl.style.color = '#8fd18f';
-                statusEl.textContent = 'Semua data dipadam. Log keluar...';
+                statusEl.textContent = 'All data deleted. Signing out...';
 
                 setTimeout(async () => {
                     await signOutUser();
@@ -2574,7 +2574,7 @@
                 }, 1500);
             } catch (err) {
                 statusEl.style.color = '#d9534f';
-                statusEl.textContent = err.message || 'Gagal padam data.';
+                statusEl.textContent = err.message || 'Failed to delete data.';
             }
         });
 
@@ -2614,10 +2614,10 @@
             linkInput.value = '';
 
             if (!activeProjectIsPublic) {
-                statusEl.textContent = 'Projek ini masih "🔒 Persendirian". Tukar jadi "🌐 Awam" dahulu (butang di top-bar) supaya pengguna lain boleh akses tanpa log masuk.';
+                statusEl.textContent = 'This project is still "🔒 Private". Switch it to "🌐 Public" first (button in the top bar) so other users can access it without signing in.';
             } else {
                 const url = getViewerUrl();
-                statusEl.textContent = 'Sesiapa dengan link/QR ni boleh terus buka pratonton AR/VR (tanpa perlu log masuk):';
+                statusEl.textContent = 'Anyone with this link/QR can open the AR/VR preview directly (no sign-in required):';
                 linkInput.value = url;
                 shareQrInstance = new QRCode(qrContainer, {
                     text: url,
@@ -2654,18 +2654,18 @@
             }
 
             if (copied) {
-                showPopupMessage('📋 Link disalin!', 1500);
+                showPopupMessage('📋 Link copied!', 1500);
                 return;
             }
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(linkInput.value).then(() => {
-                    showPopupMessage('📋 Link disalin!', 1500);
+                    showPopupMessage('📋 Link copied!', 1500);
                 }).catch(() => {
-                    showPopupMessage('⚠️ Gagal salin — sila tekan Ctrl+C selepas klik link', 2500);
+                    showPopupMessage('⚠️ Copy failed — please press Ctrl+C after clicking the link', 2500);
                 });
             } else {
-                showPopupMessage('⚠️ Gagal salin — sila tekan Ctrl+C selepas klik link', 2500);
+                showPopupMessage('⚠️ Copy failed — please press Ctrl+C after clicking the link', 2500);
             }
         });
 
@@ -2778,14 +2778,14 @@
                     successCount++;
                 } catch (err) {
                     console.error('Ralat upload audio:', err);
-                    alert(`Gagal upload "${file.name}": ` + (err.message || err));
+                    alert(`Failed to upload "${file.name}": ` + (err.message || err));
                 }
             }
 
             updateAudioDropdown();
             renderMediaList();
             scheduleAutoSave();
-            if (successCount > 0) alert(`${successCount} fail audio telah berjaya dimuat naik!`);
+            if (successCount > 0) alert(`${successCount} audio file(s) uploaded successfully!`);
             audioInput.value = "";
         });
 
@@ -2793,7 +2793,7 @@
             selectAudioFile.innerHTML = "";
             const keys = Object.keys(uploadedAudios);
             if (keys.length === 0) {
-                selectAudioFile.innerHTML = `<option value="">-- Tiada Fail Audio Muat Naik --</option>`;
+                selectAudioFile.innerHTML = `<option value="">-- No Audio File Uploaded --</option>`;
                 return;
             }
 
@@ -2817,7 +2817,7 @@
                 const opt = document.createElement('option');
                 opt.value = obj.userData.id;
                 const isSelf = selectedModel && obj.userData.id === selectedModel.userData.id;
-                opt.textContent = isSelf ? `🎯 ${obj.userData.fileName} (Objek Ini)` : `📦 ${obj.userData.fileName}`;
+                opt.textContent = isSelf ? `🎯 ${obj.userData.fileName} (This Object)` : `📦 ${obj.userData.fileName}`;
                 if (isSelf) opt.selected = true;
                 selectTargetObjects.appendChild(opt);
             });
@@ -2825,7 +2825,7 @@
             if (animOnly && candidates.length === 0) {
                 const opt = document.createElement('option');
                 opt.value = "";
-                opt.textContent = "-- Tiada objek yang mempunyai animasi untuk dimainkan --";
+                opt.textContent = "-- No objects with animation to play --";
                 opt.disabled = true;
                 selectTargetObjects.appendChild(opt);
             }
@@ -2850,7 +2850,7 @@
             if (selectWatchObjects.options.length === 0) {
                 const opt = document.createElement('option');
                 opt.value = "";
-                opt.textContent = "-- Tiada objek 'Boleh Diambil' lagi --";
+                opt.textContent = "-- No 'Grabbable' objects yet --";
                 opt.disabled = true;
                 selectWatchObjects.appendChild(opt);
             }
@@ -2904,7 +2904,7 @@
         function openAnimModal() {
             const target = getAnimPreviewTarget();
             if (!target || !target.userData.mixer || !target.userData.animAction) {
-                alert("Objek ini tidak mempunyai animasi 3D terbina untuk diuji.");
+                alert("This object has no built-in 3D animation to test.");
                 return;
             }
             animModalTarget = target;
@@ -2921,7 +2921,7 @@
             action.paused = false;
 
             animModal.style.display = "block";
-            animBtnPlayPause.innerText = "⏸ Jeda";
+            animBtnPlayPause.innerText = "⏸ Pause";
         }
 
         function closeAnimModal() {
@@ -2939,7 +2939,7 @@
             if (!animModalTarget || !animModalTarget.userData.animAction) return;
             const action = animModalTarget.userData.animAction;
             action.paused = !action.paused;
-            animBtnPlayPause.innerText = action.paused ? "▶ Main" : "⏸ Jeda";
+            animBtnPlayPause.innerText = action.paused ? "▶ Play" : "⏸ Pause";
         });
 
         animSpeedSelect.addEventListener('change', () => {
@@ -2959,13 +2959,13 @@
         document.getElementById('anim-btn-set-start').addEventListener('click', () => {
             if (!animModalTarget || !animModalTarget.userData.animAction) return;
             inputAnimStartTime.value = animModalTarget.userData.animAction.time.toFixed(1);
-            showPopupMessage(`⏱️ Masa Mula Diberi: ${inputAnimStartTime.value}s`, 1500);
+            showPopupMessage(`⏱️ Start Time Set: ${inputAnimStartTime.value}s`, 1500);
         });
 
         document.getElementById('anim-btn-set-end').addEventListener('click', () => {
             if (!animModalTarget || !animModalTarget.userData.animAction) return;
             inputAnimEndTime.value = animModalTarget.userData.animAction.time.toFixed(1);
-            showPopupMessage(`⏱️ Masa Tamat Diberi: ${inputAnimEndTime.value}s`, 1500);
+            showPopupMessage(`⏱️ End Time Set: ${inputAnimEndTime.value}s`, 1500);
         });
 
 
@@ -3114,26 +3114,26 @@
 
             if (type === 'box') {
                 geometry = new THREE.BoxGeometry(1, 1, 1);
-                nameStr = 'Kubus';
+                nameStr = 'Cube';
             } else if (type === 'sphere') {
                 geometry = new THREE.SphereGeometry(0.6, 32, 32);
-                nameStr = 'Sfera';
+                nameStr = 'Sphere';
             } else if (type === 'cylinder') {
                 geometry = new THREE.CylinderGeometry(0.5, 0.5, 1.2, 32);
-                nameStr = 'Silinder';
+                nameStr = 'Cylinder';
             } else if (type === 'plane') {
                 geometry = new THREE.PlaneGeometry(2, 2);
-                nameStr = 'Satah';
+                nameStr = 'Plane';
             } else if (type === 'zone') {
                 geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
                 material = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.8 });
-                nameStr = 'Zon Sasaran';
+                nameStr = 'Target Zone';
             } else if (type === 'waypoint') {
                 geometry = new THREE.CircleGeometry(0.15, 24);
                 material = new THREE.MeshBasicMaterial({ color: 0x2196f3, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
                 nameStr = 'Waypoint';
             } else if (type === 'text') {
-                const userText = options.presetText !== undefined ? options.presetText : prompt("Sila taipkan teks untuk dipaparkan:", "Teks Informasi");
+                const userText = options.presetText !== undefined ? options.presetText : prompt("Please type the text to display:", "Info Text");
                 if (!userText) return null;
 
                 isText = true;
@@ -3175,7 +3175,7 @@
 
             mesh.userData = {
                 id: options.id || (Date.now() + Math.random()),
-                fileName: (isText ? '🔤 Teks: ' : type === 'zone' ? '🎯 ' : type === 'waypoint' ? '📍 ' : '🧊 ') + nameStr,
+                fileName: (isText ? '🔤 Text: ' : type === 'zone' ? '🎯 ' : type === 'waypoint' ? '📍 ' : '🧊 ') + nameStr,
                 kind: 'primitive',
                 primType: type,
                 textContent: fullUserText,
@@ -3313,7 +3313,7 @@
             Array.from(files).forEach((file) => {
                 addImagePlane(file).catch(err => {
                     console.error('Gagal upload gambar:', err);
-                    alert('Gagal upload gambar: ' + (err.message || err));
+                    alert('Failed to upload image: ' + (err.message || err));
                 });
             });
             imageInput.value = '';
@@ -3885,7 +3885,7 @@
                     // onHover: kekal terpapar selagi kursor di atas objek (hilang bila hover tamat, lihat pointermove).
                     // onClick: kekal guna timer tetap sebab ia tindakan sekali klik, bukan status berterusan.
                     const popupDuration = (eventType === 'onHover') ? 3600000 : 3000;
-                    showInfoPopupAtPointer(config.noteTitle, config.note || "Maklumat Objek", popupDuration, px, py);
+                    showInfoPopupAtPointer(config.noteTitle, config.note || "Object Information", popupDuration, px, py);
                 } 
                 else if (config.action === 'playSound') {
                     if (config.audioFile && uploadedAudios[config.audioFile]) {
@@ -3900,30 +3900,30 @@
 
             const hasPopInfo = matchingActions.some(a => a.action === 'popInfo');
             if (!hasPopInfo) {
-                showPopupMessage(`⚡ ${matchingActions.length} Tindakan Dijalankan!`, 1500);
+                showPopupMessage(`⚡ ${matchingActions.length} Action(s) Executed!`, 1500);
             }
         }
 
         function getActionSummaryText(act) {
             if (act.action === 'popInfo') return `💬 ${act.noteTitle ? act.noteTitle + ': ' : ''}"${act.note || ''}"`;
-            if (act.action === 'toggleModelAnim') return `🎬 Animasi (${act.animMode})`;
+            if (act.action === 'toggleModelAnim') return `🎬 Animation (${act.animMode})`;
             if (act.action === 'stepMove') return `🚗 Step Move (${act.stepX}, ${act.stepY}, ${act.stepZ})`;
-            if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibiliti (${act.targetObjectIds ? act.targetObjectIds.length : 1} sasaran)`;
+            if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibility (${act.targetObjectIds ? act.targetObjectIds.length : 1} target(s))`;
             if (act.action === 'playSound') return `🎵 Audio: ${act.audioFile}`;
-            if (act.action === 'changeColor') return `🎨 Tukar Warna`;
-            if (act.action === 'rotateAnim') return `↻ Putaran Manual`;
+            if (act.action === 'changeColor') return `🎨 Change Color`;
+            if (act.action === 'rotateAnim') return `↻ Manual Rotation`;
             if (act.action === 'changeScene') {
                 const meta = projectScenesMeta.find(s => s.id === act.targetSceneId);
-                return `🎬 Tukar Scene: ${meta ? meta.name : '(scene dipadam)'}`;
+                return `🎬 Switch Scene: ${meta ? meta.name : '(scene deleted)'}`;
             }
-            return `⚡ Tindakan`;
+            return `⚡ Action`;
         }
 
         function renderSavedActionsList() {
             savedActionsList.innerHTML = "";
 
             if (!selectedModel || !selectedModel.userData.interactions || selectedModel.userData.interactions.length === 0) {
-                savedActionsList.innerHTML = `<li class="hierarchy-empty-msg">Tiada tindakan didaftarkan</li>`;
+                savedActionsList.innerHTML = `<li class="hierarchy-empty-msg">No actions registered</li>`;
                 return;
             }
 
@@ -3935,13 +3935,13 @@
                 let badgeText = 'HOVER';
                 if (act.trigger === 'onClick') {
                     badgeClass = 'badge-click';
-                    badgeText = 'KLIK';
+                    badgeText = 'CLICK';
                 } else if (act.trigger === 'onPlaceInZone' || act.trigger === 'onUserEnterZone') {
                     badgeClass = 'badge-zone';
-                    badgeText = 'ZON';
+                    badgeText = 'ZONE';
                 } else if (act.trigger === 'onStart') {
                     badgeClass = 'badge-start';
-                    badgeText = 'MULA';
+                    badgeText = 'START';
                 }
 
                 li.innerHTML = `
@@ -3949,7 +3949,7 @@
                         <span class="trigger-badge ${badgeClass}">${badgeText}</span>
                         <span class="action-item-desc">${getActionSummaryText(act)}</span>
                     </div>
-                    <button class="btn-delete-obj" title="Padam Tindakan Ini">✕</button>
+                    <button class="btn-delete-obj" title="Delete This Action">✕</button>
                 `;
 
                 const btnDel = li.querySelector('.btn-delete-obj');
@@ -3997,7 +3997,7 @@
         function deselectObject() {
             selectedModel = null;
             transformControls.detach();
-            document.getElementById('selected-object-name').textContent = "Tiada Objek Dipilih";
+            document.getElementById('selected-object-name').textContent = "No Object Selected";
             chkInitialHidden.checked = false;
             chkGrabbable.checked = false;
             chkSolid.checked = false;
@@ -4015,7 +4015,7 @@
 
         function deleteObject(model) {
             if (model === previewCameraMarker) {
-                alert("Kamera Utama tidak boleh dipadam!");
+                alert("The Main Camera cannot be deleted!");
                 return;
             }
 
@@ -4050,7 +4050,7 @@
         // TAMBAH TINDAKAN KE SENARAI
         document.getElementById('btn-save-interaction').addEventListener('click', () => {
             if (!selectedModel) {
-                alert("Sila pilih satu objek 3D terlebih dahulu!");
+                alert("Please select a 3D object first!");
                 return;
             }
 
@@ -4070,19 +4070,19 @@
             const selectedWatchObjects = Array.from(selectWatchObjects.selectedOptions).map(opt => opt.value).filter(v => v !== "");
 
             if (trigger === 'onPlaceInZone' && selectedWatchObjects.length === 0) {
-                alert("Sila pilih sekurang-kurangnya satu objek 'Boleh Diambil' untuk dipantau oleh zon ini!");
+                alert("Please select at least one 'Grabbable' object for this zone to monitor!");
                 return;
             }
 
             if ((trigger === 'onPlaceInZone' || trigger === 'onUserEnterZone') && selectedModel.userData.primType !== 'zone') {
-                alert("Trigger ini hanya boleh digunakan pada objek 'Zon Sasaran' (🎯)! Cipta/pilih Zon Sasaran dahulu.");
+                alert("This trigger can only be used on a 'Target Zone' (🎯) object! Create/select a Target Zone first.");
                 return;
             }
 
             if (action === 'playSound') {
                 audioFile = selectAudioFile.value;
                 if (!audioFile) {
-                    alert("Sila muat naik dan pilih fail audio terlebih dahulu!");
+                    alert("Please upload and select an audio file first!");
                     return;
                 }
             } else if (action === 'popInfo') {
@@ -4101,7 +4101,7 @@
             } else if (action === 'changeScene') {
                 targetSceneId = selectTargetScene.value;
                 if (!targetSceneId) {
-                    alert("Sila pilih scene sasaran terlebih dahulu!");
+                    alert("Please select a target scene first!");
                     return;
                 }
             }
@@ -4134,7 +4134,7 @@
             selectedModel.userData.interactions.push(newActionObj);
             renderSavedActionsList();
             scheduleAutoSave();
-            showPopupMessage(`➕ Tindakan Ditambah ke Senarai!`, 1500);
+            showPopupMessage(`➕ Action Added to List!`, 1500);
         });
 
         // BETULKAN COLOR SPACE TEKSTUR MODEL DIMUAT NAIK (ELAK TERLALU TERANG/PUDAR)
@@ -4184,15 +4184,15 @@
             Array.from(files).forEach(async (file) => {
                 const ext = file.name.split('.').pop().toLowerCase();
                 loadingText.style.display = 'block';
-                loadingText.innerText = 'Sedang upload fail...';
+                loadingText.innerText = 'Uploading file...';
 
                 let fileURL;
                 try {
                     fileURL = await uploadAssetToStorage(file);
                 } catch (err) {
                     console.error('Ralat upload fail 3D:', err);
-                    loadingText.innerText = 'Ralat! Gagal upload fail.';
-                    alert('Gagal upload fail: ' + (err.message || err));
+                    loadingText.innerText = 'Error! Failed to upload file.';
+                    alert('Failed to upload file: ' + (err.message || err));
                     return;
                 }
 
@@ -4279,13 +4279,13 @@
                 const onProgress = function (xhr) {
                     if (xhr.lengthComputable) {
                         const percentComplete = (xhr.loaded / xhr.total) * 100;
-                        loadingText.innerText = 'Memuat model: ' + Math.round(percentComplete) + '%';
+                        loadingText.innerText = 'Loading model: ' + Math.round(percentComplete) + '%';
                     }
                 };
 
                 const onError = function (error) {
                     console.error('Ralat memuat fail 3D:', error);
-                    loadingText.innerText = 'Ralat! Gagal memuat fail.';
+                    loadingText.innerText = 'Error! Failed to load file.';
                 };
 
                 if (ext === 'fbx') {
@@ -4334,9 +4334,9 @@
                 li.innerHTML = `
                     <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Tukar Ketampilan Permulaan Mod Pratonton">${visIcon}</button>
-                        <button class="btn-rename-obj" title="Tukar Nama Objek">✏️</button>
-                        <button class="btn-delete-obj" title="Padam Model Ini">✕</button>
+                        <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Toggle Initial Visibility in Preview Mode">${visIcon}</button>
+                        <button class="btn-rename-obj" title="Rename Object">✏️</button>
+                        <button class="btn-delete-obj" title="Delete This Model">✕</button>
                     </div>
                 `;
 
@@ -4359,7 +4359,7 @@
                 const btnRename = li.querySelector('.btn-rename-obj');
                 btnRename.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const newName = prompt('Nama baharu untuk objek ni:', model.userData.fileName);
+                    const newName = prompt('New name for this object:', model.userData.fileName);
                     if (!newName || newName.trim() === '') return;
                     model.userData.fileName = newName.trim();
                     if (selectedModel === model) {
@@ -4372,8 +4372,8 @@
                 const btnDel = li.querySelector('.btn-delete-obj');
                 btnDel.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const objLabel = model.userData.fileName || 'objek ini';
-                    if (!confirm(`Padam "${objLabel}"?\n\nTindakan ini tidak boleh dibuat asal (undo).`)) return;
+                    const objLabel = model.userData.fileName || 'this object';
+                    if (!confirm(`Delete "${objLabel}"?\n\nThis action cannot be undone.`)) return;
                     deleteObject(model);
                 });
 
@@ -4387,7 +4387,7 @@
 
             const keys = Object.keys(uploadedAudios);
             if (keys.length === 0) {
-                tree.innerHTML = `<li class="hierarchy-empty-msg">Tiada fail media diimport</li>`;
+                tree.innerHTML = `<li class="hierarchy-empty-msg">No media files imported</li>`;
                 return;
             }
 
@@ -4398,8 +4398,8 @@
                 li.innerHTML = `
                     <span class="media-title-text">🎵 ${fileName}</span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-play-audio" title="Uji Bunyi Ini">▶</button>
-                        <button class="btn-delete-obj" title="Padam Audio Ini">✕</button>
+                        <button class="btn-play-audio" title="Test This Sound">▶</button>
+                        <button class="btn-delete-obj" title="Delete This Audio">✕</button>
                     </div>
                 `;
 
@@ -4416,7 +4416,7 @@
                 const btnDel = li.querySelector('.btn-delete-obj');
                 btnDel.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    if (!confirm(`Padam fail audio "${fileName}"?\n\nTindakan ini tidak boleh dibuat asal (undo). Mana-mana tindakan "Mainkan Audio" yang guna fail ini akan gagal.`)) return;
+                    if (!confirm(`Delete audio file "${fileName}"?\n\nThis action cannot be undone. Any "Play Audio" action using this file will fail.`)) return;
                     delete uploadedAudios[fileName];
                     updateAudioDropdown();
                     renderMediaList();

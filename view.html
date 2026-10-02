@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ms">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -78,8 +78,8 @@
 
     <div id="status-overlay">
         <div class="box">
-            <h2 id="status-title">⏳ Memuatkan Projek...</h2>
-            <p id="status-text">Sila tunggu sebentar.</p>
+            <h2 id="status-title">⏳ Loading Project...</h2>
+            <p id="status-text">Please wait a moment.</p>
         </div>
     </div>
 
@@ -1649,12 +1649,12 @@
                 .single();
 
             if (error || !data) {
-                showStatus('❌ Projek Tidak Ditemui', 'Projek ini tidak wujud, atau pautan tidak sah.', true);
+                showStatus('❌ Project Not Found', 'This project does not exist, or the link is invalid.', true);
                 return;
             }
 
             if (!data.is_public) {
-                showStatus('🔒 Projek Peribadi', 'Pemilik projek ini belum menjadikannya awam. Minta pemilik aktifkan status "Awam" untuk kongsi pautan ini.', true);
+                showStatus('🔒 Private Project', 'The owner of this project has not made it public yet. Ask the owner to enable "Public" status to share this link.', true);
                 return;
             }
 
@@ -1662,7 +1662,7 @@
             fullScenesData = projectData.scenes || [];
 
             if (fullScenesData.length === 0) {
-                showStatus('📭 Projek Kosong', 'Projek ini belum ada kandungan.', true);
+                showStatus('📭 Empty Project', 'This project has no content yet.', true);
                 return;
             }
 
@@ -1671,7 +1671,7 @@
             });
 
             const badge = document.getElementById('project-badge');
-            badge.innerText = '📁 ' + (data.name || 'Projek');
+            badge.innerText = '📁 ' + (data.name || 'Project');
             badge.style.display = 'block';
 
             // Scene PERTAMA dalam senarai sentiasa jadi default (sama macam mod Pratonton editor)
@@ -1686,7 +1686,7 @@
         const projectIdParam = urlParams.get('project');
 
         if (!projectIdParam) {
-            showStatus('⚠️ Tiada Projek Dinyatakan', 'Pautan ini tidak lengkap — sila guna pautan/QR yang disediakan oleh pembina projek.', true);
+            showStatus('⚠️ No Project Specified', 'This link is incomplete — please use the link/QR provided by the project creator.', true);
         } else {
             loadPublicProject(projectIdParam);
         }
