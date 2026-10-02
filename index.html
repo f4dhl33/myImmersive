@@ -495,6 +495,7 @@
         <div class="gate-box">
             <h2>📁 Projek Saya</h2>
             <p>Pilih projek sedia ada atau cipta baharu.</p>
+            <p style="font-size:11px; color:#888; margin-top:-6px;">Log masuk sebagai: <b id="gate-email-display" style="color:#ccc;">-</b></p>
 
             <ul id="project-gate-list"></ul>
 
@@ -2240,6 +2241,7 @@
         function showProjectGate() {
             document.getElementById('auth-gate').style.display = 'none';
             document.getElementById('project-gate').style.display = 'flex';
+            document.getElementById('gate-email-display').textContent = currentUser ? currentUser.email : '-';
             renderProjectGateList();
         }
 
