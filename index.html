@@ -2789,10 +2789,15 @@
             });
         }
 
-        function updateTargetObjectDropdown() {
+        function updateTargetObjectDropdown(animOnly) {
             selectTargetObjects.innerHTML = "";
 
-            loadedModelsList.forEach(obj => {
+            let candidates = loadedModelsList;
+            if (animOnly) {
+                candidates = candidates.filter(obj => obj.userData.mixer && obj.userData.animAction);
+            }
+
+            candidates.forEach(obj => {
                 const opt = document.createElement('option');
                 opt.value = obj.userData.id;
                 const isSelf = selectedModel && obj.userData.id === selectedModel.userData.id;
@@ -2800,6 +2805,14 @@
                 if (isSelf) opt.selected = true;
                 selectTargetObjects.appendChild(opt);
             });
+
+            if (animOnly && candidates.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.textContent = "-- Tiada objek yang mempunyai animasi untuk dimainkan --";
+                opt.disabled = true;
+                selectTargetObjects.appendChild(opt);
+            }
         }
 
         // ZON SASARAN — dropdown pilih objek "Boleh Diambil" yang dipantau oleh zon ni
@@ -2852,7 +2865,7 @@
             } else if (val === 'toggleModelAnim') {
                 animModeContainer.style.display = 'block';
                 targetObjContainer.style.display = 'block';
-                updateTargetObjectDropdown();
+                updateTargetObjectDropdown(true);
             } else if (val === 'stepMove') {
                 stepMoveContainer.style.display = 'block';
                 targetObjContainer.style.display = 'block';
