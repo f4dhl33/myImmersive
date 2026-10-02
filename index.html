@@ -1701,6 +1701,7 @@
             const { data, error } = await supabaseClient
                 .from('projects')
                 .select('id,name,is_public,updated_at')
+                .eq('owner_id', currentUser.id)
                 .order('updated_at', { ascending: false });
             if (error) { console.error(error); return []; }
             return data || [];
