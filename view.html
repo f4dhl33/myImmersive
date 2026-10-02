@@ -815,6 +815,16 @@
             teardownPhysicsWorld();
         }
 
+        // Cetuskan semua tindakan "onStart" (Sebaik Scene Dimulakan) sekali sahaja setiap
+        // kali kandungan scene benar-benar jadi aktif/kelihatan pada pengguna.
+        function fireSceneStartTriggers() {
+            loadedModelsList.forEach(m => {
+                if (m.userData.interactions && m.userData.interactions.some(act => act.trigger === 'onStart')) {
+                    triggerInteraction(m, 'onStart');
+                }
+            });
+        }
+
         function applyVisibilityAndCamera() {
             loadedModelsList.forEach(m => {
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
@@ -837,6 +847,7 @@
             }
 
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         // Fallback bila hit-test AR tak disokong peranti/browser — letak kandungan
@@ -851,6 +862,7 @@
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         function placeContentAtReticle() {
@@ -862,6 +874,7 @@
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         async function applySceneDataToViewport(sceneObj) {

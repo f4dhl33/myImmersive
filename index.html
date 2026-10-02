@@ -335,6 +335,7 @@
         .badge-click { background: #007acc; color: white; }
         .badge-hover { background: #e67e22; color: white; }
         .badge-zone { background: #00e5ff; color: #003844; }
+        .badge-start { background: #2ecc71; color: #06310f; }
 
         .action-item-desc {
             font-size: 11px;
@@ -664,6 +665,7 @@
             <div class="section-box">
                 <label for="select-trigger">Pemicu (Trigger Event):</label>
                 <select id="select-trigger">
+                    <option value="onStart">Sebaik Scene Dimulakan (On Start)</option>
                     <option value="onClick">Pengguna Klik Objek (On Click)</option>
                     <option value="onHover">Pengguna Lalu Tetikus (On Hover)</option>
                     <option value="onPlaceInZone">Objek Diletak Dalam Zon Ini (Pick &amp; Place)</option>
@@ -1267,6 +1269,18 @@
             target: new THREE.Vector3()
         };
 
+        // Cetuskan semua tindakan "onStart" (Sebaik Scene Dimulakan) sekali sahaja setiap
+        // kali kandungan scene benar-benar jadi aktif/kelihatan pada pengguna — dipanggil
+        // dari applyPreviewVisibilityAndCamera (non-AR) dan placeContentAtDefault/Reticle (AR),
+        // supaya ia tercetus betul-betul "sebaik shj link/QR view diaktifkan".
+        function fireSceneStartTriggers() {
+            loadedModelsList.forEach(m => {
+                if (m.userData.interactions && m.userData.interactions.some(act => act.trigger === 'onStart')) {
+                    triggerInteraction(m, 'onStart');
+                }
+            });
+        }
+
         // Letak semula visibility awal objek + posisi kamera/rig kat Kedudukan Awal Kamera.
         // Dipakai semasa masuk Pratonton, DAN semula bila "Tukar Scene" dicetus sewaktu
         // pratonton/VR/AR sedang aktif (macam "portal" ke scene lain).
@@ -1298,6 +1312,7 @@
             }
 
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         // Fallback bila hit-test AR tak disokong peranti/browser — letak kandungan
@@ -1311,6 +1326,7 @@
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         function placeContentAtReticle() {
@@ -1322,6 +1338,7 @@
                 m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
             });
             buildPhysicsWorldFromScene();
+            fireSceneStartTriggers();
         }
 
         async function setPreviewMode(enable) {
@@ -3887,9 +3904,12 @@
                 if (act.trigger === 'onClick') {
                     badgeClass = 'badge-click';
                     badgeText = 'KLIK';
-                } else if (act.trigger === 'onPlaceInZone') {
+                } else if (act.trigger === 'onPlaceInZone' || act.trigger === 'onUserEnterZone') {
                     badgeClass = 'badge-zone';
                     badgeText = 'ZON';
+                } else if (act.trigger === 'onStart') {
+                    badgeClass = 'badge-start';
+                    badgeText = 'MULA';
                 }
 
                 li.innerHTML = `
