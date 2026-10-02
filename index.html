@@ -2722,6 +2722,22 @@
         const animBtnPlayPause = document.getElementById('anim-btn-play-pause');
         const animSpeedSelect = document.getElementById('anim-speed-select');
         let isModalScrubbing = false;
+        let animModalTarget = null;
+
+        // Tentukan objek mana yang patut diuji dalam Pemotong Masa Animasi: kalau Action
+        // sedang "Mula/Henti Animasi" dan ada Objek Sasaran dipilih, guna objek sasaran tu
+        // (sebab itu yang akan dimainkan sebenarnya) — bukan semestinya objek yang sedang
+        // dipilih (selectedModel), yang mungkin hanya "pencetus" tanpa animasi sendiri.
+        function getAnimPreviewTarget() {
+            if (selectAction.value === 'toggleModelAnim') {
+                const targetIds = Array.from(selectTargetObjects.selectedOptions).map(opt => opt.value).filter(v => v !== "");
+                if (targetIds.length > 0) {
+                    const found = loadedModelsList.find(o => String(o.userData.id) === String(targetIds[0]));
+                    if (found) return found;
+                }
+            }
+            return selectedModel;
+        }
 
         // STEP MOVE INPUTS
         const stepMoveContainer = document.getElementById('step-move-container');
@@ -2886,15 +2902,17 @@
         // LOGIK MODAL INSPECTOR & PREVIEW MASA ANIMASI
         // -------------------------------------------------------------
         function openAnimModal() {
-            if (!selectedModel || !selectedModel.userData.mixer || !selectedModel.userData.animAction) {
+            const target = getAnimPreviewTarget();
+            if (!target || !target.userData.mixer || !target.userData.animAction) {
                 alert("Objek ini tidak mempunyai animasi 3D terbina untuk diuji.");
                 return;
             }
+            animModalTarget = target;
 
-            const action = selectedModel.userData.animAction;
+            const action = animModalTarget.userData.animAction;
             const duration = action.getClip().duration;
 
-            animModalTitle.innerText = selectedModel.userData.fileName;
+            animModalTitle.innerText = animModalTarget.userData.fileName;
             animScrubber.max = duration;
             animScrubber.value = action.time || 0;
             animSpeedSelect.value = action.timeScale || 1.0;
@@ -2908,44 +2926,45 @@
 
         function closeAnimModal() {
             animModal.style.display = "none";
-            if (selectedModel && selectedModel.userData.animAction) {
-                selectedModel.userData.animAction.timeScale = 1.0;
+            if (animModalTarget && animModalTarget.userData.animAction) {
+                animModalTarget.userData.animAction.timeScale = 1.0;
             }
+            animModalTarget = null;
         }
 
         document.getElementById('btn-open-anim-modal').addEventListener('click', openAnimModal);
         document.getElementById('btn-close-anim-modal').addEventListener('click', closeAnimModal);
 
         animBtnPlayPause.addEventListener('click', () => {
-            if (!selectedModel || !selectedModel.userData.animAction) return;
-            const action = selectedModel.userData.animAction;
+            if (!animModalTarget || !animModalTarget.userData.animAction) return;
+            const action = animModalTarget.userData.animAction;
             action.paused = !action.paused;
             animBtnPlayPause.innerText = action.paused ? "▶ Main" : "⏸ Jeda";
         });
 
         animSpeedSelect.addEventListener('change', () => {
-            if (!selectedModel || !selectedModel.userData.animAction) return;
-            selectedModel.userData.animAction.timeScale = parseFloat(animSpeedSelect.value);
+            if (!animModalTarget || !animModalTarget.userData.animAction) return;
+            animModalTarget.userData.animAction.timeScale = parseFloat(animSpeedSelect.value);
         });
 
         animScrubber.addEventListener('mousedown', () => { isModalScrubbing = true; });
         animScrubber.addEventListener('mouseup', () => { isModalScrubbing = false; });
         animScrubber.addEventListener('input', () => {
-            if (!selectedModel || !selectedModel.userData.animAction || !selectedModel.userData.mixer) return;
-            const action = selectedModel.userData.animAction;
+            if (!animModalTarget || !animModalTarget.userData.animAction || !animModalTarget.userData.mixer) return;
+            const action = animModalTarget.userData.animAction;
             action.time = parseFloat(animScrubber.value);
-            selectedModel.userData.mixer.update(0); // Force render pose
+            animModalTarget.userData.mixer.update(0); // Force render pose
         });
 
         document.getElementById('anim-btn-set-start').addEventListener('click', () => {
-            if (!selectedModel || !selectedModel.userData.animAction) return;
-            inputAnimStartTime.value = selectedModel.userData.animAction.time.toFixed(1);
+            if (!animModalTarget || !animModalTarget.userData.animAction) return;
+            inputAnimStartTime.value = animModalTarget.userData.animAction.time.toFixed(1);
             showPopupMessage(`⏱️ Masa Mula Diberi: ${inputAnimStartTime.value}s`, 1500);
         });
 
         document.getElementById('anim-btn-set-end').addEventListener('click', () => {
-            if (!selectedModel || !selectedModel.userData.animAction) return;
-            inputAnimEndTime.value = selectedModel.userData.animAction.time.toFixed(1);
+            if (!animModalTarget || !animModalTarget.userData.animAction) return;
+            inputAnimEndTime.value = animModalTarget.userData.animAction.time.toFixed(1);
             showPopupMessage(`⏱️ Masa Tamat Diberi: ${inputAnimEndTime.value}s`, 1500);
         });
 
@@ -4595,13 +4614,13 @@
             }
 
             // SINKRONIKAN SCRUBBER MODAL JIKA UTILITY MODAL SEDANG DIBUKA
-            if (animModal.style.display === "block" && selectedModel && selectedModel.userData.animAction) {
-                const action = selectedModel.userData.animAction;
+            if (animModal.style.display === "block" && animModalTarget && animModalTarget.userData.animAction) {
+                const action = animModalTarget.userData.animAction;
                 const clipDuration = action.getClip().duration;
 
-                const drivenByInteraction = ['playing', 'playing_fwd', 'playing_rev'].includes(selectedModel.userData.animState);
+                const drivenByInteraction = ['playing', 'playing_fwd', 'playing_rev'].includes(animModalTarget.userData.animState);
                 if (!isModalScrubbing && !action.paused && !drivenByInteraction) {
-                    selectedModel.userData.mixer.update(delta);
+                    animModalTarget.userData.mixer.update(delta);
                 }
 
                 if (!isModalScrubbing) {
