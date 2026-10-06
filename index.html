@@ -407,13 +407,6 @@
         .gate-box input { margin-bottom: 12px; }
         .gate-error-text { font-size: 11px; color: #d9534f; margin: -6px 0 10px; min-height: 14px; }
 
-        .auth-tabs { display: flex; gap: 6px; margin-bottom: 15px; }
-        .auth-tab-btn {
-            flex: 1; margin: 0; padding: 8px; font-size: 12px;
-            background: #333; border: 1px solid #444; color: #aaa; cursor: pointer; border-radius: 4px;
-        }
-        .auth-tab-btn.active { background: #0e639c; color: #fff; border-color: #0e639c; }
-
         #project-gate-list {
             list-style: none;
             max-height: 200px;
@@ -460,11 +453,6 @@
             <h2>🔐 Sign In / Create Account</h2>
             <p>Sign in to save and manage your projects in the cloud.</p>
 
-            <div class="auth-tabs">
-                <button type="button" id="tab-signin" class="auth-tab-btn active">Sign In</button>
-                <button type="button" id="tab-signup" class="auth-tab-btn">Sign Up</button>
-            </div>
-
             <div id="auth-normal-fields">
                 <input type="email" id="auth-email" placeholder="Email" autocomplete="username">
                 <input type="password" id="auth-password" placeholder="Password (min 6 characters)" autocomplete="current-password">
@@ -473,6 +461,10 @@
                 </div>
                 <div id="auth-error" class="gate-error-text"></div>
                 <button type="button" id="auth-submit-btn">Sign In</button>
+                <p style="margin-top:12px; font-size:11px; color:#aaa; text-align:center;">
+                    <span id="auth-mode-toggle-question">Don't have an account?</span>
+                    <a href="#" id="link-toggle-auth-mode" style="color:#007acc; text-decoration:none; font-weight:bold;">Create one</a>
+                </p>
             </div>
 
             <div id="auth-forgot-fields" style="display:none;">
@@ -2338,10 +2330,10 @@
 
         // ---- WIRING: SKRIN AUTH ----
         let authMode = 'signin';
-        const tabSignIn = document.getElementById('tab-signin');
-        const tabSignUp = document.getElementById('tab-signup');
         const authSubmitBtn = document.getElementById('auth-submit-btn');
         const authErrorEl = document.getElementById('auth-error');
+        const authModeToggleQuestion = document.getElementById('auth-mode-toggle-question');
+        const linkToggleAuthMode = document.getElementById('link-toggle-auth-mode');
 
         function showAuthNormalFields() {
             document.getElementById('auth-forgot-fields').style.display = 'none';
@@ -2349,21 +2341,24 @@
             document.getElementById('auth-normal-fields').style.display = 'block';
         }
 
-        tabSignIn.addEventListener('click', () => {
-            authMode = 'signin';
-            tabSignIn.classList.add('active');
-            tabSignUp.classList.remove('active');
-            authSubmitBtn.textContent = 'Sign In';
+        function setAuthMode(mode) {
+            authMode = mode;
             authErrorEl.textContent = '';
+            if (mode === 'signup') {
+                authSubmitBtn.textContent = 'Sign Up';
+                authModeToggleQuestion.textContent = 'Already have an account?';
+                linkToggleAuthMode.textContent = 'Sign In';
+            } else {
+                authSubmitBtn.textContent = 'Sign In';
+                authModeToggleQuestion.textContent = "Don't have an account?";
+                linkToggleAuthMode.textContent = 'Create one';
+            }
             showAuthNormalFields();
-        });
-        tabSignUp.addEventListener('click', () => {
-            authMode = 'signup';
-            tabSignUp.classList.add('active');
-            tabSignIn.classList.remove('active');
-            authSubmitBtn.textContent = 'Sign Up';
-            authErrorEl.textContent = '';
-            showAuthNormalFields();
+        }
+
+        linkToggleAuthMode.addEventListener('click', (e) => {
+            e.preventDefault();
+            setAuthMode(authMode === 'signin' ? 'signup' : 'signin');
         });
 
         // ---- LUPA KATA LALUAN ----
@@ -2441,9 +2436,9 @@
             try {
                 if (authMode === 'signup') {
                     await signUpUser(email, password);
+                    setAuthMode('signin');
                     authErrorEl.style.color = '#8fd18f';
                     authErrorEl.textContent = 'Account registered! Please sign in.';
-                    tabSignIn.click();
                 } else {
                     const result = await signInUser(email, password);
                     currentUser = result.user;
