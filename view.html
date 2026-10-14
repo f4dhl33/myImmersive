@@ -238,16 +238,16 @@
         controls.dampingFactor = 0.05;
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
-        // Kekalkan pivot putaran OrbitControls di tengah-tengah SEMUA kandungan scene
-        // (bukan titik tetap sejak scene dimuatkan) — dipanggil bila scene dimuatkan/
-        // ditukar, bukan setiap interaksi tetikus, supaya pivot kekal stabil &
-        // predictable (elak "lompat radius" macam zoom tiba-tiba).
+        // Kekalkan pivot putaran OrbitControls di tengah-tengah kandungan scene yang
+        // KELIHATAN sahaja (bukan Zon Sasaran/objek disembunyikan — tu authoring-only,
+        // tak patut pengaruhi pivot pandangan end-user) — dipanggil bila scene
+        // dimuatkan/ditukar, bukan setiap interaksi tetikus, supaya pivot kekal stabil
+        // & predictable (elak "lompat radius" macam zoom tiba-tiba).
         function recenterOrbitPivot() {
-            if (!loadedModelsList.length) return;
+            const visibleObjects = loadedModelsList.filter(m => m.visible);
+            if (!visibleObjects.length) return;
             const box = new THREE.Box3();
-            let hasAny = false;
-            loadedModelsList.forEach(m => { box.expandByObject(m); hasAny = true; });
-            if (!hasAny) return;
+            visibleObjects.forEach(m => box.expandByObject(m));
             const center = new THREE.Vector3();
             box.getCenter(center);
             if (!isFinite(center.x) || !isFinite(center.y) || !isFinite(center.z)) return;
