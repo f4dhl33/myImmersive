@@ -3309,6 +3309,31 @@
         renderer.domElement.addEventListener('pointerdown', (event) => {
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
+
+            // Jadikan titik yang diklik/tap sebagai pivot putaran OrbitControls
+            // seterusnya (bukan sentiasa dunia 0,0,0 atau titik lama yang dah tak
+            // relevan) — supaya rotate rasa natural ikut apa yang pengguna sedang
+            // tengok. Tak sebabkan "lompat" visual sebab kamera sendiri tak gerak,
+            // cuma pivot untuk drag rotate SETERUSNYA yang berubah.
+            if (event.button === 0 && !renderer.xr.isPresenting) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, mainCamera);
+
+                const pivotTargets = isPreviewMode ? loadedModelsList.filter(o => o.visible) : [...loadedModelsList, previewCameraMarker];
+                const pivotHits = raycaster.intersectObjects(pivotTargets, true);
+
+                if (pivotHits.length > 0) {
+                    controls.target.copy(pivotHits[0].point);
+                } else {
+                    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y);
+                    const groundHit = new THREE.Vector3();
+                    if (raycaster.ray.intersectPlane(groundPlane, groundHit)) {
+                        controls.target.copy(groundHit);
+                    }
+                }
+            }
         });
 
         renderer.domElement.addEventListener('pointerup', (event) => {
