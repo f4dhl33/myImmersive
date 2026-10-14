@@ -3475,7 +3475,9 @@
         cameraRig.add(controller2);
 
         const CONTROLLER_LASER_MAX_LENGTH = 5;
+        const CONTROLLER_LASER_IDLE_LENGTH = 1.6;
         const CONTROLLER_LASER_RADIUS = 0.005;
+        const CONTROLLER_TRIGGER_FLASH_MS = 180;
 
         // Laser dibina sebagai TIUB melengkung (quadratic bezier), dikira semula
         // setiap frame ikut jarak hit semasa — bukan silinder lurus tegar. Hujung
@@ -3525,7 +3527,10 @@
                 ctrl.userData.handedness = event.data && event.data.handedness;
             });
 
-            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_MAX_LENGTH), controllerLaserMaterial);
+            // Bahan laser KLON berasingan setiap controller (bukan kongsi satu
+            // instance) — sebab opacity dia berubah ikut status hit SETIAP
+            // controller secara berasingan (idle vs kena objek).
+            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_IDLE_LENGTH), controllerLaserMaterial.clone());
             laser.name = 'controller-laser';
             laser.renderOrder = 998;
             ctrl.add(laser);
@@ -3537,7 +3542,7 @@
                 blending: THREE.AdditiveBlending, toneMapped: false
             }));
             dot.name = 'controller-laser-dot';
-            dot.position.set(0, 0, -CONTROLLER_LASER_MAX_LENGTH);
+            dot.position.set(0, 0, -CONTROLLER_LASER_IDLE_LENGTH);
             dot.renderOrder = 999;
             ctrl.add(dot);
 
@@ -3546,14 +3551,29 @@
                 side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false
             }));
             ring.name = 'controller-laser-ring';
-            ring.position.set(0, 0, -CONTROLLER_LASER_MAX_LENGTH);
+            ring.position.set(0, 0, -CONTROLLER_LASER_IDLE_LENGTH);
             ring.renderOrder = 999;
+            ring.visible = false;
             ctrl.add(ring);
 
             ctrl.userData.laser = laser;
             ctrl.userData.laserDot = dot;
             ctrl.userData.laserRing = ring;
+            ctrl.userData.triggerFlashUntil = 0;
         });
+
+        // Kilauan kuning/putih SEKETIKA pada hujung laser bila trigger ditekan —
+        // bukan status hover berterusan (hover kekal biru). Ini bagi maklum balas
+        // visual yang jelas untuk tindakan "klik" itu sendiri.
+        function flashControllerTrigger(event) {
+            const controller = event.target;
+            const hitModel = getControllerRaycastHit(controller);
+            if (hitModel) {
+                controller.userData.triggerFlashUntil = performance.now() + CONTROLLER_TRIGGER_FLASH_MS;
+            }
+        }
+        controller1.addEventListener('selectstart', flashControllerTrigger);
+        controller2.addEventListener('selectstart', flashControllerTrigger);
 
         const controllerRaycaster = new THREE.Raycaster();
         const controllerTempMatrix = new THREE.Matrix4();
@@ -3579,32 +3599,56 @@
                 }
             }
 
+            // TIADA sasaran — laser "hilang" pada jarak pendek yang sesuai (bukan
+            // sentiasa sampai jarak maksimum 5m macam rod tegar). ADA sasaran — laser
+            // sambung terus ke titik hit sebenar, berapa jauh sekalipun.
+            const didHit = !!hitModel;
+            const displayDistance = didHit ? hitDistance : CONTROLLER_LASER_IDLE_LENGTH;
+
             const laser = controller.userData.laser;
             if (laser) {
                 laser.geometry.dispose();
-                laser.geometry = buildControllerLaserCurveGeometry(hitDistance);
+                laser.geometry = buildControllerLaserCurveGeometry(displayDistance);
+                laser.material.opacity = didHit ? 0.9 : 0.3;
             }
-            const hitColor = hitModel ? 0xffdd00 : 0x00e5ff;
+
+            // Kilauan kuning/putih HANYA seketika lepas trigger ditekan (lihat
+            // flashControllerTrigger) — selain tu laser/titik kekal biru tak kira
+            // sedang hover objek atau tidak.
+            const isFlashing = performance.now() < (controller.userData.triggerFlashUntil || 0);
+            const hitColor = isFlashing ? 0xffffff : 0x00e5ff;
+
+            // Saiz titik berkadar SONGSANG dengan jarak — lebih besar untuk objek
+            // dekat, lebih kecil untuk objek jauh (macam perspektif sebenar).
+            const distT = THREE.MathUtils.clamp(displayDistance / CONTROLLER_LASER_MAX_LENGTH, 0, 1);
+            const distanceScale = THREE.MathUtils.lerp(1.5, 0.7, distT);
+            const flashScale = isFlashing ? 1.3 : 1;
+            const markerScale = didHit ? distanceScale * flashScale : 0.55;
+
             // Tarik penanda sikit ke arah controller (bukan tepat di permukaan) bila
             // kena objek — elak z-fighting/kelipan dengan permukaan tu sekarang
-            // depthTest dah aktif. Tak perlu kalau tiada objek dikena (tiada apa nak
-            // "lawan" kedalaman).
-            const markerDistance = hitModel ? Math.max(hitDistance - 0.01, 0.001) : hitDistance;
+            // depthTest dah aktif. Tak perlu kalau tiada objek dikena.
+            const markerDistance = didHit ? Math.max(hitDistance - 0.01, 0.001) : displayDistance;
+
             const dot = controller.userData.laserDot;
             if (dot) {
                 dot.position.z = -markerDistance;
                 dot.material.color.setHex(hitColor);
-                dot.scale.setScalar(hitModel ? 1.6 : 1);
+                dot.material.opacity = didHit ? 0.95 : 0.25;
+                dot.scale.setScalar(markerScale);
             }
             const ring = controller.userData.laserRing;
             if (ring) {
-                ring.position.z = -markerDistance;
-                ring.material.color.setHex(hitColor);
-                ring.scale.setScalar(hitModel ? 1.3 : 1);
-                // Billboard — cincin sentiasa hadap kamera supaya nampak sebagai
-                // reticle tegas dari mana-mana sudut, bukan nipis/hilang dari tepi.
-                mainCamera.getWorldPosition(controllerTempCamPos);
-                ring.lookAt(controllerTempCamPos);
+                ring.visible = didHit;
+                if (didHit) {
+                    ring.position.z = -markerDistance;
+                    ring.material.color.setHex(hitColor);
+                    ring.scale.setScalar(markerScale);
+                    // Billboard — cincin sentiasa hadap kamera supaya nampak sebagai
+                    // reticle tegas dari mana-mana sudut, bukan nipis/hilang dari tepi.
+                    mainCamera.getWorldPosition(controllerTempCamPos);
+                    ring.lookAt(controllerTempCamPos);
+                }
             }
 
             return hitModel;
