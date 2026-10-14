@@ -238,6 +238,22 @@
         controls.dampingFactor = 0.05;
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
+        // Cari titik pivot yang sepadan dengan JARAK SEBENAR kandungan dari kamera —
+        // bukan jarak tetap (contoh 3 unit) yang tak kira di mana objek sebenar
+        // berada (boleh buat objek jauh "berpusar" dramatik keliling kamera bila
+        // jarak tu tak match). Raycast sepanjang arah pandangan kamera; kalau kena
+        // objek, guna titik tu sebagai pivot. Kalau tidak, fallback ke jarak tetap.
+        function findCameraOrbitTarget(camPosition, camQuaternion, fallbackDistance) {
+            contentRoot.updateMatrixWorld(true);
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuaternion).normalize();
+            const rc = new THREE.Raycaster(camPosition.clone(), forward.clone());
+            const hits = rc.intersectObjects(loadedModelsList.filter(o => o.visible), true);
+            if (hits.length > 0) {
+                return hits[0].point;
+            }
+            return camPosition.clone().add(forward.multiplyScalar(fallbackDistance));
+        }
+
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // LIGHTING (sama tetapan seperti editor)
@@ -829,8 +845,7 @@
                 mainCamera.position.set(sceneCameraData.position[0], sceneCameraData.position[1], sceneCameraData.position[2]);
                 mainCamera.rotation.set(sceneCameraData.rotation[0], sceneCameraData.rotation[1], sceneCameraData.rotation[2]);
 
-                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(mainCamera.quaternion);
-                controls.target.copy(mainCamera.position).add(forward.multiplyScalar(3));
+                controls.target.copy(findCameraOrbitTarget(mainCamera.position, mainCamera.quaternion, 3));
                 controls.update();
             }
 

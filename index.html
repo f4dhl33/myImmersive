@@ -1016,6 +1016,23 @@
             controls.update();
         }
 
+        // Cari titik pivot yang sepadan dengan JARAK SEBENAR kandungan dari kamera —
+        // bukan jarak tetap (contoh 3 unit) yang tak kira di mana objek sebenar
+        // berada (boleh buat objek jauh "berpusar" dramatik keliling kamera bila
+        // jarak tu tak match — tuas/lever-arm terlalu pendek berbanding jarak objek
+        // sebenar). Raycast sepanjang arah pandangan kamera; kalau kena objek, guna
+        // titik tu sebagai pivot. Kalau tidak, fallback ke jarak tetap.
+        function findCameraOrbitTarget(camPosition, camQuaternion, fallbackDistance) {
+            contentRoot.updateMatrixWorld(true);
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuaternion).normalize();
+            const rc = new THREE.Raycaster(camPosition.clone(), forward.clone());
+            const hits = rc.intersectObjects(loadedModelsList.filter(o => o.visible), true);
+            if (hits.length > 0) {
+                return hits[0].point;
+            }
+            return camPosition.clone().add(forward.multiplyScalar(fallbackDistance));
+        }
+
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // DUMMY KAMERA (PREVIEW STARTING POINT OBJECT)
@@ -1308,8 +1325,7 @@
                 mainCamera.position.copy(previewCameraMarker.position);
                 mainCamera.rotation.copy(previewCameraMarker.rotation);
 
-                const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(previewCameraMarker.quaternion);
-                controls.target.copy(mainCamera.position).add(forward.multiplyScalar(3));
+                controls.target.copy(findCameraOrbitTarget(mainCamera.position, mainCamera.quaternion, 3));
 
                 controls.mouseButtons = {
                     LEFT: THREE.MOUSE.ROTATE,
