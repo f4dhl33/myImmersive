@@ -3632,10 +3632,12 @@
 
             const dot = controller.userData.laserDot;
             if (dot) {
-                dot.position.z = -markerDistance;
-                dot.material.color.setHex(hitColor);
-                dot.material.opacity = didHit ? 0.95 : 0.25;
-                dot.scale.setScalar(markerScale);
+                dot.visible = didHit;
+                if (didHit) {
+                    dot.position.z = -markerDistance;
+                    dot.material.color.setHex(hitColor);
+                    dot.scale.setScalar(markerScale);
+                }
             }
             const ring = controller.userData.laserRing;
             if (ring) {
