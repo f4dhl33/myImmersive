@@ -3499,11 +3499,17 @@
             return new THREE.TubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, false);
         }
 
+        // depthTest AKTIF — laser mesti hormat kedalaman SEBENAR dalam scene (ter-
+        // sorok di belakang objek yang lebih dekat dengan kamera berbanding titik
+        // yang disasar), supaya perspektif/occlusion antara dua objek berbeza jarak
+        // kekal betul. depthWrite dimatikan supaya laser (nipis & lutsinar) sendiri
+        // tak "menghalang" ujian kedalaman objek lut sinar lain di belakangnya.
         const controllerLaserMaterial = new THREE.MeshBasicMaterial({
             color: 0x00e5ff,
             transparent: true,
             opacity: 0.9,
-            depthTest: false,
+            depthTest: true,
+            depthWrite: false,
             blending: THREE.AdditiveBlending,
             toneMapped: false
         });
@@ -3527,7 +3533,7 @@
             // Titik pada hujung laser — tunjuk dengan jelas objek apa yang sedang disasar,
             // dan laser sendiri akan pendek mengikut jarak sasaran (bukan sentiasa nampak infinity)
             const dot = new THREE.Mesh(controllerDotGeometry, new THREE.MeshBasicMaterial({
-                color: 0x00e5ff, transparent: true, opacity: 0.95, depthTest: false,
+                color: 0x00e5ff, transparent: true, opacity: 0.95, depthTest: true, depthWrite: false,
                 blending: THREE.AdditiveBlending, toneMapped: false
             }));
             dot.name = 'controller-laser-dot';
@@ -3536,7 +3542,7 @@
             ctrl.add(dot);
 
             const ring = new THREE.Mesh(controllerRingGeometry, new THREE.MeshBasicMaterial({
-                color: 0x00e5ff, transparent: true, opacity: 1, depthTest: false,
+                color: 0x00e5ff, transparent: true, opacity: 1, depthTest: true, depthWrite: false,
                 side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false
             }));
             ring.name = 'controller-laser-ring';
@@ -3579,15 +3585,20 @@
                 laser.geometry = buildControllerLaserCurveGeometry(hitDistance);
             }
             const hitColor = hitModel ? 0xffdd00 : 0x00e5ff;
+            // Tarik penanda sikit ke arah controller (bukan tepat di permukaan) bila
+            // kena objek — elak z-fighting/kelipan dengan permukaan tu sekarang
+            // depthTest dah aktif. Tak perlu kalau tiada objek dikena (tiada apa nak
+            // "lawan" kedalaman).
+            const markerDistance = hitModel ? Math.max(hitDistance - 0.01, 0.001) : hitDistance;
             const dot = controller.userData.laserDot;
             if (dot) {
-                dot.position.z = -hitDistance;
+                dot.position.z = -markerDistance;
                 dot.material.color.setHex(hitColor);
                 dot.scale.setScalar(hitModel ? 1.6 : 1);
             }
             const ring = controller.userData.laserRing;
             if (ring) {
-                ring.position.z = -hitDistance;
+                ring.position.z = -markerDistance;
                 ring.material.color.setHex(hitColor);
                 ring.scale.setScalar(hitModel ? 1.3 : 1);
                 // Billboard — cincin sentiasa hadap kamera supaya nampak sebagai
