@@ -3492,9 +3492,9 @@
         const controllerLaserCurve = new THREE.QuadraticBezierCurve3(controllerLaserCurveP0, controllerLaserCurveP1, controllerLaserCurveP2);
 
         function buildControllerLaserCurveGeometry(hitDistance) {
-            const droop = Math.min(hitDistance * 0.12, 0.25);
+            const arc = Math.min(hitDistance * 0.12, 0.25);
             controllerLaserCurveP0.set(0, 0, 0);
-            controllerLaserCurveP1.set(0, -droop, -hitDistance * 0.5);
+            controllerLaserCurveP1.set(0, arc, -hitDistance * 0.5);
             controllerLaserCurveP2.set(0, 0, -hitDistance);
             return new THREE.TubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, false);
         }
