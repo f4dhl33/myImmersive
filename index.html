@@ -3305,38 +3305,55 @@
 
         // LOGIK KLIK & RAYCASTING STABIL
         let pointerDownPos = { x: 0, y: 0 };
+        let rotatePivotPending = false;
 
         renderer.domElement.addEventListener('pointerdown', (event) => {
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
+            rotatePivotPending = (event.button === 0 && !renderer.xr.isPresenting);
+        });
 
-            // Jadikan titik yang diklik/tap sebagai pivot putaran OrbitControls
-            // seterusnya (bukan sentiasa dunia 0,0,0 atau titik lama yang dah tak
-            // relevan) — supaya rotate rasa natural ikut apa yang pengguna sedang
-            // tengok. Tak sebabkan "lompat" visual sebab kamera sendiri tak gerak,
-            // cuma pivot untuk drag rotate SETERUSNYA yang berubah.
-            if (event.button === 0 && !renderer.xr.isPresenting) {
-                const rect = renderer.domElement.getBoundingClientRect();
-                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-                raycaster.setFromCamera(mouse, mainCamera);
+        // Jadikan titik yang diklik/tap sebagai pivot putaran OrbitControls seterusnya
+        // (bukan sentiasa dunia 0,0,0 atau titik lama yang dah tak relevan) — supaya
+        // rotate rasa natural ikut apa yang pengguna sedang tengok. Sengaja tunggu drag
+        // BETUL-BETUL bermula (>5px, bukan setiap klik) sebelum tukar pivot — kalau
+        // ditukar pada setiap pointerdown (termasuk klik ringkas utk pilih objek),
+        // sebarang gerakan residual OrbitControls (disebabkan enableDamping) akan
+        // di-smooth-kan merentasi beberapa frame dan nampak macam "tersentak". controls.update()
+        // dipanggil serta-merta supaya pembetulan radius/sudut berlaku instant, bukan animasi.
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            if (!rotatePivotPending) return;
+            if (event.buttons !== 1) { rotatePivotPending = false; return; }
 
-                const pivotTargets = isPreviewMode ? loadedModelsList.filter(o => o.visible) : [...loadedModelsList, previewCameraMarker];
-                const pivotHits = raycaster.intersectObjects(pivotTargets, true);
+            const deltaX = Math.abs(event.clientX - pointerDownPos.x);
+            const deltaY = Math.abs(event.clientY - pointerDownPos.y);
+            if (deltaX <= 5 && deltaY <= 5) return;
 
-                if (pivotHits.length > 0) {
-                    controls.target.copy(pivotHits[0].point);
-                } else {
-                    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y);
-                    const groundHit = new THREE.Vector3();
-                    if (raycaster.ray.intersectPlane(groundPlane, groundHit)) {
-                        controls.target.copy(groundHit);
-                    }
+            rotatePivotPending = false;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((pointerDownPos.x - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((pointerDownPos.y - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, mainCamera);
+
+            const pivotTargets = isPreviewMode ? loadedModelsList.filter(o => o.visible) : [...loadedModelsList, previewCameraMarker];
+            const pivotHits = raycaster.intersectObjects(pivotTargets, true);
+
+            if (pivotHits.length > 0) {
+                controls.target.copy(pivotHits[0].point);
+                controls.update();
+            } else {
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y);
+                const groundHit = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(groundPlane, groundHit)) {
+                    controls.target.copy(groundHit);
+                    controls.update();
                 }
             }
         });
 
         renderer.domElement.addEventListener('pointerup', (event) => {
+            rotatePivotPending = false;
             if (event.button !== 0) return;
             if (isDraggingGizmo) return;
 
