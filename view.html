@@ -1213,7 +1213,11 @@
             toneMapped: false
         });
 
-        const controllerDotGeometry = new THREE.SphereGeometry(0.018, 16, 16);
+        const controllerDotGeometry = new THREE.SphereGeometry(0.025, 16, 16);
+        // Cincin padat (bukan bebola lut sinar/halo kabur) di sekeliling titik —
+        // penanda TEGAS & jelas supaya hujung laser tak nampak macam terapung
+        // tanpa kena mengena dengan objek, walaupun titik sendiri kecil dari jauh.
+        const controllerRingGeometry = new THREE.RingGeometry(0.032, 0.044, 24);
 
         [controller1, controller2].forEach(ctrl => {
             ctrl.addEventListener('connected', (event) => {
@@ -1234,12 +1238,23 @@
             dot.renderOrder = 999;
             ctrl.add(dot);
 
+            const ring = new THREE.Mesh(controllerRingGeometry, new THREE.MeshBasicMaterial({
+                color: 0x00e5ff, transparent: true, opacity: 1, depthTest: false,
+                side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false
+            }));
+            ring.name = 'controller-laser-ring';
+            ring.position.set(0, 0, -CONTROLLER_LASER_MAX_LENGTH);
+            ring.renderOrder = 999;
+            ctrl.add(ring);
+
             ctrl.userData.laser = laser;
             ctrl.userData.laserDot = dot;
+            ctrl.userData.laserRing = ring;
         });
 
         const controllerRaycaster = new THREE.Raycaster();
         const controllerTempMatrix = new THREE.Matrix4();
+        const controllerTempCamPos = new THREE.Vector3();
 
         function getControllerRaycastHit(controller) {
             controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
@@ -1265,11 +1280,22 @@
             if (laser) {
                 laser.scale.z = hitDistance;
             }
+            const hitColor = hitModel ? 0xffdd00 : 0x00e5ff;
             const dot = controller.userData.laserDot;
             if (dot) {
                 dot.position.z = -hitDistance;
-                dot.material.color.setHex(hitModel ? 0xffdd00 : 0x00e5ff);
+                dot.material.color.setHex(hitColor);
                 dot.scale.setScalar(hitModel ? 1.6 : 1);
+            }
+            const ring = controller.userData.laserRing;
+            if (ring) {
+                ring.position.z = -hitDistance;
+                ring.material.color.setHex(hitColor);
+                ring.scale.setScalar(hitModel ? 1.3 : 1);
+                // Billboard — cincin sentiasa hadap kamera supaya nampak sebagai
+                // reticle tegas dari mana-mana sudut, bukan nipis/hilang dari tepi.
+                mainCamera.getWorldPosition(controllerTempCamPos);
+                ring.lookAt(controllerTempCamPos);
             }
 
             return hitModel;
