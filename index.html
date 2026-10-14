@@ -194,6 +194,21 @@
         }
         .checkbox-label input { width: auto; margin: 0; cursor: pointer; }
 
+        /* Sub-pilihan bersyarat (child) — hanya relevan bila parent di atasnya ON.
+           Indent + warna lebih senyap untuk tunjuk hubungan hierarki, dan jadi pudar
+           + tak boleh klik (.disabled, ditoggle via JS) bila parent OFF. */
+        .checkbox-label-child {
+            margin-left: 24px;
+            margin-top: -5px;
+            color: #ccc;
+            background: #242424;
+        }
+        .checkbox-label.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .checkbox-label.disabled input { cursor: not-allowed; }
+
         .hint-text { font-size: 10px; color: #aaa; margin-bottom: 5px; }
 
         /* MODAL INSPECTOR MASA ANIMASI */
@@ -793,14 +808,14 @@
                 <span>🤏 Grabbable & Movable (Physics: Gravity/Bounce)</span>
             </label>
 
+            <label class="checkbox-label checkbox-label-child" id="label-return-on-release" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor. Only applies to Grabbable objects.">
+                <input type="checkbox" id="chk-return-on-release">
+                <span>🔄 Return to Original on Release</span>
+            </label>
+
             <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
                 <input type="checkbox" id="chk-solid">
                 <span>🧱 Solid (physics collider — prevents pass-through)</span>
-            </label>
-
-            <label class="checkbox-label" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor.">
-                <input type="checkbox" id="chk-return-on-release">
-                <span>🔄 Return to Original on Release</span>
             </label>
 
             <label>Camera Controls & Movement:</label>
@@ -1542,11 +1557,25 @@
         });
 
         const chkGrabbable = document.getElementById('chk-grabbable');
+        const chkReturnOnRelease = document.getElementById('chk-return-on-release');
+        const labelReturnOnRelease = document.getElementById('label-return-on-release');
+
+        // "Return to Original on Release" cuma bermakna untuk objek Grabbable (tiada
+        // "release" kalau tak pernah boleh digenggam) — sekat (disable, bukan force-
+        // uncheck) child ni bila parent OFF, supaya tak keliru tapi nilai sedia ada
+        // tak hilang kalau Grabbable di-ON semula kemudian.
+        function syncReturnOnReleaseAvailability() {
+            const enabled = chkGrabbable.checked;
+            chkReturnOnRelease.disabled = !enabled;
+            labelReturnOnRelease.classList.toggle('disabled', !enabled);
+        }
+
         chkGrabbable.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.isGrabbable = this.checked;
                 scheduleAutoSave();
             }
+            syncReturnOnReleaseAvailability();
         });
 
         const chkSolid = document.getElementById('chk-solid');
@@ -1557,13 +1586,14 @@
             }
         });
 
-        const chkReturnOnRelease = document.getElementById('chk-return-on-release');
         chkReturnOnRelease.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.returnToOriginalOnRelease = this.checked;
                 scheduleAutoSave();
             }
         });
+
+        syncReturnOnReleaseAvailability();
 
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
@@ -4207,6 +4237,7 @@
             chkGrabbable.checked = !!model.userData.isGrabbable;
             chkSolid.checked = !!model.userData.isSolid;
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
+            syncReturnOnReleaseAvailability();
             updateTransformInputsFromModel(model);
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
@@ -4234,6 +4265,7 @@
             chkGrabbable.checked = false;
             chkSolid.checked = false;
             chkReturnOnRelease.checked = false;
+            syncReturnOnReleaseAvailability();
             clearTransformInputs();
             infoPopup.style.display = 'none';
             closeAnimModal();
