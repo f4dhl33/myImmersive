@@ -877,19 +877,13 @@
                 element.style.zIndex = '999';
             }
 
-            function disableButton() {
-                button.style.display = '';
-                button.style.cursor = 'auto';
-                button.style.left = 'calc(50% - 75px)';
-                button.style.width = '150px';
-                button.onmouseenter = null;
-                button.onmouseleave = null;
-                button.onclick = null;
-            }
-
+            // Peranti/browser tak sokong sesi XR ni (contoh: tiada ARCore, atau
+            // VR/AR session type tak disokong) — sorok terus butang (bukan papar
+            // "NOT SUPPORTED") supaya pengguna automatik teruskan dengan 3D biasa
+            // (OrbitControls) yang dah berfungsi sejak awal, tanpa nampak macam ralat.
             function showXRNotFound() {
-                disableButton();
-                button.textContent = label + ' NOT SUPPORTED';
+                console.info(label + ' session not supported on this device/browser — falling back to regular 3D view.');
+                button.style.display = 'none';
             }
 
             function showEnterXR() {
@@ -939,19 +933,13 @@
 
                 return button;
             } else {
-                const message = document.createElement('a');
-                if (window.isSecureContext === false) {
-                    message.href = document.location.href.replace(/^http:/, 'https:');
-                    message.innerHTML = 'WEBXR NEEDS HTTPS';
-                } else {
-                    message.href = 'https://immersiveweb.dev/';
-                    message.innerHTML = 'WEBXR NOT AVAILABLE';
-                }
-                message.style.left = 'calc(50% - 90px)';
-                message.style.width = '180px';
-                message.style.textDecoration = 'none';
-                stylizeElement(message);
-                return message;
+                // Browser ni langsung tiada WebXR API (contoh: Safari/iOS) — jangan
+                // papar sebarang mesej/link yang nampak macam ralat. Just sorokkan
+                // sepenuhnya dan biar 3D view (OrbitControls) jadi pengalaman default.
+                console.info('WebXR API not available in this browser' + (window.isSecureContext === false ? ' (page is not HTTPS)' : '') + ' — falling back to regular 3D view.');
+                const placeholder = document.createElement('div');
+                placeholder.style.display = 'none';
+                return placeholder;
             }
         }
 
