@@ -1193,13 +1193,15 @@
         scene.add(controller2);
 
         const CONTROLLER_LASER_MAX_LENGTH = 5;
-        const CONTROLLER_LASER_RADIUS = 0.004;
+        const CONTROLLER_LASER_RADIUS = 0.005;
 
         // Laser dibina sebagai SILINDER nipis (bukan THREE.Line) — WebGL hadkan
         // linewidth kepada 1px pada kebanyakan browser/GPU, jadi THREE.Line nampak
         // nipis/kabur dalam headset VR. Silinder bagi ketebalan SEBENAR yang jelas.
-        // Geometri dibina sepanjang Z (0 ke -1) supaya scale.z terus kawal panjang.
-        const controllerLaserGeometry = new THREE.CylinderGeometry(CONTROLLER_LASER_RADIUS, CONTROLLER_LASER_RADIUS, 1, 8, 1, true);
+        // Geometri dibina sepanjang Z tempatan controller (0 di controller, -1 ke
+        // hadapan) supaya scale.z terus kawal panjang. BUKAN openEnded — hujung
+        // bertutup supaya nampak jelas ia "bermula" tepat dari controller.
+        const controllerLaserGeometry = new THREE.CylinderGeometry(CONTROLLER_LASER_RADIUS, CONTROLLER_LASER_RADIUS, 1, 8, 1, false);
         controllerLaserGeometry.rotateX(Math.PI / 2);
         controllerLaserGeometry.translate(0, 0, -0.5);
         const controllerLaserMaterial = new THREE.MeshBasicMaterial({
@@ -1211,8 +1213,7 @@
             toneMapped: false
         });
 
-        const controllerDotGeometry = new THREE.SphereGeometry(0.025, 16, 16);
-        const controllerHaloGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+        const controllerDotGeometry = new THREE.SphereGeometry(0.018, 16, 16);
 
         [controller1, controller2].forEach(ctrl => {
             ctrl.addEventListener('connected', (event) => {
@@ -1223,17 +1224,6 @@
             laser.name = 'controller-laser';
             laser.renderOrder = 998;
             ctrl.add(laser);
-
-            // Halo lembut di belakang titik — bagi kesan "bercahaya" supaya mudah
-            // dikesan dari jauh, walaupun titik sendiri kecil relatif pada jarak jauh.
-            const halo = new THREE.Mesh(controllerHaloGeometry, new THREE.MeshBasicMaterial({
-                color: 0x00e5ff, transparent: true, opacity: 0.25, depthTest: false,
-                blending: THREE.AdditiveBlending, toneMapped: false
-            }));
-            halo.name = 'controller-laser-halo';
-            halo.position.set(0, 0, -CONTROLLER_LASER_MAX_LENGTH);
-            halo.renderOrder = 998;
-            ctrl.add(halo);
 
             const dot = new THREE.Mesh(controllerDotGeometry, new THREE.MeshBasicMaterial({
                 color: 0x00e5ff, transparent: true, opacity: 0.95, depthTest: false,
@@ -1246,7 +1236,6 @@
 
             ctrl.userData.laser = laser;
             ctrl.userData.laserDot = dot;
-            ctrl.userData.laserHalo = halo;
         });
 
         const controllerRaycaster = new THREE.Raycaster();
@@ -1276,18 +1265,11 @@
             if (laser) {
                 laser.scale.z = hitDistance;
             }
-            const hitColor = hitModel ? 0xffdd00 : 0x00e5ff;
             const dot = controller.userData.laserDot;
             if (dot) {
                 dot.position.z = -hitDistance;
-                dot.material.color.setHex(hitColor);
+                dot.material.color.setHex(hitModel ? 0xffdd00 : 0x00e5ff);
                 dot.scale.setScalar(hitModel ? 1.6 : 1);
-            }
-            const halo = controller.userData.laserHalo;
-            if (halo) {
-                halo.position.z = -hitDistance;
-                halo.material.color.setHex(hitColor);
-                halo.scale.setScalar(hitModel ? 1.4 : 1);
             }
 
             return hitModel;
