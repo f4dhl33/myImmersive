@@ -1325,7 +1325,10 @@
                 mainCamera.position.copy(previewCameraMarker.position);
                 mainCamera.rotation.copy(previewCameraMarker.rotation);
 
-                controls.target.copy(findCameraOrbitTarget(mainCamera.position, mainCamera.quaternion, 3));
+                // Guna pivot yang SAMA macam mod editing (titik tengah bounding-box
+                // semua kandungan) — bukan kira semula berdasarkan kamera pratonton —
+                // supaya putaran dalam Pratonton rasa konsisten dengan editor.
+                recenterOrbitPivot();
 
                 controls.mouseButtons = {
                     LEFT: THREE.MOUSE.ROTATE,
