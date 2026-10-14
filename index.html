@@ -3477,17 +3477,28 @@
         const CONTROLLER_LASER_MAX_LENGTH = 5;
         const CONTROLLER_LASER_RADIUS = 0.005;
 
-        // Laser dibina sebagai SILINDER nipis (bukan THREE.Line) — WebGL hadkan
-        // linewidth kepada 1px pada kebanyakan browser/GPU (had sama yang buat kita
-        // tukar laluan waypoint ke textured plane dulu), jadi THREE.Line nampak
-        // nipis/kabur dalam headset VR. Silinder bagi ketebalan SEBENAR yang jelas.
-        // Geometri dibina sepanjang Z tempatan controller (0 di controller, -1 ke
-        // hadapan) supaya scale.z terus kawal panjang tanpa perlu bina semula setiap
-        // frame. BUKAN openEnded — hujung bertutup supaya nampak jelas ia "bermula"
-        // tepat dari controller, bukan macam tiub lut sinar.
-        const controllerLaserGeometry = new THREE.CylinderGeometry(CONTROLLER_LASER_RADIUS, CONTROLLER_LASER_RADIUS, 1, 8, 1, false);
-        controllerLaserGeometry.rotateX(Math.PI / 2);
-        controllerLaserGeometry.translate(0, 0, -0.5);
+        // Laser dibina sebagai TIUB melengkung (quadratic bezier), dikira semula
+        // setiap frame ikut jarak hit semasa — bukan silinder lurus tegar. Hujung
+        // PANGKAL (P0) sentiasa di controller dengan tangen awal lurus ke hadapan
+        // (P1 diletak terus di depan P0, cuma sedikit "melentik" ke bawah), dan
+        // hujung AKHIR (P2) sentiasa TEPAT di titik hit sebenar (sama dgn raycast
+        // lurus yang dipakai untuk selection) — jadi nampak lebih natural/selesa
+        // tanpa jejaskan ketepatan sasaran. WebGL hadkan linewidth THREE.Line kepada
+        // 1px pada kebanyakan browser/GPU, jadi tiub (bukan Line) juga perlu untuk
+        // ketebalan sebenar yang jelas dalam headset VR.
+        const controllerLaserCurveP0 = new THREE.Vector3();
+        const controllerLaserCurveP1 = new THREE.Vector3();
+        const controllerLaserCurveP2 = new THREE.Vector3();
+        const controllerLaserCurve = new THREE.QuadraticBezierCurve3(controllerLaserCurveP0, controllerLaserCurveP1, controllerLaserCurveP2);
+
+        function buildControllerLaserCurveGeometry(hitDistance) {
+            const droop = Math.min(hitDistance * 0.12, 0.25);
+            controllerLaserCurveP0.set(0, 0, 0);
+            controllerLaserCurveP1.set(0, -droop, -hitDistance * 0.5);
+            controllerLaserCurveP2.set(0, 0, -hitDistance);
+            return new THREE.TubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, false);
+        }
+
         const controllerLaserMaterial = new THREE.MeshBasicMaterial({
             color: 0x00e5ff,
             transparent: true,
@@ -3508,7 +3519,7 @@
                 ctrl.userData.handedness = event.data && event.data.handedness;
             });
 
-            const laser = new THREE.Mesh(controllerLaserGeometry, controllerLaserMaterial);
+            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_MAX_LENGTH), controllerLaserMaterial);
             laser.name = 'controller-laser';
             laser.renderOrder = 998;
             ctrl.add(laser);
@@ -3564,7 +3575,8 @@
 
             const laser = controller.userData.laser;
             if (laser) {
-                laser.scale.z = hitDistance;
+                laser.geometry.dispose();
+                laser.geometry = buildControllerLaserCurveGeometry(hitDistance);
             }
             const hitColor = hitModel ? 0xffdd00 : 0x00e5ff;
             const dot = controller.userData.laserDot;
