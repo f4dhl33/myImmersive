@@ -995,6 +995,10 @@
         // tetikus, supaya pivot kekal stabil & predictable sepanjang sesi edit/rotate.
         function recenterOrbitPivot() {
             if (!loadedModelsList.length) return;
+            // Paksa matrixWorld ter-update dulu — Box3 baca matrixWorld terus, tak
+            // auto-update sendiri, jadi kedudukan dunia objek yang baru sahaja
+            // ditambah/dimuat mungkin masih belum "fresh" tanpa panggilan ni.
+            contentRoot.updateMatrixWorld(true);
             const box = new THREE.Box3();
             let hasAny = false;
             loadedModelsList.forEach(m => { box.expandByObject(m); hasAny = true; });

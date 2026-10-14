@@ -246,6 +246,11 @@
         function recenterOrbitPivot() {
             const visibleObjects = loadedModelsList.filter(m => m.visible);
             if (!visibleObjects.length) return;
+            // Paksa matrixWorld ter-update dulu — pada muatan scene PERTAMA ni dipanggil
+            // sebelum frame render pertama berlaku, jadi kedudukan dunia objek yang baru
+            // ditambah mungkin masih belum "fresh" tanpa panggilan ni (Box3 baca
+            // matrixWorld terus, tak auto-update sendiri).
+            contentRoot.updateMatrixWorld(true);
             const box = new THREE.Box3();
             visibleObjects.forEach(m => box.expandByObject(m));
             const center = new THREE.Vector3();
