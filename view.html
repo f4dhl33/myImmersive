@@ -896,7 +896,21 @@
         }
 
         async function applySceneDataToViewport(sceneObj) {
-            scene.background = new THREE.Color(sceneObj.bgColor || '#87ceeb');
+            // Tangkap status SEBELUM ia di-reset di bawah — bezakan antara "baru
+            // masuk AR, belum letak lagi" (perlu tunggu tap-to-place) dengan "dah
+            // letak, scene ni ditukar semasa sesi AR sedang berjalan" (anchor
+            // dunia sebenar tak sepatutnya berubah hanya sebab kandungan bertukar).
+            const alreadyAnchoredInAR = renderer.xr.isPresenting && isARSession && isPlaced;
+
+            // Semasa sesi AR (passthrough) aktif, scene.background MESTI kekal null
+            // supaya kamera dunia sebenar kelihatan — jangan timpa dengan warna latar
+            // scene baru (itu akan "tutup" passthrough, tinggal objek je kelihatan).
+            // Simpan warna baru tu untuk dipulihkan bila sesi AR tamat nanti.
+            if (renderer.xr.isPresenting && isARSession) {
+                savedSceneBackgroundForAR = new THREE.Color(sceneObj.bgColor || '#87ceeb');
+            } else {
+                scene.background = new THREE.Color(sceneObj.bgColor || '#87ceeb');
+            }
             sceneCameraData = sceneObj.camera || { position: [0, 2, 6], rotation: [0, 0, 0] };
             arAutoPlace = !!sceneObj.arAutoPlace;
 
@@ -913,15 +927,25 @@
             rebuildWaypointPath();
 
             if (isARSession) {
-                // AR: minta pengguna tap-to-place semula untuk scene ni
-                // (bukan gerakkan kamera — realiti sebenar tak berubah).
-                isPlaced = false;
-                hitTestSourceRequested = false;
-                hitTestSource = null;
-                reticle.visible = false;
-                contentRoot.position.set(0, 0, 0);
-                contentRoot.quaternion.identity();
-                loadedModelsList.forEach(m => { m.visible = false; });
+                if (alreadyAnchoredInAR) {
+                    // ANCHOR: guna kedudukan/orientasi penjangkaran YANG SAMA dari
+                    // penempatan sebelum ni untuk scene baharu ni — pengguna tak
+                    // perlu tap-to-place berulang kali setiap kali tukar scene.
+                    loadedModelsList.forEach(m => {
+                        m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
+                    });
+                    buildPhysicsWorldFromScene();
+                    fireSceneStartTriggers();
+                } else {
+                    // Penempatan PERTAMA kali: minta pengguna tap-to-place.
+                    isPlaced = false;
+                    hitTestSourceRequested = false;
+                    hitTestSource = null;
+                    reticle.visible = false;
+                    contentRoot.position.set(0, 0, 0);
+                    contentRoot.quaternion.identity();
+                    loadedModelsList.forEach(m => { m.visible = false; });
+                }
             } else {
                 applyVisibilityAndCamera();
             }

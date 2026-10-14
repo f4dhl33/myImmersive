@@ -2014,7 +2014,15 @@
         // TIDAK clear dulu — panggil clearViewportObjects() sebelum ni kalau perlu.
         async function applySceneDataToViewport(sceneData) {
             const bg = (sceneData && sceneData.bgColor) || '#87ceeb';
-            scene.background = new THREE.Color(bg);
+            // Semasa sesi AR (passthrough) aktif, scene.background MESTI kekal null
+            // supaya kamera dunia sebenar kelihatan — jangan timpa dengan warna latar
+            // scene baru (itu akan "tutup" passthrough, tinggal objek je kelihatan).
+            // Simpan warna baru tu untuk dipulihkan bila sesi AR tamat nanti.
+            if (renderer.xr.isPresenting && isARSession) {
+                savedSceneBackgroundForAR = new THREE.Color(bg);
+            } else {
+                scene.background = new THREE.Color(bg);
+            }
             bgColorPicker.value = bg;
             chkArAutoPlace.checked = !!(sceneData && sceneData.arAutoPlace);
 
@@ -2144,15 +2152,16 @@
 
             if (isPreviewMode) {
                 if (isARSession) {
-                    // AR: minta pengguna tap-to-place semula untuk scene baharu ni
-                    // (bukan gerakkan kamera — realiti sebenar tak berubah).
-                    isPlaced = false;
-                    hitTestSourceRequested = false;
-                    hitTestSource = null;
-                    reticle.visible = false;
-                    contentRoot.position.set(0, 0, 0);
-                    contentRoot.quaternion.identity();
-                    loadedModelsList.forEach(m => { m.visible = false; });
+                    // ANCHOR: guna kedudukan/orientasi penjangkaran YANG SAMA dari
+                    // penempatan scene pertama untuk SEMUA scene lain dalam sesi AR
+                    // ni — pengguna tak perlu tap-to-place berulang kali setiap kali
+                    // tukar scene (lokasi fizikal pengguna di dunia sebenar tak
+                    // berubah hanya sebab kandungan/scene bertukar).
+                    loadedModelsList.forEach(m => {
+                        m.visible = (m.userData.primType === 'zone') ? false : (m.userData.initialVisibility !== false);
+                    });
+                    buildPhysicsWorldFromScene();
+                    fireSceneStartTriggers();
                 } else {
                     applyPreviewVisibilityAndCamera();
                 }
