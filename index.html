@@ -4550,7 +4550,13 @@
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
-            if (isPreviewMode) {
+            // "Pengguna masuk zon" cuma bermakna bila kamera = kedudukan sebenar
+            // pengguna di dunia nyata (sesi AR/VR sebenar sedang presenting). Dalam
+            // mod Pratonton desktop/mobile biasa, kamera cuma ikut orbit tetikus —
+            // kalau check di sini juga, kamera yang "lalu" dekat zon semasa drag
+            // rotate boleh tercetus tukar scene/reset tanpa diingini pada bila-bila
+            // masa (nampak macam kamera "lompat" semasa pusing).
+            if (isPreviewMode && renderer.xr.isPresenting) {
                 checkUserZoneEntryTriggers();
             }
 

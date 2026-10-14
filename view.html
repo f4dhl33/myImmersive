@@ -1492,7 +1492,14 @@
                 waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
-            checkUserZoneEntryTriggers();
+            // "Pengguna masuk zon" cuma bermakna bila kamera = kedudukan sebenar
+            // pengguna di dunia nyata (sesi AR/VR sebenar sedang presenting). Dalam
+            // mod 3D biasa (orbit ikut tetikus), kamera tak mewakili kedudukan
+            // sebenar pengguna — check di sini akan tercetus tanpa diingini bila
+            // kamera orbit "lalu" dekat zon semasa drag rotate.
+            if (renderer.xr.isPresenting) {
+                checkUserZoneEntryTriggers();
+            }
 
             // TAP-TO-PLACE (hit-test) — hanya semasa AR aktif & belum diletak lagi.
             // Scene boleh tanda "Auto Letak AR" (arAutoPlace) untuk skip terus tanpa tunggu tap.
