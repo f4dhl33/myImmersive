@@ -994,6 +994,12 @@
         // (objek ditambah/dibuang/dimuat, scene ditukar), bukan setiap interaksi
         // tetikus, supaya pivot kekal stabil & predictable sepanjang sesi edit/rotate.
         function recenterOrbitPivot() {
+            // JANGAN sentuh OrbitControls semasa sesi XR aktif sedang presenting —
+            // kedudukan kamera sepatutnya dikawal sepenuhnya oleh WebXR/headset/
+            // telefon ketika tu, bukan OrbitControls. controls.update() akan tulis
+            // semula mainCamera.position ikut matematik orbit dan boleh rosakkan/
+            // konflik dengan render AR sebenar (contoh: bila tukar scene semasa AR).
+            if (renderer.xr.isPresenting) return;
             if (!loadedModelsList.length) return;
             // Paksa matrixWorld ter-update dulu — Box3 baca matrixWorld terus, tak
             // auto-update sendiri, jadi kedudukan dunia objek yang baru sahaja
