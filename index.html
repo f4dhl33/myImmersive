@@ -1300,6 +1300,22 @@
         // dari applyPreviewVisibilityAndCamera (non-AR) dan placeContentAtDefault/Reticle (AR),
         // supaya ia tercetus betul-betul "sebaik shj link/QR view diaktifkan".
         function fireSceneStartTriggers() {
+            // Reset status animasi (play/pause/toggleReverse) ke keadaan asal SETIAP
+            // kali scene "bermula" (Pratonton dimasuki, AR diletak semula, dll) —
+            // kalau tidak, status main/jeda terbawa dari sesi sebelumnya, jadi
+            // tindakan "Mula/Henti Animasi" yang dipasang pada onStart akan
+            // selang-seli (sekali main, sekali jeda) bukan sentiasa main semula
+            // dari permulaan macam sepatutnya bila "scene baru bermula".
+            loadedModelsList.forEach(m => {
+                if (m.userData.mixer && m.userData.animAction) {
+                    m.userData.animAction.stop();
+                    m.userData.animAction.reset();
+                    m.userData.animAction.paused = false;
+                    m.userData.animState = 'stopped';
+                    m.userData.mixer.update(0);
+                }
+            });
+
             loadedModelsList.forEach(m => {
                 if (m.userData.interactions && m.userData.interactions.some(act => act.trigger === 'onStart')) {
                     triggerInteraction(m, 'onStart');
