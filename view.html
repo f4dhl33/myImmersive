@@ -238,6 +238,23 @@
         controls.dampingFactor = 0.05;
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
+        // Kekalkan pivot putaran OrbitControls di tengah-tengah SEMUA kandungan scene
+        // (bukan titik tetap sejak scene dimuatkan) — dipanggil bila scene dimuatkan/
+        // ditukar, bukan setiap interaksi tetikus, supaya pivot kekal stabil &
+        // predictable (elak "lompat radius" macam zoom tiba-tiba).
+        function recenterOrbitPivot() {
+            if (!loadedModelsList.length) return;
+            const box = new THREE.Box3();
+            let hasAny = false;
+            loadedModelsList.forEach(m => { box.expandByObject(m); hasAny = true; });
+            if (!hasAny) return;
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            if (!isFinite(center.x) || !isFinite(center.y) || !isFinite(center.z)) return;
+            controls.target.copy(center);
+            controls.update();
+        }
+
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // LIGHTING (sama tetapan seperti editor)
@@ -894,6 +911,7 @@
                 loadedModelsList.forEach(m => { m.visible = false; });
             } else {
                 applyVisibilityAndCamera();
+                recenterOrbitPivot();
             }
         }
 
@@ -1069,54 +1087,13 @@
         // INPUT: TETIKUS/TOUCH (klik & hover)
         // ---------------------------------------------------------------
         let pointerDownPos = { x: 0, y: 0 };
-        let rotatePivotPending = false;
 
         renderer.domElement.addEventListener('pointerdown', (event) => {
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
-            rotatePivotPending = (event.button === 0 && !renderer.xr.isPresenting);
-        });
-
-        // Jadikan titik yang diklik/tap sebagai pivot putaran OrbitControls seterusnya
-        // (bukan sentiasa titik tetap sejak scene dimuatkan) — supaya rotate rasa
-        // natural ikut apa yang pengguna sedang tengok. Sengaja tunggu drag BETUL-BETUL
-        // bermula (>5px, bukan setiap klik) sebelum tukar pivot — kalau ditukar pada
-        // setiap pointerdown (termasuk klik ringkas), sebarang gerakan residual
-        // OrbitControls (disebabkan enableDamping) akan di-smooth-kan merentasi
-        // beberapa frame dan nampak macam "tersentak". controls.update() dipanggil
-        // serta-merta supaya pembetulan radius/sudut berlaku instant, bukan animasi.
-        renderer.domElement.addEventListener('pointermove', (event) => {
-            if (!rotatePivotPending) return;
-            if (event.buttons !== 1) { rotatePivotPending = false; return; }
-
-            const moveDeltaX = Math.abs(event.clientX - pointerDownPos.x);
-            const moveDeltaY = Math.abs(event.clientY - pointerDownPos.y);
-            if (moveDeltaX <= 5 && moveDeltaY <= 5) return;
-
-            rotatePivotPending = false;
-
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((pointerDownPos.x - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((pointerDownPos.y - rect.top) / rect.height) * 2 + 1;
-            raycaster.setFromCamera(mouse, mainCamera);
-
-            const pivotHits = raycaster.intersectObjects(loadedModelsList.filter(o => o.visible), true);
-
-            if (pivotHits.length > 0) {
-                controls.target.copy(pivotHits[0].point);
-                controls.update();
-            } else {
-                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -controls.target.y);
-                const groundHit = new THREE.Vector3();
-                if (raycaster.ray.intersectPlane(groundPlane, groundHit)) {
-                    controls.target.copy(groundHit);
-                    controls.update();
-                }
-            }
         });
 
         renderer.domElement.addEventListener('pointerup', (event) => {
-            rotatePivotPending = false;
             if (event.button !== 0) return;
 
             const deltaX = Math.abs(event.clientX - pointerDownPos.x);
