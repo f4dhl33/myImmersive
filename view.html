@@ -1189,8 +1189,13 @@
         // ---------------------------------------------------------------
         const controller1 = renderer.xr.getController(0);
         const controller2 = renderer.xr.getController(1);
-        scene.add(controller1);
-        scene.add(controller2);
+        // Controller MESTI jadi anak cameraRig (sama macam mainCamera), bukan scene
+        // terus — kalau tidak, bila cameraRig "teleport" (ikut Kedudukan Awal Kamera
+        // scene semasa), pandangan berpindah tapi controller kekal di kedudukan asal
+        // (dekat origin dunia) — tangan/laser jadi terputus & salah trajektori
+        // berbanding apa yang pengguna nampak/rasa.
+        cameraRig.add(controller1);
+        cameraRig.add(controller2);
 
         const CONTROLLER_LASER_MAX_LENGTH = 5;
         const CONTROLLER_LASER_RADIUS = 0.005;
