@@ -238,28 +238,6 @@
         controls.dampingFactor = 0.05;
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
-        // Kekalkan pivot putaran OrbitControls di tengah-tengah kandungan scene yang
-        // KELIHATAN sahaja (bukan Zon Sasaran/objek disembunyikan — tu authoring-only,
-        // tak patut pengaruhi pivot pandangan end-user) — dipanggil bila scene
-        // dimuatkan/ditukar, bukan setiap interaksi tetikus, supaya pivot kekal stabil
-        // & predictable (elak "lompat radius" macam zoom tiba-tiba).
-        function recenterOrbitPivot() {
-            const visibleObjects = loadedModelsList.filter(m => m.visible);
-            if (!visibleObjects.length) return;
-            // Paksa matrixWorld ter-update dulu — pada muatan scene PERTAMA ni dipanggil
-            // sebelum frame render pertama berlaku, jadi kedudukan dunia objek yang baru
-            // ditambah mungkin masih belum "fresh" tanpa panggilan ni (Box3 baca
-            // matrixWorld terus, tak auto-update sendiri).
-            contentRoot.updateMatrixWorld(true);
-            const box = new THREE.Box3();
-            visibleObjects.forEach(m => box.expandByObject(m));
-            const center = new THREE.Vector3();
-            box.getCenter(center);
-            if (!isFinite(center.x) || !isFinite(center.y) || !isFinite(center.z)) return;
-            controls.target.copy(center);
-            controls.update();
-        }
-
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // LIGHTING (sama tetapan seperti editor)
@@ -916,7 +894,6 @@
                 loadedModelsList.forEach(m => { m.visible = false; });
             } else {
                 applyVisibilityAndCamera();
-                recenterOrbitPivot();
             }
         }
 
