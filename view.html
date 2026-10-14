@@ -1214,12 +1214,65 @@
         const controllerLaserCurveP2 = new THREE.Vector3();
         const controllerLaserCurve = new THREE.QuadraticBezierCurve3(controllerLaserCurveP0, controllerLaserCurveP1, controllerLaserCurveP2);
 
-        function buildControllerLaserCurveGeometry(hitDistance) {
-            const arc = Math.min(hitDistance * 0.12, 0.25);
+        // Tiub dibina TANGAN (bukan terus THREE.TubeGeometry) supaya jejari boleh
+        // berubah sepanjang panjang (taper) — perlu untuk hujung "menirus" semasa
+        // idle. Frenet frame dari curve tu yang bagi orientasi cincin tiap gelang.
+        function buildLaserTubeGeometry(curve, tubularSegments, baseRadius, radialSegments, taperFn) {
+            const frames = curve.computeFrenetFrames(tubularSegments, false);
+            const points = curve.getPoints(tubularSegments);
+            const positions = [];
+            const indices = [];
+
+            for (let i = 0; i <= tubularSegments; i++) {
+                const t = i / tubularSegments;
+                const radius = baseRadius * taperFn(t);
+                const normal = frames.normals[i];
+                const binormal = frames.binormals[i];
+                const center = points[i];
+                for (let j = 0; j <= radialSegments; j++) {
+                    const angle = (j / radialSegments) * Math.PI * 2;
+                    const sin = Math.sin(angle), cos = -Math.cos(angle);
+                    const x = cos * normal.x + sin * binormal.x;
+                    const y = cos * normal.y + sin * binormal.y;
+                    const z = cos * normal.z + sin * binormal.z;
+                    positions.push(center.x + radius * x, center.y + radius * y, center.z + radius * z);
+                }
+            }
+
+            for (let i = 1; i <= tubularSegments; i++) {
+                for (let j = 1; j <= radialSegments; j++) {
+                    const a = (radialSegments + 1) * (i - 1) + (j - 1);
+                    const b = (radialSegments + 1) * i + (j - 1);
+                    const c = (radialSegments + 1) * i + j;
+                    const d = (radialSegments + 1) * (i - 1) + j;
+                    indices.push(a, b, d, b, c, d);
+                }
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setIndex(indices);
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            return geometry;
+        }
+
+        const laserTaperFull = () => 1;
+        // Idle: jejari kekal penuh untuk 60% awal, lepas tu menirus terus ke 0 di
+        // hujung — nampak "hilang" secara natural, bukan terputus tiba-tiba.
+        function laserTaperIdle(t) {
+            const taperStart = 0.6;
+            if (t < taperStart) return 1;
+            return 1 - (t - taperStart) / (1 - taperStart);
+        }
+
+        function buildControllerLaserCurveGeometry(distance, isIdle) {
+            // Idle: tangen/lengkung dikurangkan supaya nampak lebih lurus (sebab
+            // laser ni belum "mengunci" apa-apa sasaran). Bila kena objek, kekal
+            // lengkung lembut asal.
+            const arc = isIdle ? Math.min(distance * 0.03, 0.06) : Math.min(distance * 0.12, 0.25);
             controllerLaserCurveP0.set(0, 0, 0);
-            controllerLaserCurveP1.set(0, arc, -hitDistance * 0.5);
-            controllerLaserCurveP2.set(0, 0, -hitDistance);
-            return new THREE.TubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, false);
+            controllerLaserCurveP1.set(0, arc, -distance * 0.5);
+            controllerLaserCurveP2.set(0, 0, -distance);
+            return buildLaserTubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, isIdle ? laserTaperIdle : laserTaperFull);
         }
 
         // depthTest AKTIF — laser mesti hormat kedalaman SEBENAR dalam scene (ter-
@@ -1251,7 +1304,7 @@
             // Bahan laser KLON berasingan setiap controller (bukan kongsi satu
             // instance) — sebab opacity dia berubah ikut status hit SETIAP
             // controller secara berasingan (idle vs kena objek).
-            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_IDLE_LENGTH), controllerLaserMaterial.clone());
+            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_IDLE_LENGTH, true), controllerLaserMaterial.clone());
             laser.name = 'controller-laser';
             laser.renderOrder = 998;
             ctrl.add(laser);
@@ -1327,7 +1380,7 @@
             const laser = controller.userData.laser;
             if (laser) {
                 laser.geometry.dispose();
-                laser.geometry = buildControllerLaserCurveGeometry(displayDistance);
+                laser.geometry = buildControllerLaserCurveGeometry(displayDistance, !didHit);
                 laser.material.opacity = didHit ? 0.9 : 0.3;
             }
 
