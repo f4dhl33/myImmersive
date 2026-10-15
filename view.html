@@ -336,6 +336,29 @@
         physicsWorld.addContactMaterial(physicsContactMaterial);
         physicsWorld.defaultContactMaterial = physicsContactMaterial;
 
+        // Bahan fizik berasingan untuk setiap NILAI bounciness tersendiri (bukan setiap
+        // objek) — dicache ikut nilai supaya tak daftar ContactMaterial berulang-ulang
+        // setiap kali physics rebuild. Objek dengan bounciness lalai (0.4) kongsi
+        // physicsDefaultMaterial sedia ada.
+        const physicsBounceMaterialCache = new Map();
+        function getPhysicsMaterialForBounciness(bounciness) {
+            const key = Math.round(bounciness * 100) / 100;
+            if (key === 0.4) return physicsDefaultMaterial;
+            if (physicsBounceMaterialCache.has(key)) return physicsBounceMaterialCache.get(key);
+
+            const mat = new CANNON.Material('bounce_' + key);
+            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, physicsDefaultMaterial, {
+                friction: 0.4,
+                restitution: key
+            }));
+            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, mat, {
+                friction: 0.4,
+                restitution: key
+            }));
+            physicsBounceMaterialCache.set(key, mat);
+            return mat;
+        }
+
         let physicsBodies = [];
         let physicsActive = false;
 
@@ -386,10 +409,11 @@
         function createPhysicsBodyForMesh(mesh) {
             const isDynamic = !!mesh.userData.isGrabbable;
             const { shape, offset } = buildPhysicsShapeForMesh(mesh);
+            const bounciness = (typeof mesh.userData.bounciness === 'number') ? mesh.userData.bounciness : 0.4;
 
             const body = new CANNON.Body({
                 mass: isDynamic ? 1 : 0,
-                material: physicsDefaultMaterial,
+                material: getPhysicsMaterialForBounciness(bounciness),
                 linearDamping: 0.2,
                 angularDamping: 0.4
             });
@@ -546,6 +570,7 @@
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
+                        bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -602,6 +627,7 @@
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
+                        bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -779,6 +805,7 @@
                 isGrabbable: objData.isGrabbable || false,
                 isSolid: objData.isSolid || false,
                 returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
+                bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
                 isRotating: false,
                 mixer: null,
                 animAction: null,

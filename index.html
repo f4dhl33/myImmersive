@@ -818,6 +818,9 @@
                 <span>🧱 Solid (physics collider — prevents pass-through)</span>
             </label>
 
+            <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
+            <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
+
             <label>Camera Controls & Movement:</label>
             <div class="btn-action-group">
                 <button id="btn-undo" class="btn-secondary">↶ Undo</button>
@@ -1310,6 +1313,36 @@
             target: new THREE.Vector3()
         };
 
+        // Simpan kedudukan/putaran/saiz SETIAP objek SEBELUM Pratonton dimasuki, pulihkan
+        // semula bila keluar — supaya Pratonton (fizik gravity/bounce, pick & place, dll)
+        // sentiasa jadi "ujian" yang selamat, bukan ubah layout editor secara kekal.
+        let previewObjectSnapshot = null;
+
+        function capturePreviewObjectSnapshot() {
+            previewObjectSnapshot = new Map();
+            loadedModelsList.forEach(m => {
+                previewObjectSnapshot.set(m.userData.id, {
+                    position: m.position.clone(),
+                    quaternion: m.quaternion.clone(),
+                    scale: m.scale.clone()
+                });
+            });
+        }
+
+        function restorePreviewObjectSnapshot() {
+            if (!previewObjectSnapshot) return;
+            loadedModelsList.forEach(m => {
+                const snap = previewObjectSnapshot.get(m.userData.id);
+                if (!snap) return;
+                m.position.copy(snap.position);
+                m.quaternion.copy(snap.quaternion);
+                m.scale.copy(snap.scale);
+                m.userData.stepStateToggle = false;
+                m.userData.isRotating = false;
+            });
+            previewObjectSnapshot = null;
+        }
+
         // Cetuskan semua tindakan "onStart" (Sebaik Scene Dimulakan) sekali sahaja setiap
         // kali kandungan scene benar-benar jadi aktif/kelihatan pada pengguna — dipanggil
         // dari applyPreviewVisibilityAndCamera (non-AR) dan placeContentAtDefault/Reticle (AR),
@@ -1420,6 +1453,10 @@
                 gridHelper.visible = false;
                 cameraHelper.visible = false;
 
+                // Tangkap kedudukan/putaran/saiz SEMUA objek SEBELUM apa-apa simulasi
+                // fizik/interaksi berlaku — ni yang dipulihkan semula bila keluar Pratonton.
+                capturePreviewObjectSnapshot();
+
                 // Reset status "pengguna dalam zon" supaya trigger onUserEnterZone boleh
                 // tercetus semula dari awal setiap kali Pratonton dimasuki.
                 loadedModelsList.forEach(m => { m.userData._userInsideZone = false; });
@@ -1453,6 +1490,12 @@
                 cameraHelper.visible = true;
 
                 teardownPhysicsWorld();
+
+                // Pulihkan kedudukan/putaran/saiz semua objek ke keadaan SEBELUM Pratonton
+                // dimasuki — buang sebarang kesan fizik/pick & place/interaksi yang berlaku
+                // semasa sesi ujian tu, supaya layout editor tak berubah secara kekal.
+                restorePreviewObjectSnapshot();
+                renderObjectsList();
 
                 loadedModelsList.forEach(m => {
                     m.visible = true;
@@ -1586,6 +1629,18 @@
             }
         });
 
+        const inputBounciness = document.getElementById('input-bounciness');
+        inputBounciness.addEventListener('change', function() {
+            let val = parseFloat(this.value);
+            if (isNaN(val)) val = 0.4;
+            val = Math.min(Math.max(val, 0), 1);
+            this.value = val;
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.bounciness = val;
+                scheduleAutoSave();
+            }
+        });
+
         chkReturnOnRelease.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.returnToOriginalOnRelease = this.checked;
@@ -1627,6 +1682,30 @@
         });
         physicsWorld.addContactMaterial(physicsContactMaterial);
         physicsWorld.defaultContactMaterial = physicsContactMaterial;
+
+        // Bahan fizik berasingan untuk setiap NILAI bounciness tersendiri (bukan setiap
+        // objek) — dicache ikut nilai supaya tak daftar ContactMaterial berulang-ulang
+        // setiap kali buildPhysicsWorldFromScene() jalan semula (contoh: setiap kali
+        // masuk Pratonton/tukar scene). Objek dengan bounciness lalai (0.4) kongsi
+        // physicsDefaultMaterial sedia ada — tiada perubahan untuk kes biasa.
+        const physicsBounceMaterialCache = new Map();
+        function getPhysicsMaterialForBounciness(bounciness) {
+            const key = Math.round(bounciness * 100) / 100;
+            if (key === 0.4) return physicsDefaultMaterial;
+            if (physicsBounceMaterialCache.has(key)) return physicsBounceMaterialCache.get(key);
+
+            const mat = new CANNON.Material('bounce_' + key);
+            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, physicsDefaultMaterial, {
+                friction: 0.4,
+                restitution: key
+            }));
+            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, mat, {
+                friction: 0.4,
+                restitution: key
+            }));
+            physicsBounceMaterialCache.set(key, mat);
+            return mat;
+        }
 
         let physicsBodies = []; // [{ mesh, body }]
         let physicsActive = false;
@@ -1680,10 +1759,11 @@
         function createPhysicsBodyForMesh(mesh) {
             const isDynamic = !!mesh.userData.isGrabbable;
             const { shape, offset } = buildPhysicsShapeForMesh(mesh);
+            const bounciness = (typeof mesh.userData.bounciness === 'number') ? mesh.userData.bounciness : 0.4;
 
             const body = new CANNON.Body({
                 mass: isDynamic ? 1 : 0,
-                material: physicsDefaultMaterial,
+                material: getPhysicsMaterialForBounciness(bounciness),
                 linearDamping: 0.2,
                 angularDamping: 0.4
             });
@@ -1892,7 +1972,8 @@
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
-                    returnToOriginalOnRelease: ud.returnToOriginalOnRelease || false
+                    returnToOriginalOnRelease: ud.returnToOriginalOnRelease || false,
+                    bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4
                 };
             });
 
@@ -2001,6 +2082,7 @@
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
+                        bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -2081,6 +2163,7 @@
                         mesh.userData.isGrabbable = objData.isGrabbable || false;
                         mesh.userData.isSolid = objData.isSolid || false;
                         mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
+                        mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
                         if (objData.primType === 'waypoint') rebuildWaypointPath();
                     }
                 }
@@ -3274,6 +3357,7 @@
                 isGrabbable: false,
                 isSolid: false,
                 returnToOriginalOnRelease: false,
+                bounciness: 0.4,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -3340,6 +3424,7 @@
                         isGrabbable: false,
                         isSolid: false,
                         returnToOriginalOnRelease: false,
+                        bounciness: 0.4,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -3389,6 +3474,7 @@
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
                     mesh.userData.isSolid = objData.isSolid || false;
                     mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
+                    mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
                 }
                 return mesh;
             });
@@ -4238,6 +4324,7 @@
             chkSolid.checked = !!model.userData.isSolid;
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
+            inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             updateTransformInputsFromModel(model);
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
@@ -4266,6 +4353,7 @@
             chkSolid.checked = false;
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
+            inputBounciness.value = 0.4;
             clearTransformInputs();
             infoPopup.style.display = 'none';
             closeAnimModal();
@@ -4501,6 +4589,7 @@
                         isGrabbable: false,
                         isSolid: false,
                         returnToOriginalOnRelease: false,
+                        bounciness: 0.4,
                         isRotating: false,
                         mixer: mixer,
                         animAction: animAction,
