@@ -147,6 +147,11 @@
         
         .top-bar-checkbox { display: flex; align-items: center; gap: 4px; margin: 0; color: #eee; font-size: 11px; font-weight: normal; cursor: pointer; white-space: nowrap; }
         .top-bar-checkbox input { width: auto; margin: 0; cursor: pointer; }
+        /* Macam .top-bar-checkbox, tapi SENGAJA tak disorok dalam mod Pratonton — ni
+           untuk kawalan (contoh "Show Colliders") yang hanya berguna SEMASA Pratonton
+           aktif (fizik hanya wujud ketika tu), lawan Auto Placed yang cuma guna sebelum. */
+        .top-bar-checkbox-preview { display: flex; align-items: center; gap: 4px; margin: 0; color: #eee; font-size: 11px; font-weight: normal; cursor: pointer; white-space: nowrap; }
+        .top-bar-checkbox-preview input { width: auto; margin: 0; cursor: pointer; }
 
         .btn-ar-top { width: auto; padding: 4px 10px; margin: 0; font-size: 11px; border-radius: 4px; background: #28a745; color: white; font-weight: bold; }
         .btn-ar-top:hover { background: #218838; }
@@ -612,6 +617,11 @@
             <label class="top-bar-checkbox" title="When AR opens, content is placed immediately (1.5m ahead) without waiting for the user to tap a surface. Useful for waypoint/wayfinding scenes.">
                 <input type="checkbox" id="chk-ar-auto-place">
                 <span>📍 Auto Placed</span>
+            </label>
+
+            <label class="top-bar-checkbox-preview" title="Show a wireframe outline of each physics collider (the exact shape/position cannon.js uses) — useful for diagnosing objects that float, clip, or rest at the wrong height.">
+                <input type="checkbox" id="chk-show-colliders">
+                <span>🔲 Show Colliders</span>
             </label>
 
             <button id="btn-toggle-preview" class="btn-ar-top">Preview WebXR (AR/VR)</button>
@@ -1773,23 +1783,50 @@
             body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
             if (!isDynamic) body.type = CANNON.Body.STATIC;
 
-            return body;
+            return { body, shape, offset };
+        }
+
+        // PENUNJUK DEBUG (wireframe) — tunjuk dengan TEPAT saiz & kedudukan "kotak fizik"
+        // (collider) sebenar yang cannon.js guna untuk setiap objek, supaya senang kesan
+        // kalau ia tak sepadan dengan model visual (contoh: terlalu besar/offset silap
+        // untuk model GLB kompleks). Togol via checkbox "Show Colliders" di top-bar.
+        const physicsDebugMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, depthTest: false });
+        function buildPhysicsDebugMesh(shape, offset) {
+            let geometry;
+            if (shape instanceof CANNON.Sphere) {
+                geometry = new THREE.SphereGeometry(shape.radius, 12, 8);
+            } else {
+                const he = shape.halfExtents;
+                geometry = new THREE.BoxGeometry(he.x * 2, he.y * 2, he.z * 2);
+            }
+            const debugMesh = new THREE.Mesh(geometry, physicsDebugMaterial);
+            debugMesh.userData._localOffset = new THREE.Vector3(offset.x, offset.y, offset.z);
+            debugMesh.renderOrder = 997;
+            return debugMesh;
         }
 
         // Bina semula dunia fizik daripada kedudukan SEMASA setiap objek "Boleh Diambil"
         // (badan dinamik — kena graviti, boleh melantun) & "Pepejal" (badan statik — perengkuh).
         // Dipanggil setiap kali Pratonton/VR/AR dimasuki, atau bila scene ditukar semasa aktif.
         function buildPhysicsWorldFromScene() {
-            physicsBodies.forEach(pb => physicsWorld.removeBody(pb.body));
+            physicsBodies.forEach(pb => {
+                physicsWorld.removeBody(pb.body);
+                if (pb.debugMesh) contentRoot.remove(pb.debugMesh);
+            });
             physicsBodies = [];
 
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return; // zon bukan objek fizikal
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
 
-                const body = createPhysicsBodyForMesh(mesh);
+                const { body, shape, offset } = createPhysicsBodyForMesh(mesh);
                 physicsWorld.addBody(body);
-                physicsBodies.push({ mesh, body });
+
+                const debugMesh = buildPhysicsDebugMesh(shape, offset);
+                debugMesh.visible = chkShowColliders.checked;
+                contentRoot.add(debugMesh);
+
+                physicsBodies.push({ mesh, body, debugMesh });
                 mesh.userData._physicsBody = body;
             });
 
@@ -1800,6 +1837,7 @@
             physicsActive = false;
             physicsBodies.forEach(pb => {
                 physicsWorld.removeBody(pb.body);
+                if (pb.debugMesh) contentRoot.remove(pb.debugMesh);
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
@@ -4971,6 +5009,15 @@
                         pb.mesh.position.copy(pb.body.position);
                         pb.mesh.quaternion.copy(pb.body.quaternion);
                     }
+                    if (pb.debugMesh && pb.debugMesh.visible) {
+                        const worldOffset = pb.debugMesh.userData._localOffset.clone().applyQuaternion(pb.body.quaternion);
+                        pb.debugMesh.position.set(
+                            pb.body.position.x + worldOffset.x,
+                            pb.body.position.y + worldOffset.y,
+                            pb.body.position.z + worldOffset.z
+                        );
+                        pb.debugMesh.quaternion.copy(pb.body.quaternion);
+                    }
                 });
             }
 
@@ -5057,6 +5104,7 @@
         const btnApplyBg = document.getElementById('btn-apply-bg');
         const bgColorPicker = document.getElementById('bg-color-picker');
         const chkArAutoPlace = document.getElementById('chk-ar-auto-place');
+        const chkShowColliders = document.getElementById('chk-show-colliders');
 
         btnApplyBg.addEventListener('click', () => {
             scene.background = new THREE.Color(bgColorPicker.value);
@@ -5065,6 +5113,12 @@
 
         chkArAutoPlace.addEventListener('change', () => {
             scheduleAutoSave();
+        });
+
+        chkShowColliders.addEventListener('change', () => {
+            physicsBodies.forEach(pb => {
+                if (pb.debugMesh) pb.debugMesh.visible = chkShowColliders.checked;
+            });
         });
 
         // ---- RESIZE PANEL (seret handle untuk ubah saiz, simpan dalam localStorage) ----
