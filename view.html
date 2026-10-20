@@ -427,6 +427,22 @@
             return { halfExtents: size.multiplyScalar(0.5), offset: center };
         }
 
+        function applyColliderTrim(mesh, halfExtents, offset) {
+            const t = mesh.userData.colliderTrim;
+            if (!t) return { halfExtents, offset };
+            const hx = Math.max(halfExtents.x - ((t.nx || 0) + (t.px || 0)) / 2, 0.02);
+            const hy = Math.max(halfExtents.y - ((t.ny || 0) + (t.py || 0)) / 2, 0.02);
+            const hz = Math.max(halfExtents.z - ((t.nz || 0) + (t.pz || 0)) / 2, 0.02);
+            return {
+                halfExtents: { x: hx, y: hy, z: hz },
+                offset: {
+                    x: offset.x + ((t.nx || 0) - (t.px || 0)) / 2,
+                    y: offset.y + ((t.ny || 0) - (t.py || 0)) / 2,
+                    z: offset.z + ((t.nz || 0) - (t.pz || 0)) / 2
+                }
+            };
+        }
+
         function buildPhysicsShapeForMesh(mesh) {
             const primType = mesh.userData.primType;
 
@@ -438,22 +454,18 @@
                 const hx = Math.max(0.5 * mesh.scale.x, 0.02);
                 const hy = Math.max(0.5 * mesh.scale.y, 0.02);
                 const hz = Math.max(0.5 * mesh.scale.z, 0.02);
-                return { shape: new CANNON.Box(new CANNON.Vec3(hx, hy, hz)), offset: new CANNON.Vec3(0, 0, 0) };
+                const trimmed = applyColliderTrim(mesh, { x: hx, y: hy, z: hz }, { x: 0, y: 0, z: 0 });
+                return {
+                    shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
+                    offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
+                };
             }
 
-            const { halfExtents, offset } = computeLocalBoxHalfExtentsAndOffset(mesh);
-
-            const trim = Math.max(0, mesh.userData.colliderBottomTrim || 0);
-            let hy = halfExtents.y;
-            let offY = offset.y;
-            if (trim > 0 && trim < hy * 2) {
-                hy = hy - trim / 2;
-                offY = offY + trim / 2;
-            }
-
+            const base = computeLocalBoxHalfExtentsAndOffset(mesh);
+            const trimmed = applyColliderTrim(mesh, base.halfExtents, base.offset);
             return {
-                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, Math.max(hy, 0.02), halfExtents.z)),
-                offset: new CANNON.Vec3(offset.x, offY, offset.z)
+                shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
+                offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
             };
         }
 
@@ -622,7 +634,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
-                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
+                        colliderTrim: objData.colliderTrim || null,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -680,7 +692,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
-                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
+                        colliderTrim: objData.colliderTrim || null,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -859,13 +871,27 @@
                 isSolid: objData.isSolid || false,
                 returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                 bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
-                colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
+                colliderTrim: objData.colliderTrim || null,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
                 animState: 'stopped',
                 stepStateToggle: false
             };
+
+            if (['box', 'sphere', 'cylinder', 'plane'].includes(type)) {
+                if (objData.customColor) {
+                    material.color.set(objData.customColor);
+                    mesh.userData.customColor = objData.customColor;
+                }
+                if (objData.customTextureUrl) {
+                    mesh.userData.customTextureUrl = objData.customTextureUrl;
+                    new THREE.TextureLoader().load(objData.customTextureUrl, (tex) => {
+                        material.map = tex;
+                        material.needsUpdate = true;
+                    });
+                }
+            }
 
             mesh.position.fromArray(objData.position);
             mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);

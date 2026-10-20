@@ -834,8 +834,35 @@
             <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
             <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
 
-            <label for="input-collider-trim" title="Shrinks the auto-generated physics collider from the BOTTOM only, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe sits lower than the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider taller than the real model.">⬇️ Collider Bottom Trim (m):</label>
-            <input type="number" id="input-collider-trim" min="0" max="5" step="0.01" value="0">
+            <label style="margin-top:4px;" title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe doesn't match the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">X −/+</span>
+                <input type="number" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face">
+                <input type="number" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Y −/+</span>
+                <input type="number" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y (bottom) face">
+                <input type="number" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y (top) face">
+            </div>
+            <div class="transform-numeric-row">
+                <span class="transform-axis-label">Z −/+</span>
+                <input type="number" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face">
+                <input type="number" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face">
+            </div>
+
+            <div id="shape-appearance-section" style="display:none;">
+                <label style="margin-top: 10px;">🎨 Basic Shape Appearance:</label>
+                <div class="transform-numeric-row">
+                    <span class="transform-axis-label">Color</span>
+                    <input type="color" id="input-shape-color" value="#cccccc" style="flex:1; height: 26px; padding: 0; border: none; cursor: pointer;">
+                </div>
+                <div class="btn-action-group">
+                    <button id="btn-shape-texture" class="btn-secondary">🖼️ Apply Texture...</button>
+                    <button id="btn-shape-texture-clear" class="btn-secondary">✖ Clear Texture</button>
+                </div>
+                <input type="file" id="input-shape-texture-file" accept="image/*" style="display:none;">
+            </div>
 
             <label>Camera Controls & Movement:</label>
             <div class="btn-action-group">
@@ -1657,16 +1684,91 @@
             }
         });
 
-        const inputColliderTrim = document.getElementById('input-collider-trim');
-        inputColliderTrim.addEventListener('change', function() {
-            let val = parseFloat(this.value);
-            if (isNaN(val) || val < 0) val = 0;
-            this.value = val;
-            if (selectedModel && selectedModel !== previewCameraMarker) {
-                selectedModel.userData.colliderBottomTrim = val;
+        // Potong collider per muka (6 sisi): -X/+X, -Y/+Y, -Z/+Z — disimpan dalam
+        // userData.colliderTrim = {nx,px,ny,py,nz,pz}, semua lalai 0 (tiada potongan).
+        const colliderTrimInputs = {
+            nx: document.getElementById('input-trim-nx'), px: document.getElementById('input-trim-px'),
+            ny: document.getElementById('input-trim-ny'), py: document.getElementById('input-trim-py'),
+            nz: document.getElementById('input-trim-nz'), pz: document.getElementById('input-trim-pz')
+        };
+        Object.keys(colliderTrimInputs).forEach(axis => {
+            colliderTrimInputs[axis].addEventListener('change', function() {
+                let val = parseFloat(this.value);
+                if (isNaN(val) || val < 0) val = 0;
+                this.value = val;
+                if (selectedModel && selectedModel !== previewCameraMarker) {
+                    if (!selectedModel.userData.colliderTrim) selectedModel.userData.colliderTrim = { nx: 0, px: 0, ny: 0, py: 0, nz: 0, pz: 0 };
+                    selectedModel.userData.colliderTrim[axis] = val;
+                    scheduleAutoSave();
+                }
+            });
+        });
+        function syncColliderTrimInputsFromModel(model) {
+            const t = (model && model.userData.colliderTrim) || { nx: 0, px: 0, ny: 0, py: 0, nz: 0, pz: 0 };
+            Object.keys(colliderTrimInputs).forEach(axis => { colliderTrimInputs[axis].value = (typeof t[axis] === 'number') ? t[axis] : 0; });
+        }
+
+        // Rupa (warna/tekstur) untuk bentuk asas (box/sphere/cylinder/plane sahaja) —
+        // tak terpakai untuk model GLB/FBX (dah ada material sendiri) atau imej (dah tekstur).
+        const shapeAppearanceSection = document.getElementById('shape-appearance-section');
+        const inputShapeColor = document.getElementById('input-shape-color');
+        const btnShapeTexture = document.getElementById('btn-shape-texture');
+        const btnShapeTextureClear = document.getElementById('btn-shape-texture-clear');
+        const inputShapeTextureFile = document.getElementById('input-shape-texture-file');
+        const shapeTextureLoader = new THREE.TextureLoader();
+
+        function isBasicShapeMesh(model) {
+            if (!model || model === previewCameraMarker) return false;
+            return model.userData.kind === 'primitive' && ['box', 'sphere', 'cylinder', 'plane'].includes(model.userData.primType);
+        }
+
+        inputShapeColor.addEventListener('input', function() {
+            if (isBasicShapeMesh(selectedModel)) {
+                selectedModel.material.color.set(this.value);
+                selectedModel.userData.customColor = this.value;
                 scheduleAutoSave();
             }
         });
+
+        btnShapeTexture.addEventListener('click', function() { inputShapeTextureFile.click(); });
+
+        inputShapeTextureFile.addEventListener('change', async function(event) {
+            const file = event.target.files[0];
+            if (!file || !isBasicShapeMesh(selectedModel)) return;
+            const targetModel = selectedModel;
+            try {
+                const url = await uploadAssetToStorage(file);
+                shapeTextureLoader.load(url, (tex) => {
+                    tex.colorSpace = THREE.SRGBColorSpace || tex.colorSpace;
+                    targetModel.material.map = tex;
+                    targetModel.material.needsUpdate = true;
+                    targetModel.userData.customTextureUrl = url;
+                    scheduleAutoSave();
+                });
+            } catch (err) {
+                console.error('Error uploading shape texture:', err);
+                alert('Failed to upload texture: ' + (err.message || err));
+            }
+            inputShapeTextureFile.value = '';
+        });
+
+        btnShapeTextureClear.addEventListener('click', function() {
+            if (isBasicShapeMesh(selectedModel)) {
+                selectedModel.material.map = null;
+                selectedModel.material.needsUpdate = true;
+                selectedModel.userData.customTextureUrl = null;
+                scheduleAutoSave();
+            }
+        });
+
+        function syncShapeAppearanceFromModel(model) {
+            if (isBasicShapeMesh(model)) {
+                shapeAppearanceSection.style.display = 'block';
+                inputShapeColor.value = model.userData.customColor || '#cccccc';
+            } else {
+                shapeAppearanceSection.style.display = 'none';
+            }
+        }
 
         chkReturnOnRelease.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
@@ -1831,6 +1933,26 @@
             return { halfExtents: size.multiplyScalar(0.5), offset: center };
         }
 
+        // Potong manual kotak collider dari MANA-MANA muka (6 sisi) — untuk kes auto-detect
+        // (visible-only box) masih tak match bentuk sebenar (cth: fail GLB dengan geometri
+        // tersembunyi yang tak dikesan), supaya pengguna boleh betulkan terus ikut mata guna
+        // "Show Colliders". trim = {nx,px,ny,py,nz,pz}, semua dalam meter, lalai 0.
+        function applyColliderTrim(mesh, halfExtents, offset) {
+            const t = mesh.userData.colliderTrim;
+            if (!t) return { halfExtents, offset };
+            const hx = Math.max(halfExtents.x - ((t.nx || 0) + (t.px || 0)) / 2, 0.02);
+            const hy = Math.max(halfExtents.y - ((t.ny || 0) + (t.py || 0)) / 2, 0.02);
+            const hz = Math.max(halfExtents.z - ((t.nz || 0) + (t.pz || 0)) / 2, 0.02);
+            return {
+                halfExtents: { x: hx, y: hy, z: hz },
+                offset: {
+                    x: offset.x + ((t.nx || 0) - (t.px || 0)) / 2,
+                    y: offset.y + ((t.ny || 0) - (t.py || 0)) / 2,
+                    z: offset.z + ((t.nz || 0) - (t.pz || 0)) / 2
+                }
+            };
+        }
+
         function buildPhysicsShapeForMesh(mesh) {
             const primType = mesh.userData.primType;
 
@@ -1842,25 +1964,18 @@
                 const hx = Math.max(0.5 * mesh.scale.x, 0.02);
                 const hy = Math.max(0.5 * mesh.scale.y, 0.02);
                 const hz = Math.max(0.5 * mesh.scale.z, 0.02);
-                return { shape: new CANNON.Box(new CANNON.Vec3(hx, hy, hz)), offset: new CANNON.Vec3(0, 0, 0) };
+                const trimmed = applyColliderTrim(mesh, { x: hx, y: hy, z: hz }, { x: 0, y: 0, z: 0 });
+                return {
+                    shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
+                    offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
+                };
             }
 
-            const { halfExtents, offset } = computeLocalBoxHalfExtentsAndOffset(mesh);
-
-            // Potong manual bahagian BAWAH kotak collider — untuk fail GLB yang ada
-            // geometri tersembunyi/lutsinar yang auto-detect tak dapat kesan sepenuhnya,
-            // supaya pengguna boleh betulkan terus ikut mata (guna Show Colliders).
-            const trim = Math.max(0, mesh.userData.colliderBottomTrim || 0);
-            let hy = halfExtents.y;
-            let offY = offset.y;
-            if (trim > 0 && trim < hy * 2) {
-                hy = hy - trim / 2;
-                offY = offY + trim / 2;
-            }
-
+            const base = computeLocalBoxHalfExtentsAndOffset(mesh);
+            const trimmed = applyColliderTrim(mesh, base.halfExtents, base.offset);
             return {
-                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, Math.max(hy, 0.02), halfExtents.z)),
-                offset: new CANNON.Vec3(offset.x, offY, offset.z)
+                shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
+                offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
             };
         }
 
@@ -2121,7 +2236,9 @@
                     isSolid: ud.isSolid || false,
                     returnToOriginalOnRelease: ud.returnToOriginalOnRelease || false,
                     bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4,
-                    colliderBottomTrim: (typeof ud.colliderBottomTrim === 'number') ? ud.colliderBottomTrim : 0
+                    colliderTrim: ud.colliderTrim || null,
+                    customColor: ud.customColor || null,
+                    customTextureUrl: ud.customTextureUrl || null
                 };
             });
 
@@ -2231,7 +2348,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
-                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
+                        colliderTrim: objData.colliderTrim || null,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -2313,7 +2430,20 @@
                         mesh.userData.isSolid = objData.isSolid || false;
                         mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
                         mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
-                        mesh.userData.colliderBottomTrim = (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0;
+                        mesh.userData.colliderTrim = objData.colliderTrim || null;
+                        if (isBasicShapeMesh(mesh)) {
+                            if (objData.customColor) {
+                                mesh.material.color.set(objData.customColor);
+                                mesh.userData.customColor = objData.customColor;
+                            }
+                            if (objData.customTextureUrl) {
+                                mesh.userData.customTextureUrl = objData.customTextureUrl;
+                                shapeTextureLoader.load(objData.customTextureUrl, (tex) => {
+                                    mesh.material.map = tex;
+                                    mesh.material.needsUpdate = true;
+                                });
+                            }
+                        }
                         if (objData.primType === 'waypoint') rebuildWaypointPath();
                     }
                 }
@@ -3508,7 +3638,9 @@
                 isSolid: false,
                 returnToOriginalOnRelease: false,
                 bounciness: 0.4,
-                colliderBottomTrim: 0,
+                colliderTrim: null,
+                customColor: null,
+                customTextureUrl: null,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -3576,7 +3708,7 @@
                         isSolid: false,
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
-                        colliderBottomTrim: 0,
+                        colliderTrim: null,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -3627,7 +3759,7 @@
                     mesh.userData.isSolid = objData.isSolid || false;
                     mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
                     mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
-                    mesh.userData.colliderBottomTrim = (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0;
+                    mesh.userData.colliderTrim = objData.colliderTrim || null;
                 }
                 return mesh;
             });
@@ -4478,7 +4610,8 @@
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
-            inputColliderTrim.value = (typeof model.userData.colliderBottomTrim === 'number') ? model.userData.colliderBottomTrim : 0;
+            syncColliderTrimInputsFromModel(model);
+            syncShapeAppearanceFromModel(model);
             updateTransformInputsFromModel(model);
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
@@ -4508,7 +4641,8 @@
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
             inputBounciness.value = 0.4;
-            inputColliderTrim.value = 0;
+            syncColliderTrimInputsFromModel(null);
+            syncShapeAppearanceFromModel(null);
             clearTransformInputs();
             infoPopup.style.display = 'none';
             closeAnimModal();
@@ -4745,7 +4879,7 @@
                         isSolid: false,
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
-                        colliderBottomTrim: 0,
+                        colliderTrim: null,
                         isRotating: false,
                         mixer: mixer,
                         animAction: animAction,
