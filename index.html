@@ -4680,15 +4680,30 @@
                     let box = computeVisibleWorldBox3(object3D);
                     const size = box.getSize(new THREE.Vector3());
                     const maxDim = Math.max(size.x, size.y, size.z);
+                    console.log('[Upload] ' + file.name + ' initial visible-box size=', size, 'maxDim=', maxDim);
 
-                    if (maxDim > 0) {
+                    if (maxDim > 0 && isFinite(maxDim)) {
                         const scale = 3 / maxDim;
                         object3D.scale.set(scale, scale, scale);
+                    } else {
+                        console.warn('[Upload] ' + file.name + ' produced an invalid/empty bounding box (no visible mesh found?) — falling back to the FULL (all-nodes) box instead.');
+                        box = new THREE.Box3().setFromObject(object3D);
+                        const fallbackSize = box.getSize(new THREE.Vector3());
+                        const fallbackMaxDim = Math.max(fallbackSize.x, fallbackSize.y, fallbackSize.z);
+                        if (fallbackMaxDim > 0 && isFinite(fallbackMaxDim)) {
+                            object3D.scale.set(3 / fallbackMaxDim, 3 / fallbackMaxDim, 3 / fallbackMaxDim);
+                        }
                     }
 
                     object3D.updateMatrixWorld(true);
                     box = computeVisibleWorldBox3(object3D);
-                    const center = box.getCenter(new THREE.Vector3());
+                    let center = box.getCenter(new THREE.Vector3());
+                    if (!isFinite(center.x) || !isFinite(center.y) || !isFinite(center.z) || !isFinite(box.min.y)) {
+                        console.warn('[Upload] ' + file.name + ' visible-box center/min still invalid after scaling — using FULL box as fallback.');
+                        box = new THREE.Box3().setFromObject(object3D);
+                        center = box.getCenter(new THREE.Vector3());
+                    }
+                    console.log('[Upload] ' + file.name + ' final box min=', box.min, 'center=', center, 'scale=', object3D.scale);
 
                     const offset = loadedModelsList.length * 0.5;
                     object3D.position.x -= center.x - offset;
