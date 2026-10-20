@@ -135,6 +135,23 @@
         .subgroup { margin-bottom: 14px; }
         .subgroup-header { font-size: 11px; font-weight: bold; color: #ccc; padding: 6px 2px; border-bottom: 1px solid #333; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
         .subgroup-header .toggle-arrow { color: #666; }
+
+        /* Kod warna paksi X/Y/Z (merah/hijau/biru) — sepadan dengan warna gizmo
+           Move/Rotate/Scale (TransformControls) yang pengguna dah biasa nampak dalam
+           viewport, supaya rujukan arah untuk Collider Trim & Precise Transform konsisten. */
+        .axis-legend { font-size: 10px; color: #888; margin-bottom: 6px; }
+        .axis-legend b.axis-x { color: #ff5252; background: none; border: none; padding: 0; }
+        .axis-legend b.axis-y { color: #69f0ae; background: none; border: none; padding: 0; }
+        .axis-legend b.axis-z { color: #448aff; background: none; border: none; padding: 0; }
+        .transform-axis-label.axis-x { color: #ff5252; }
+        .transform-axis-label.axis-y { color: #69f0ae; }
+        .transform-axis-label.axis-z { color: #448aff; }
+        input.axis-x { border-left: 3px solid #ff5252 !important; }
+        input.axis-y { border-left: 3px solid #69f0ae !important; }
+        input.axis-z { border-left: 3px solid #448aff !important; }
+        input.axis-x::placeholder { color: #ff5252; opacity: 0.8; }
+        input.axis-y::placeholder { color: #69f0ae; opacity: 0.8; }
+        input.axis-z::placeholder { color: #448aff; opacity: 0.8; }
         label { font-size: 11px; color: #ccc; display: block; margin-bottom: 5px; }
         select, input, button {
             width: 100%;
@@ -864,20 +881,21 @@
                     <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
 
                     <label style="margin-top:8px;" title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe doesn't match the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
+                    <div class="axis-legend"><b class="axis-x">● X</b> = left/right &nbsp; <b class="axis-y">● Y</b> = down/up &nbsp; <b class="axis-z">● Z</b> = back/front</div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label">X −/+</span>
-                        <input type="number" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face">
-                        <input type="number" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face">
+                        <span class="transform-axis-label axis-x">◀ X ▶</span>
+                        <input type="number" class="axis-x" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face (left)">
+                        <input type="number" class="axis-x" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face (right)">
                     </div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Y −/+</span>
-                        <input type="number" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y (bottom) face">
-                        <input type="number" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y (top) face">
+                        <span class="transform-axis-label axis-y">▼ Y ▲</span>
+                        <input type="number" class="axis-y" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y face (bottom)">
+                        <input type="number" class="axis-y" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y face (top)">
                     </div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Z −/+</span>
-                        <input type="number" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face">
-                        <input type="number" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face">
+                        <span class="transform-axis-label axis-z">⊖ Z ⊕</span>
+                        <input type="number" class="axis-z" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face (back)">
+                        <input type="number" class="axis-z" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face (front)">
                     </div>
                 </div>
             </div>
@@ -925,23 +943,24 @@
             <div class="collapsible subgroup collapsed" data-key="transform">
                 <div class="collapsible-header subgroup-header">📐 Precise Transform <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
+                    <div class="axis-legend"><b class="axis-x">● X</b> &nbsp; <b class="axis-y">● Y</b> &nbsp; <b class="axis-z">● Z</b> (matches the Move/Rotate/Scale gizmo colors in the viewport)</div>
                     <div class="transform-numeric-row">
                         <span class="transform-axis-label">Pos</span>
-                        <input type="number" id="input-pos-x" step="0.01" placeholder="X">
-                        <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
-                        <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
+                        <input type="number" class="axis-x" id="input-pos-x" step="0.01" placeholder="X">
+                        <input type="number" class="axis-y" id="input-pos-y" step="0.01" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-pos-z" step="0.01" placeholder="Z">
                     </div>
                     <div class="transform-numeric-row">
                         <span class="transform-axis-label">Rot°</span>
-                        <input type="number" id="input-rot-x" step="1" placeholder="X">
-                        <input type="number" id="input-rot-y" step="1" placeholder="Y">
-                        <input type="number" id="input-rot-z" step="1" placeholder="Z">
+                        <input type="number" class="axis-x" id="input-rot-x" step="1" placeholder="X">
+                        <input type="number" class="axis-y" id="input-rot-y" step="1" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-rot-z" step="1" placeholder="Z">
                     </div>
                     <div class="transform-numeric-row">
                         <span class="transform-axis-label">Scale</span>
-                        <input type="number" id="input-scale-x" step="0.01" placeholder="X">
-                        <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
-                        <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
+                        <input type="number" class="axis-x" id="input-scale-x" step="0.01" placeholder="X">
+                        <input type="number" class="axis-y" id="input-scale-y" step="0.01" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
                     </div>
                 </div>
             </div>
