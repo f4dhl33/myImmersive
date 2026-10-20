@@ -1723,6 +1723,29 @@
         let physicsBodies = []; // [{ mesh, body }]
         let physicsActive = false;
 
+        // Box3 yang HANYA kira mesh yang benar-benar KELIHATAN (node.visible !== false).
+        // THREE.Box3().setFromObject() baku mengabaikan flag visible — kalau fail GLB ada
+        // node tersembunyi (cth: platform/collision-proxy/backdrop yang ditinggalkan oleh
+        // pencipta asal model), ia tetap disertakan dalam kiraan kotak, buat collider fizik
+        // jadi jauh lebih besar/beranjak berbanding model yang benar-benar nampak.
+        function computeVisibleWorldBox3(root) {
+            const box = new THREE.Box3();
+            const tmpBox = new THREE.Box3();
+            let hasAny = false;
+            (function recurse(node) {
+                if (node.visible === false) return;
+                if (node.isMesh && node.geometry) {
+                    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+                    tmpBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld);
+                    if (!hasAny) { box.copy(tmpBox); hasAny = true; }
+                    else box.union(tmpBox);
+                }
+                for (let i = 0; i < node.children.length; i++) recurse(node.children[i]);
+            })(root);
+            if (!hasAny) box.setFromObject(root); // fallback kalau tiada mesh kelihatan langsung
+            return box;
+        }
+
         // Kira "kotak sempadan lokal" objek (saiz + offset pusat berbanding position-nya) —
         // guna bila primitif bukan kotak/sfera ringkas (contoh model GLTF, satah teks, dll).
         function computeLocalBoxHalfExtentsAndOffset(mesh) {
@@ -1732,11 +1755,21 @@
             mesh.position.set(0, 0, 0);
             mesh.updateMatrixWorld(true);
 
-            const box = new THREE.Box3().setFromObject(mesh);
+            const box = computeVisibleWorldBox3(mesh);
             const size = new THREE.Vector3();
             const center = new THREE.Vector3();
             box.getSize(size);
             box.getCenter(center);
+
+            // DIAGNOSTIK: banding dengan kotak "naif" (semua node, termasuk yang tersembunyi).
+            // Kalau beza ketara, model ni ada geometri tersembunyi yang menjadikan collider
+            // lebih besar/beranjak daripada bentuk yang benar-benar kelihatan.
+            const naiveBox = new THREE.Box3().setFromObject(mesh);
+            const naiveSize = naiveBox.getSize(new THREE.Vector3());
+            const naiveCenter = naiveBox.getCenter(new THREE.Vector3());
+            if (naiveCenter.distanceTo(center) > 0.03 || naiveSize.distanceTo(size) > 0.03) {
+                console.warn('[Physics] Hidden-geometry mismatch for "' + (mesh.userData.fileName || mesh.name) + '": visible-only box center=', center, 'size=', size, ' vs naive (all nodes) center=', naiveCenter, 'size=', naiveSize);
+            }
 
             mesh.quaternion.copy(savedQuat);
             mesh.position.copy(savedPos);
@@ -4640,16 +4673,17 @@
 
                     fixModelMaterialLighting(object3D);
 
-                    const box = new THREE.Box3().setFromObject(object3D);
+                    let box = computeVisibleWorldBox3(object3D);
                     const size = box.getSize(new THREE.Vector3());
                     const maxDim = Math.max(size.x, size.y, size.z);
-                        
+
                     if (maxDim > 0) {
                         const scale = 3 / maxDim;
                         object3D.scale.set(scale, scale, scale);
                     }
 
-                    box.setFromObject(object3D);
+                    object3D.updateMatrixWorld(true);
+                    box = computeVisibleWorldBox3(object3D);
                     const center = box.getCenter(new THREE.Vector3());
 
                     const offset = loadedModelsList.length * 0.5;

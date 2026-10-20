@@ -362,6 +362,24 @@
         let physicsBodies = [];
         let physicsActive = false;
 
+        function computeVisibleWorldBox3(root) {
+            const box = new THREE.Box3();
+            const tmpBox = new THREE.Box3();
+            let hasAny = false;
+            (function recurse(node) {
+                if (node.visible === false) return;
+                if (node.isMesh && node.geometry) {
+                    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+                    tmpBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld);
+                    if (!hasAny) { box.copy(tmpBox); hasAny = true; }
+                    else box.union(tmpBox);
+                }
+                for (let i = 0; i < node.children.length; i++) recurse(node.children[i]);
+            })(root);
+            if (!hasAny) box.setFromObject(root);
+            return box;
+        }
+
         function computeLocalBoxHalfExtentsAndOffset(mesh) {
             const savedQuat = mesh.quaternion.clone();
             const savedPos = mesh.position.clone();
@@ -369,7 +387,7 @@
             mesh.position.set(0, 0, 0);
             mesh.updateMatrixWorld(true);
 
-            const box = new THREE.Box3().setFromObject(mesh);
+            const box = computeVisibleWorldBox3(mesh);
             const size = new THREE.Vector3();
             const center = new THREE.Vector3();
             box.getSize(size);
