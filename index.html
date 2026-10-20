@@ -1729,6 +1729,10 @@
         // pencipta asal model), ia tetap disertakan dalam kiraan kotak, buat collider fizik
         // jadi jauh lebih besar/beranjak berbanding model yang benar-benar nampak.
         function computeVisibleWorldBox3(root) {
+            // PENTING: paksa matrixWorld terkini dulu — root mungkin belum pernah
+            // di-render/ditambah ke scene (cth: model yang baru siap load), jadi
+            // matrixWorld lalai (identity) tak mencerminkan transform sebenar lagi.
+            root.updateMatrixWorld(true);
             const box = new THREE.Box3();
             const tmpBox = new THREE.Box3();
             let hasAny = false;

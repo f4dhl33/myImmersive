@@ -363,6 +363,7 @@
         let physicsActive = false;
 
         function computeVisibleWorldBox3(root) {
+            root.updateMatrixWorld(true);
             const box = new THREE.Box3();
             const tmpBox = new THREE.Box3();
             let hasAny = false;
