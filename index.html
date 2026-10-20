@@ -1544,6 +1544,7 @@
         async function setPreviewMode(enable) {
             isPreviewMode = enable;
             hoveredModel = null;
+            clearEditColliderDebug(); // elak wireframe mod Editing bertindih dengan yang fizik sebenar
             if (enable) {
                 // Scene PERTAMA (paling atas dalam senarai) sentiasa jadi default view bila
                 // masuk Pratonton/VR/AR — tak kira scene mana yang terakhir diedit.
@@ -1627,6 +1628,7 @@
                     controls.enabled = true;
                     controls.update();
                 }
+                buildEditColliderDebug();
             }
             window.dispatchEvent(new Event('resize'));
         }
@@ -2132,6 +2134,47 @@
             physicsBodies = [];
         }
 
+        // "Show Colliders" di luar Pratonton (mod Editing biasa) — tiada dunia fizik cannon.js
+        // berjalan di sini (tiada graviti/simulasi), jadi ini sekadar PAPARAN STATIK: bina
+        // wireframe collider terus daripada kedudukan/putaran/saiz SEMASA setiap objek
+        // Pepejal/Boleh Diambil, supaya pengguna nampak collider masa tengah edit/trim lagi
+        // tanpa perlu masuk Preview setiap kali nak semak.
+        let editColliderDebugMeshes = [];
+        function clearEditColliderDebug() {
+            editColliderDebugMeshes.forEach(e => contentRoot.remove(e.debugMesh));
+            editColliderDebugMeshes = [];
+        }
+        function buildEditColliderDebug() {
+            clearEditColliderDebug();
+            if (isPreviewMode || !chkShowColliders.checked) return;
+
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return;
+                if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
+
+                const { shape, offset } = buildPhysicsShapeForMesh(mesh);
+                const debugMesh = buildPhysicsDebugMesh(shape, offset);
+                debugMesh.visible = true;
+                contentRoot.add(debugMesh);
+                editColliderDebugMeshes.push({ mesh, debugMesh, localOffset: new THREE.Vector3(offset.x, offset.y, offset.z) });
+            });
+            syncEditColliderDebugPositions();
+        }
+        // Dipanggil setiap frame (murah — sekadar salin position/quaternion) supaya collider
+        // ikut objek secara langsung semasa drag (Move/Rotate). Saiz/bentuk kotak (geometry)
+        // hanya dibina semula bila benar-benar perlu (lihat scheduleAutoSave).
+        function syncEditColliderDebugPositions() {
+            editColliderDebugMeshes.forEach(e => {
+                const worldOffset = e.localOffset.clone().applyQuaternion(e.mesh.quaternion);
+                e.debugMesh.position.set(
+                    e.mesh.position.x + worldOffset.x,
+                    e.mesh.position.y + worldOffset.y,
+                    e.mesh.position.z + worldOffset.z
+                );
+                e.debugMesh.quaternion.copy(e.mesh.quaternion);
+            });
+        }
+
         // RETICLE (penunjuk tap-to-place semasa AR)
         const reticleGeometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
         const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00e5ff });
@@ -2254,7 +2297,16 @@
             if (el) el.innerText = text;
         }
 
+        // scheduleAutoSave() dipanggil daripada hampir SETIAP titik perubahan objek dalam
+        // app ni (togol flag, tukar trim, transform, tambah/padam objek, tukar scene, dll) —
+        // jadi ia juga tempat paling senang & selamat untuk "cuba bina semula" paparan debug
+        // collider (Show Colliders) masa Editing, tanpa perlu sambung panggilan ke setiap
+        // handler secara berasingan satu-satu.
+        let editColliderDebugTimer = null;
         function scheduleAutoSave() {
+            clearTimeout(editColliderDebugTimer);
+            editColliderDebugTimer = setTimeout(buildEditColliderDebug, 150);
+
             if (isRestoringProject || !activeProjectId) return;
             setSaveStatusText('⏳ Saving...');
             clearTimeout(autoSaveTimer);
@@ -5352,6 +5404,10 @@
                         pb.debugMesh.quaternion.copy(pb.body.quaternion);
                     }
                 });
+            } else if (editColliderDebugMeshes.length > 0) {
+                // Mod Editing (bukan Pratonton) — tiada simulasi fizik, cuma ikut
+                // kedudukan/putaran SEMASA objek supaya collider "live" semasa drag.
+                syncEditColliderDebugPositions();
             }
 
             // SINKRONIKAN SCRUBBER MODAL JIKA UTILITY MODAL SEDANG DIBUKA
@@ -5452,6 +5508,7 @@
             physicsBodies.forEach(pb => {
                 if (pb.debugMesh) pb.debugMesh.visible = chkShowColliders.checked;
             });
+            buildEditColliderDebug(); // kemaskini serta-merta untuk mod Editing (bukan Pratonton)
         });
 
         // ---- RESIZE PANEL (seret handle untuk ubah saiz, simpan dalam localStorage) ----
