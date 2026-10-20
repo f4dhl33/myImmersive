@@ -834,6 +834,9 @@
             <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
             <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
 
+            <label for="input-collider-trim" title="Shrinks the auto-generated physics collider from the BOTTOM only, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe sits lower than the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider taller than the real model.">⬇️ Collider Bottom Trim (m):</label>
+            <input type="number" id="input-collider-trim" min="0" max="5" step="0.01" value="0">
+
             <label>Camera Controls & Movement:</label>
             <div class="btn-action-group">
                 <button id="btn-undo" class="btn-secondary">↶ Undo</button>
@@ -1654,6 +1657,17 @@
             }
         });
 
+        const inputColliderTrim = document.getElementById('input-collider-trim');
+        inputColliderTrim.addEventListener('change', function() {
+            let val = parseFloat(this.value);
+            if (isNaN(val) || val < 0) val = 0;
+            this.value = val;
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.colliderBottomTrim = val;
+                scheduleAutoSave();
+            }
+        });
+
         chkReturnOnRelease.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.returnToOriginalOnRelease = this.checked;
@@ -1728,6 +1742,16 @@
         // node tersembunyi (cth: platform/collision-proxy/backdrop yang ditinggalkan oleh
         // pencipta asal model), ia tetap disertakan dalam kiraan kotak, buat collider fizik
         // jadi jauh lebih besar/beranjak berbanding model yang benar-benar nampak.
+        // Sesetengah fail GLB muat turun ada "shadow plane"/mesh bantuan yang node.visible
+        // dia TRUE (jadi tetap dirender) tapi material dia lutsinar/opacity hampir 0 — nampak
+        // "tiada" di mata tapi geometri dia tetap wujud dan selalunya lebih luas/rendah
+        // daripada model sebenar, buat collider jadi lebih besar daripada yang patut.
+        function isMaterialEffectivelyInvisible(material) {
+            if (!material) return false;
+            const mats = Array.isArray(material) ? material : [material];
+            return mats.every(m => m && (m.visible === false || (m.transparent && m.opacity <= 0.02)));
+        }
+
         function computeVisibleWorldBox3(root) {
             // PENTING: paksa matrixWorld terkini dulu — root mungkin belum pernah
             // di-render/ditambah ke scene (cth: model yang baru siap load), jadi
@@ -1739,6 +1763,7 @@
             let hasAny = false;
             (function recurse(node) {
                 if (node.visible === false) return;
+                if (node.isMesh && isMaterialEffectivelyInvisible(node.material)) return;
                 if (node.isSkinnedMesh && node.geometry && node.skeleton) {
                     // SkinnedMesh.geometry.boundingBox ialah bentuk "bind pose" STATIK —
                     // tak kira langsung pose/rig semasa (cth: kaki robot terbuka/tertutup),
@@ -1821,9 +1846,21 @@
             }
 
             const { halfExtents, offset } = computeLocalBoxHalfExtentsAndOffset(mesh);
+
+            // Potong manual bahagian BAWAH kotak collider — untuk fail GLB yang ada
+            // geometri tersembunyi/lutsinar yang auto-detect tak dapat kesan sepenuhnya,
+            // supaya pengguna boleh betulkan terus ikut mata (guna Show Colliders).
+            const trim = Math.max(0, mesh.userData.colliderBottomTrim || 0);
+            let hy = halfExtents.y;
+            let offY = offset.y;
+            if (trim > 0 && trim < hy * 2) {
+                hy = hy - trim / 2;
+                offY = offY + trim / 2;
+            }
+
             return {
-                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, halfExtents.y, halfExtents.z)),
-                offset: new CANNON.Vec3(offset.x, offset.y, offset.z)
+                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, Math.max(hy, 0.02), halfExtents.z)),
+                offset: new CANNON.Vec3(offset.x, offY, offset.z)
             };
         }
 
@@ -2083,7 +2120,8 @@
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
                     returnToOriginalOnRelease: ud.returnToOriginalOnRelease || false,
-                    bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4
+                    bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4,
+                    colliderBottomTrim: (typeof ud.colliderBottomTrim === 'number') ? ud.colliderBottomTrim : 0
                 };
             });
 
@@ -2193,6 +2231,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
+                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -2274,6 +2313,7 @@
                         mesh.userData.isSolid = objData.isSolid || false;
                         mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
                         mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
+                        mesh.userData.colliderBottomTrim = (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0;
                         if (objData.primType === 'waypoint') rebuildWaypointPath();
                     }
                 }
@@ -3468,6 +3508,7 @@
                 isSolid: false,
                 returnToOriginalOnRelease: false,
                 bounciness: 0.4,
+                colliderBottomTrim: 0,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -3535,6 +3576,7 @@
                         isSolid: false,
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
+                        colliderBottomTrim: 0,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -3585,6 +3627,7 @@
                     mesh.userData.isSolid = objData.isSolid || false;
                     mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
                     mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
+                    mesh.userData.colliderBottomTrim = (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0;
                 }
                 return mesh;
             });
@@ -4435,6 +4478,7 @@
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
+            inputColliderTrim.value = (typeof model.userData.colliderBottomTrim === 'number') ? model.userData.colliderBottomTrim : 0;
             updateTransformInputsFromModel(model);
 
             if (model.userData.interaction && (!model.userData.interactions || model.userData.interactions.length === 0)) {
@@ -4464,6 +4508,7 @@
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
             inputBounciness.value = 0.4;
+            inputColliderTrim.value = 0;
             clearTransformInputs();
             infoPopup.style.display = 'none';
             closeAnimModal();
@@ -4700,6 +4745,7 @@
                         isSolid: false,
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
+                        colliderBottomTrim: 0,
                         isRotating: false,
                         mixer: mixer,
                         animAction: animAction,

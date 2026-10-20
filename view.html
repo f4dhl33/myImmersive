@@ -362,6 +362,12 @@
         let physicsBodies = [];
         let physicsActive = false;
 
+        function isMaterialEffectivelyInvisible(material) {
+            if (!material) return false;
+            const mats = Array.isArray(material) ? material : [material];
+            return mats.every(m => m && (m.visible === false || (m.transparent && m.opacity <= 0.02)));
+        }
+
         function computeVisibleWorldBox3(root) {
             root.updateMatrixWorld(true);
             const box = new THREE.Box3();
@@ -370,6 +376,7 @@
             let hasAny = false;
             (function recurse(node) {
                 if (node.visible === false) return;
+                if (node.isMesh && isMaterialEffectivelyInvisible(node.material)) return;
                 if (node.isSkinnedMesh && node.geometry && node.skeleton) {
                     node.skeleton.update();
                     const posAttr = node.geometry.attributes.position;
@@ -435,9 +442,18 @@
             }
 
             const { halfExtents, offset } = computeLocalBoxHalfExtentsAndOffset(mesh);
+
+            const trim = Math.max(0, mesh.userData.colliderBottomTrim || 0);
+            let hy = halfExtents.y;
+            let offY = offset.y;
+            if (trim > 0 && trim < hy * 2) {
+                hy = hy - trim / 2;
+                offY = offY + trim / 2;
+            }
+
             return {
-                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, halfExtents.y, halfExtents.z)),
-                offset: new CANNON.Vec3(offset.x, offset.y, offset.z)
+                shape: new CANNON.Box(new CANNON.Vec3(halfExtents.x, Math.max(hy, 0.02), halfExtents.z)),
+                offset: new CANNON.Vec3(offset.x, offY, offset.z)
             };
         }
 
@@ -606,6 +622,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
+                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -663,6 +680,7 @@
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
+                        colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -841,6 +859,7 @@
                 isSolid: objData.isSolid || false,
                 returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                 bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
+                colliderBottomTrim: (typeof objData.colliderBottomTrim === 'number') ? objData.colliderBottomTrim : 0,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
