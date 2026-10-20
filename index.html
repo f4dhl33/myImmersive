@@ -1889,6 +1889,17 @@
 
                 physicsBodies.push({ mesh, body, debugMesh });
                 mesh.userData._physicsBody = body;
+
+                // DIAGNOSTIK: banding bawah kotak collider (fizik) dengan bawah model
+                // SEBENAR yang nampak, dalam unit DUNIA yang sama (ruang lokal contentRoot).
+                const halfY = shape.halfExtents ? shape.halfExtents.y : shape.radius;
+                const colliderMinY = body.position.y + offset.y - halfY;
+                const colliderMaxY = body.position.y + offset.y + halfY;
+                const trueBox = computeVisibleWorldBox3(mesh);
+                console.log('[Physics] ' + (mesh.userData.fileName || mesh.name || 'object') +
+                    ' | collider Y: ' + colliderMinY.toFixed(3) + ' to ' + colliderMaxY.toFixed(3) +
+                    ' | true visual Y: ' + trueBox.min.y.toFixed(3) + ' to ' + trueBox.max.y.toFixed(3) +
+                    ' | GAP (collider bottom - visual bottom) = ' + (colliderMinY - trueBox.min.y).toFixed(3));
             });
 
             physicsActive = true;
