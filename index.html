@@ -122,6 +122,19 @@
         /* ELEMEN UI */
         h3 { font-size: 13px; text-transform: uppercase; color: #007acc; margin-bottom: 10px; letter-spacing: 1px; }
         .section-box { background: #1e1e1e; padding: 12px; border-radius: 6px; border: 1px solid #333; margin-bottom: 15px; }
+
+        /* Kumpulan boleh minimize/collapse — guna untuk h3 utama (panel kiri) DAN
+           sub-seksyen dalam panel kanan, supaya kawalan yang makin bertambah tak jadi
+           satu senarai panjang yang sukar diskan. State disimpan dalam localStorage
+           ikut data-key supaya kekal lepas reload, konsisten dengan panel resize. */
+        .collapsible-header { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; }
+        .collapsible-header .toggle-arrow { font-size: 10px; color: #888; transition: transform 0.15s; margin-left: 6px; flex-shrink: 0; }
+        .collapsible.collapsed > .collapsible-header .toggle-arrow { transform: rotate(-90deg); }
+        .collapsible.collapsed > .collapsible-body { display: none; }
+
+        .subgroup { margin-bottom: 14px; }
+        .subgroup-header { font-size: 11px; font-weight: bold; color: #ccc; padding: 6px 2px; border-bottom: 1px solid #333; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .subgroup-header .toggle-arrow { color: #666; }
         label { font-size: 11px; color: #ccc; display: block; margin-bottom: 5px; }
         select, input, button {
             width: 100%;
@@ -552,14 +565,20 @@
 
     <!-- PANEL KIRI -->
     <div id="left-panel">
-        <h3>🎬 Project Scenes</h3>
-        <div class="section-box">
-            <label>🎬 Scene List (in this project):</label>
-            <ul id="scenes-list" class="hierarchy-list"></ul>
-            <button id="btn-add-scene" class="btn-secondary btn-full" style="margin-top:5px;">+ New Scene</button>
+        <div class="collapsible" data-key="scenes">
+            <h3 class="collapsible-header">🎬 Project Scenes <span class="toggle-arrow">▾</span></h3>
+            <div class="collapsible-body">
+                <div class="section-box">
+                    <label>🎬 Scene List (in this project):</label>
+                    <ul id="scenes-list" class="hierarchy-list"></ul>
+                    <button id="btn-add-scene" class="btn-secondary btn-full" style="margin-top:5px;">+ New Scene</button>
+                </div>
+            </div>
         </div>
 
-        <h3>1. Library & Import</h3>
+        <div class="collapsible" data-key="library">
+            <h3 class="collapsible-header">1. Library & Import <span class="toggle-arrow">▾</span></h3>
+            <div class="collapsible-body">
         <div class="section-box">
             <label for="file-input">Upload Model (.glb, .gltf, .fbx)</label>
             <input type="file" id="file-input" accept=".glb,.gltf,.fbx" multiple>
@@ -594,6 +613,8 @@
             <ul id="hierarchy-tree-media" class="hierarchy-list">
                 <li class="hierarchy-empty-msg">No media files imported</li>
             </ul>
+        </div>
+            </div>
         </div>
     </div>
 
@@ -811,104 +832,129 @@
         <div class="section-box">
             <div id="selected-object-name" class="selected-object-badge">No Object Selected</div>
 
-            <label class="checkbox-label">
-                <input type="checkbox" id="chk-initial-hidden">
-                <span>🙈 Hide Object Initially</span>
-            </label>
+            <div class="collapsible subgroup" data-key="flags">
+                <div class="collapsible-header subgroup-header">🚩 Object Flags <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="chk-initial-hidden">
+                        <span>🙈 Hide Object Initially</span>
+                    </label>
 
-            <label class="checkbox-label" title="Object follows physics: gravity, collision & bounce during Preview/AR/VR, and can be grabbed using a controller.">
-                <input type="checkbox" id="chk-grabbable">
-                <span>🤏 Grabbable & Movable (Physics: Gravity/Bounce)</span>
-            </label>
+                    <label class="checkbox-label" title="Object follows physics: gravity, collision & bounce during Preview/AR/VR, and can be grabbed using a controller.">
+                        <input type="checkbox" id="chk-grabbable">
+                        <span>🤏 Grabbable & Movable (Physics: Gravity/Bounce)</span>
+                    </label>
 
-            <label class="checkbox-label checkbox-label-child" id="label-return-on-release" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor. Only applies to Grabbable objects.">
-                <input type="checkbox" id="chk-return-on-release">
-                <span>🔄 Return to Original on Release</span>
-            </label>
+                    <label class="checkbox-label checkbox-label-child" id="label-return-on-release" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor. Only applies to Grabbable objects.">
+                        <input type="checkbox" id="chk-return-on-release">
+                        <span>🔄 Return to Original on Release</span>
+                    </label>
 
-            <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
-                <input type="checkbox" id="chk-solid">
-                <span>🧱 Solid (physics collider — prevents pass-through)</span>
-            </label>
-
-            <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
-            <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
-
-            <label style="margin-top:4px;" title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe doesn't match the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">X −/+</span>
-                <input type="number" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face">
-                <input type="number" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face">
-            </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Y −/+</span>
-                <input type="number" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y (bottom) face">
-                <input type="number" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y (top) face">
-            </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Z −/+</span>
-                <input type="number" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face">
-                <input type="number" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face">
-            </div>
-
-            <div id="shape-appearance-section" style="display:none;">
-                <label style="margin-top: 10px;">🎨 Basic Shape Appearance:</label>
-                <div class="transform-numeric-row">
-                    <span class="transform-axis-label">Color</span>
-                    <input type="color" id="input-shape-color" value="#cccccc" style="flex:1; height: 26px; padding: 0; border: none; cursor: pointer;">
+                    <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
+                        <input type="checkbox" id="chk-solid">
+                        <span>🧱 Solid (physics collider — prevents pass-through)</span>
+                    </label>
                 </div>
-                <div class="btn-action-group">
-                    <button id="btn-shape-texture" class="btn-secondary">🖼️ Apply Texture...</button>
-                    <button id="btn-shape-texture-clear" class="btn-secondary">✖ Clear Texture</button>
+            </div>
+
+            <div class="collapsible subgroup collapsed" data-key="physics">
+                <div class="collapsible-header subgroup-header">⚡ Physics Tuning <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
+                    <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
+
+                    <label style="margin-top:8px;" title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview) if the magenta wireframe doesn't match the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">X −/+</span>
+                        <input type="number" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face">
+                        <input type="number" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face">
+                    </div>
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Y −/+</span>
+                        <input type="number" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y (bottom) face">
+                        <input type="number" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y (top) face">
+                    </div>
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Z −/+</span>
+                        <input type="number" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face">
+                        <input type="number" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face">
+                    </div>
                 </div>
-                <input type="file" id="input-shape-texture-file" accept="image/*" style="display:none;">
             </div>
 
-            <label>Camera Controls & Movement:</label>
-            <div class="btn-action-group">
-                <button id="btn-undo" class="btn-secondary">↶ Undo</button>
-                <button id="btn-redo" class="btn-secondary">↷ Redo</button>
-                <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Focus Camera on Selected Object">🔍 Focus</button>
+            <div class="collapsible subgroup" id="shape-appearance-section" data-key="appearance" style="display:none;">
+                <div class="collapsible-header subgroup-header">🎨 Basic Shape Appearance <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Color</span>
+                        <input type="color" id="input-shape-color" value="#cccccc" style="flex:1; height: 26px; padding: 0; border: none; cursor: pointer;">
+                    </div>
+                    <div class="btn-action-group">
+                        <button id="btn-shape-texture" class="btn-secondary">🖼️ Apply Texture...</button>
+                        <button id="btn-shape-texture-clear" class="btn-secondary">✖ Clear Texture</button>
+                    </div>
+                    <input type="file" id="input-shape-texture-file" accept="image/*" style="display:none;">
+                </div>
             </div>
 
-            <label style="margin-top: 10px;">Object Control Mode:</label>
-            <div class="btn-grid">
-                <button id="btn-mode-translate" class="btn-mode active">Move</button>
-                <button id="btn-mode-rotate" class="btn-mode">Rotate</button>
-                <button id="btn-mode-scale" class="btn-mode btn-full">Scale</button>
+            <div class="collapsible subgroup" data-key="cameramode">
+                <div class="collapsible-header subgroup-header">🎥 Camera & Mode <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <label>Camera Controls & Movement:</label>
+                    <div class="btn-action-group">
+                        <button id="btn-undo" class="btn-secondary">↶ Undo</button>
+                        <button id="btn-redo" class="btn-secondary">↷ Redo</button>
+                        <button id="btn-focus-obj" class="btn-secondary btn-focus" title="Focus Camera on Selected Object">🔍 Focus</button>
+                    </div>
+
+                    <label style="margin-top: 10px;">Object Control Mode:</label>
+                    <div class="btn-grid">
+                        <button id="btn-mode-translate" class="btn-mode active">Move</button>
+                        <button id="btn-mode-rotate" class="btn-mode">Rotate</button>
+                        <button id="btn-mode-scale" class="btn-mode btn-full">Scale</button>
+                    </div>
+
+                    <label style="margin-top: 10px;">Axis Space:</label>
+                    <div class="btn-grid">
+                        <button id="btn-space-local" class="btn-mode active">Local</button>
+                        <button id="btn-space-world" class="btn-mode">World</button>
+                    </div>
+                </div>
             </div>
 
-            <label style="margin-top: 10px;">Axis Space:</label>
-            <div class="btn-grid">
-                <button id="btn-space-local" class="btn-mode active">Local</button>
-                <button id="btn-space-world" class="btn-mode">World</button>
+            <div class="collapsible subgroup collapsed" data-key="transform">
+                <div class="collapsible-header subgroup-header">📐 Precise Transform <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Pos</span>
+                        <input type="number" id="input-pos-x" step="0.01" placeholder="X">
+                        <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
+                        <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
+                    </div>
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Rot°</span>
+                        <input type="number" id="input-rot-x" step="1" placeholder="X">
+                        <input type="number" id="input-rot-y" step="1" placeholder="Y">
+                        <input type="number" id="input-rot-z" step="1" placeholder="Z">
+                    </div>
+                    <div class="transform-numeric-row">
+                        <span class="transform-axis-label">Scale</span>
+                        <input type="number" id="input-scale-x" step="0.01" placeholder="X">
+                        <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
+                        <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
+                    </div>
+                </div>
             </div>
 
-            <label style="margin-top: 10px;">📐 Precise Transform:</label>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Pos</span>
-                <input type="number" id="input-pos-x" step="0.01" placeholder="X">
-                <input type="number" id="input-pos-y" step="0.01" placeholder="Y">
-                <input type="number" id="input-pos-z" step="0.01" placeholder="Z">
+            <div class="collapsible subgroup collapsed" data-key="reset">
+                <div class="collapsible-header subgroup-header">↺ Reset <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-body subgroup-body">
+                    <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Position</button>
+                    <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Rotation</button>
+                    <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Scale</button>
+                    <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Entire Object</button>
+                </div>
             </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Rot°</span>
-                <input type="number" id="input-rot-x" step="1" placeholder="X">
-                <input type="number" id="input-rot-y" step="1" placeholder="Y">
-                <input type="number" id="input-rot-z" step="1" placeholder="Z">
-            </div>
-            <div class="transform-numeric-row">
-                <span class="transform-axis-label">Scale</span>
-                <input type="number" id="input-scale-x" step="0.01" placeholder="X">
-                <input type="number" id="input-scale-y" step="0.01" placeholder="Y">
-                <input type="number" id="input-scale-z" step="0.01" placeholder="Z">
-            </div>
-
-            <label style="margin-top: 10px;">Reset Individually:</label>
-            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Position</button>
-            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Rotation</button>
-            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Scale</button>
-            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Entire Object</button>
         </div>
     </div>
 
@@ -5442,6 +5488,26 @@
         makeResizable(document.getElementById('resize-left-panel'), document.getElementById('left-panel'), 'horizontal', { min: 200, max: 500 });
         makeResizable(document.getElementById('resize-right-panel'), document.getElementById('right-panel'), 'horizontal', { min: 250, max: 550, invert: true });
         makeResizable(document.getElementById('resize-bottom-panel'), document.getElementById('bottom-panel'), 'vertical', { min: 150, max: 500, invert: true });
+
+        // KUMPULAN BOLEH MINIMIZE (panel kiri + sub-seksyen panel kanan) — klik header untuk
+        // togol, state kekal lepas reload (localStorage). Kalau tiada state tersimpan lagi,
+        // kekalkan default yang dah ditetapkan dalam HTML (class "collapsed" sedia ada).
+        function initCollapsibles() {
+            document.querySelectorAll('.collapsible').forEach(el => {
+                const header = el.querySelector('.collapsible-header');
+                const body = el.querySelector('.collapsible-body');
+                if (!header || !body) return;
+                const key = 'uiCollapsed_' + (el.dataset.key || '');
+                const stored = localStorage.getItem(key);
+                if (stored === '1') el.classList.add('collapsed');
+                else if (stored === '0') el.classList.remove('collapsed');
+                header.addEventListener('click', () => {
+                    el.classList.toggle('collapsed');
+                    localStorage.setItem(key, el.classList.contains('collapsed') ? '1' : '0');
+                });
+            });
+        }
+        initCollapsibles();
 
         // MULAKAN APLIKASI — semak sesi Supabase & papar gate yang sesuai
         initApp();
