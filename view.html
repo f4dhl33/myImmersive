@@ -366,10 +366,26 @@
             root.updateMatrixWorld(true);
             const box = new THREE.Box3();
             const tmpBox = new THREE.Box3();
+            const tmpVec = new THREE.Vector3();
             let hasAny = false;
             (function recurse(node) {
                 if (node.visible === false) return;
-                if (node.isMesh && node.geometry) {
+                if (node.isSkinnedMesh && node.geometry && node.skeleton) {
+                    node.skeleton.update();
+                    const posAttr = node.geometry.attributes.position;
+                    let firstVertex = true;
+                    const skinnedBox = new THREE.Box3();
+                    for (let i = 0; i < posAttr.count; i++) {
+                        node.boneTransform(i, tmpVec);
+                        tmpVec.applyMatrix4(node.matrixWorld);
+                        if (firstVertex) { skinnedBox.min.copy(tmpVec); skinnedBox.max.copy(tmpVec); firstVertex = false; }
+                        else skinnedBox.expandByPoint(tmpVec);
+                    }
+                    if (!firstVertex) {
+                        if (!hasAny) { box.copy(skinnedBox); hasAny = true; }
+                        else box.union(skinnedBox);
+                    }
+                } else if (node.isMesh && node.geometry) {
                     if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
                     tmpBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld);
                     if (!hasAny) { box.copy(tmpBox); hasAny = true; }
