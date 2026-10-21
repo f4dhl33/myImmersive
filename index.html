@@ -1671,6 +1671,11 @@
                 restorePreviewObjectSnapshot();
                 renderObjectsList();
 
+                // Simpan SEMULA keadaan yang baru dipulihkan — timpa sebarang auto-save "rosak"
+                // (cth: objek terbalik/posisi fizik ujian) yang mungkin sempat tersimpan semasa
+                // Pratonton sebelum gari scheduleAutoSave() di atas wujud/jalan.
+                scheduleAutoSave();
+
                 loadedModelsList.forEach(m => {
                     m.visible = true;
                 });
@@ -2386,6 +2391,14 @@
         function scheduleAutoSave() {
             clearTimeout(editColliderDebugTimer);
             editColliderDebugTimer = setTimeout(buildEditColliderDebug, 150);
+
+            // PENTING: JANGAN simpan semasa Pratonton aktif — posisi/putaran objek masa tu
+            // adalah hasil fizik/interaksi UJIAN sahaja (grab/drop, graviti, bounce...), bukan
+            // layout yang pengguna sahkan dalam Editor. Grab-release dsb. turut panggil
+            // scheduleAutoSave(), jadi tanpa gari ni, keadaan "rosak" masa test (cth: objek
+            // terbalik) akan ditulis terus ke Supabase sebelum sempat dipulihkan bila keluar
+            // Pratonton — refresh/masuk balik lepas tu akan muatkan keadaan rosak tu secara KEKAL.
+            if (isPreviewMode) return;
 
             if (isRestoringProject || !activeProjectId) return;
             setSaveStatusText('⏳ Saving...');
