@@ -1943,20 +1943,34 @@
                     // tak kira langsung pose/rig semasa (cth: kaki robot terbuka/tertutup),
                     // jadi boleh jadi jauh lebih kecil/nipis daripada bentuk sebenar yang
                     // nampak. Guna boneTransform() supaya kedudukan vertex SELEPAS skinning
-                    // yang diukur, bukan bentuk rehat.
-                    node.skeleton.update();
-                    const posAttr = node.geometry.attributes.position;
-                    let firstVertex = true;
-                    const skinnedBox = new THREE.Box3();
-                    for (let i = 0; i < posAttr.count; i++) {
-                        node.boneTransform(i, tmpVec);
-                        tmpVec.applyMatrix4(node.matrixWorld);
-                        if (firstVertex) { skinnedBox.min.copy(tmpVec); skinnedBox.max.copy(tmpVec); firstVertex = false; }
-                        else skinnedBox.expandByPoint(tmpVec);
+                    // yang diukur, bukan bentuk rehat. cuba/tangkap — model dengan skeleton
+                    // tak lengkap/pelik boleh baling ralat dalam boneTransform(); jangan biar
+                    // ia gugurkan keseluruhan pengiraan, guna bind-pose statik sebagai fallback.
+                    let skinnedOk = false;
+                    try {
+                        node.skeleton.update();
+                        const posAttr = node.geometry.attributes.position;
+                        let firstVertex = true;
+                        const skinnedBox = new THREE.Box3();
+                        for (let i = 0; i < posAttr.count; i++) {
+                            node.boneTransform(i, tmpVec);
+                            tmpVec.applyMatrix4(node.matrixWorld);
+                            if (firstVertex) { skinnedBox.min.copy(tmpVec); skinnedBox.max.copy(tmpVec); firstVertex = false; }
+                            else skinnedBox.expandByPoint(tmpVec);
+                        }
+                        if (!firstVertex) {
+                            if (!hasAny) { box.copy(skinnedBox); hasAny = true; }
+                            else box.union(skinnedBox);
+                            skinnedOk = true;
+                        }
+                    } catch (e) {
+                        console.warn('[Physics] boneTransform failed for "' + (node.name || 'skinned mesh') + '", falling back to bind-pose box:', e);
                     }
-                    if (!firstVertex) {
-                        if (!hasAny) { box.copy(skinnedBox); hasAny = true; }
-                        else box.union(skinnedBox);
+                    if (!skinnedOk && node.geometry) {
+                        if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+                        tmpBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld);
+                        if (!hasAny) { box.copy(tmpBox); hasAny = true; }
+                        else box.union(tmpBox);
                     }
                 } else if (node.isMesh && node.geometry) {
                     if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
@@ -1979,25 +1993,27 @@
             mesh.position.set(0, 0, 0);
             mesh.updateMatrixWorld(true);
 
-            const box = computeVisibleWorldBox3(mesh);
-            const size = new THREE.Vector3();
-            const center = new THREE.Vector3();
-            box.getSize(size);
-            box.getCenter(center);
-
-            // DIAGNOSTIK: banding dengan kotak "naif" (semua node, termasuk yang tersembunyi).
-            // Kalau beza ketara, model ni ada geometri tersembunyi yang menjadikan collider
-            // lebih besar/beranjak daripada bentuk yang benar-benar kelihatan.
-            const naiveBox = new THREE.Box3().setFromObject(mesh);
-            const naiveSize = naiveBox.getSize(new THREE.Vector3());
-            const naiveCenter = naiveBox.getCenter(new THREE.Vector3());
-            if (naiveCenter.distanceTo(center) > 0.03 || naiveSize.distanceTo(size) > 0.03) {
-                console.warn('[Physics] Hidden-geometry mismatch for "' + (mesh.userData.fileName || mesh.name) + '": visible-only box center=', center, 'size=', size, ' vs naive (all nodes) center=', naiveCenter, 'size=', naiveSize);
+            // PENTING: position/quaternion mesh MESTI dipulihkan tak kira apa-apa pun jadi
+            // semasa pengiraan (contoh: ralat tak dijangka dalam computeVisibleWorldBox3) —
+            // kalau tidak, objek tu "terperangkap" di (0,0,0)/identity secara kekal. Ini boleh
+            // dipanggil bila-bila masa (Preview, Show Colliders masa Editing, mouse-grab),
+            // jadi ralat terlepas pandang di sini rosakkan kedudukan objek yang nampak.
+            let size, center;
+            try {
+                const box = computeVisibleWorldBox3(mesh);
+                size = new THREE.Vector3();
+                center = new THREE.Vector3();
+                box.getSize(size);
+                box.getCenter(center);
+            } catch (e) {
+                console.error('[Physics] computeVisibleWorldBox3 failed for "' + (mesh.userData.fileName || mesh.name) + '" — using a small fallback box:', e);
+                size = new THREE.Vector3(0.5, 0.5, 0.5);
+                center = new THREE.Vector3(0, 0, 0);
+            } finally {
+                mesh.quaternion.copy(savedQuat);
+                mesh.position.copy(savedPos);
+                mesh.updateMatrixWorld(true);
             }
-
-            mesh.quaternion.copy(savedQuat);
-            mesh.position.copy(savedPos);
-            mesh.updateMatrixWorld(true);
 
             size.x = Math.max(size.x, 0.02);
             size.y = Math.max(size.y, 0.02);
@@ -2104,26 +2120,21 @@
                 if (mesh.userData.primType === 'zone') return; // zon bukan objek fizikal
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
 
-                const { body, shape, offset } = createPhysicsBodyForMesh(mesh);
-                physicsWorld.addBody(body);
+                // try/catch SETIAP objek — satu objek bermasalah tak patut gugurkan
+                // pembinaan fizik untuk SEMUA objek lain dalam scene.
+                try {
+                    const { body, shape, offset } = createPhysicsBodyForMesh(mesh);
+                    physicsWorld.addBody(body);
 
-                const debugMesh = buildPhysicsDebugMesh(shape, offset);
-                debugMesh.visible = chkShowColliders.checked;
-                contentRoot.add(debugMesh);
+                    const debugMesh = buildPhysicsDebugMesh(shape, offset);
+                    debugMesh.visible = chkShowColliders.checked;
+                    contentRoot.add(debugMesh);
 
-                physicsBodies.push({ mesh, body, debugMesh });
-                mesh.userData._physicsBody = body;
-
-                // DIAGNOSTIK: banding bawah kotak collider (fizik) dengan bawah model
-                // SEBENAR yang nampak, dalam unit DUNIA yang sama (ruang lokal contentRoot).
-                const halfY = shape.halfExtents ? shape.halfExtents.y : shape.radius;
-                const colliderMinY = body.position.y + offset.y - halfY;
-                const colliderMaxY = body.position.y + offset.y + halfY;
-                const trueBox = computeVisibleWorldBox3(mesh);
-                console.log('[Physics] ' + (mesh.userData.fileName || mesh.name || 'object') +
-                    ' | collider Y: ' + colliderMinY.toFixed(3) + ' to ' + colliderMaxY.toFixed(3) +
-                    ' | true visual Y: ' + trueBox.min.y.toFixed(3) + ' to ' + trueBox.max.y.toFixed(3) +
-                    ' | GAP (collider bottom - visual bottom) = ' + (colliderMinY - trueBox.min.y).toFixed(3));
+                    physicsBodies.push({ mesh, body, debugMesh });
+                    mesh.userData._physicsBody = body;
+                } catch (e) {
+                    console.error('[Physics] Failed to build physics body for "' + (mesh.userData.fileName || mesh.name) + '" — skipping this object:', e);
+                }
             });
 
             physicsActive = true;
@@ -2157,11 +2168,15 @@
                 if (mesh.userData.primType === 'zone') return;
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
 
-                const { shape, offset } = buildPhysicsShapeForMesh(mesh);
-                const debugMesh = buildPhysicsDebugMesh(shape, offset);
-                debugMesh.visible = true;
-                contentRoot.add(debugMesh);
-                editColliderDebugMeshes.push({ mesh, debugMesh, localOffset: new THREE.Vector3(offset.x, offset.y, offset.z) });
+                try {
+                    const { shape, offset } = buildPhysicsShapeForMesh(mesh);
+                    const debugMesh = buildPhysicsDebugMesh(shape, offset);
+                    debugMesh.visible = true;
+                    contentRoot.add(debugMesh);
+                    editColliderDebugMeshes.push({ mesh, debugMesh, localOffset: new THREE.Vector3(offset.x, offset.y, offset.z) });
+                } catch (e) {
+                    console.error('[Physics] Failed to build edit-mode collider debug for "' + (mesh.userData.fileName || mesh.name) + '":', e);
+                }
             });
             syncEditColliderDebugPositions();
         }
