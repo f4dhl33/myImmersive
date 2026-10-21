@@ -1234,10 +1234,40 @@
         renderer.domElement.addEventListener('pointerdown', (event) => {
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
+
+            // GENGGAM MOUSE (desktop, bukan sesi XR) — mula genggam serta-merta kalau klik
+            // kena objek "Boleh Diambil", sebelum apa-apa semakan jarak/threshold klik.
+            if (!renderer.xr.isPresenting && !grabbedObject && event.button === 0) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, mainCamera);
+
+                const grabTargets = loadedModelsList.filter(o => o.visible && o.userData.isGrabbable);
+                const intersects = raycaster.intersectObjects(grabTargets, true);
+                if (intersects.length > 0) {
+                    let hitModel = intersects[0].object;
+                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
+                        hitModel = hitModel.parent;
+                    }
+                    if (hitModel.userData.isGrabbable) {
+                        startMouseGrab(hitModel, intersects[0].point);
+                        try { renderer.domElement.setPointerCapture(event.pointerId); } catch (e) {}
+                    }
+                }
+            }
         });
 
         renderer.domElement.addEventListener('pointerup', (event) => {
             if (event.button !== 0) return;
+
+            if (isMouseGrabbing) {
+                isMouseGrabbing = false;
+                controls.enabled = true;
+                try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
+                onControllerSelectEnd();
+                return;
+            }
 
             const deltaX = Math.abs(event.clientX - pointerDownPos.x);
             const deltaY = Math.abs(event.clientY - pointerDownPos.y);
@@ -1268,6 +1298,14 @@
             mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
             raycaster.setFromCamera(mouse, mainCamera);
+
+            if (isMouseGrabbing && grabbedObject) {
+                const target = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(mouseGrabPlane, target)) {
+                    mouseGrabProxy.position.copy(target);
+                }
+                return;
+            }
 
             let hitModel = null;
             if (loadedModelsList.length > 0) {
@@ -1760,6 +1798,55 @@
         controller2.addEventListener('selectstart', onControllerSelectStart);
         controller2.addEventListener('selectend', onControllerSelectEnd);
 
+        // GENGGAM GUNA MOUSE (desktop/bukan sesi XR — termasuk fallback "View tanpa AR/VR"
+        // bila peranti tak sokong WebXR, sebab mod tu pun guna laluan mouse yang sama).
+        // AR (tap di skrin telefon) sudah tercakup oleh onControllerSelectStart/End di atas
+        // (WebXR mewakilkan tap sebagai "transient-pointer" controller).
+        const mouseGrabProxy = new THREE.Object3D();
+        const mouseGrabPlane = new THREE.Plane();
+        const mouseGrabPlaneNormal = new THREE.Vector3();
+        let isMouseGrabbing = false;
+
+        function startMouseGrab(hitModel, grabPoint) {
+            grabbedObject = hitModel;
+            controls.enabled = false;
+
+            const bodyToWake = hitModel.userData._physicsBody;
+            if (bodyToWake && bodyToWake.type === CANNON.Body.STATIC) {
+                bodyToWake.type = CANNON.Body.DYNAMIC;
+                bodyToWake.mass = 1;
+                bodyToWake.updateMassProperties();
+                bodyToWake.velocity.set(0, 0, 0);
+                bodyToWake.angularVelocity.set(0, 0, 0);
+            }
+
+            mainCamera.getWorldDirection(mouseGrabPlaneNormal);
+            mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
+            mouseGrabProxy.position.copy(grabPoint);
+            mouseGrabProxy.quaternion.identity();
+
+            const objWorldPosStart = new THREE.Vector3();
+            const objWorldQuatStart = new THREE.Quaternion();
+            hitModel.getWorldPosition(objWorldPosStart);
+            hitModel.getWorldQuaternion(objWorldQuatStart);
+
+            const controllerWorldPosStart = new THREE.Vector3();
+            const controllerWorldQuatInvStart = new THREE.Quaternion();
+            mouseGrabProxy.getWorldPosition(controllerWorldPosStart);
+            mouseGrabProxy.getWorldQuaternion(controllerWorldQuatInvStart).invert();
+
+            grabStartState = {
+                mode: 'move',
+                controller: mouseGrabProxy,
+                objWorldPosStart,
+                objWorldQuatStart,
+                controllerWorldPosStart,
+                controllerWorldQuatInvStart
+            };
+
+            isMouseGrabbing = true;
+        }
+
         // ---------------------------------------------------------------
         // SESI WEBXR (VR/AR) — reposisi kamera & urus latar passthrough
         // ---------------------------------------------------------------
@@ -1877,17 +1964,15 @@
                 reticle.visible = false;
             }
 
-            if (renderer.xr.isPresenting) {
-                if (grabbedObject) {
-                    updateGrabbedObjectTransform(delta);
-                } else {
-                    const vrHit1 = getControllerRaycastHit(controller1);
-                    const vrHit2 = getControllerRaycastHit(controller2);
-                    const vrHit = vrHit1 || vrHit2;
-                    if (vrHit !== hoveredModel) {
-                        hoveredModel = vrHit;
-                        if (hoveredModel) triggerInteraction(hoveredModel, 'onHover');
-                    }
+            if (grabbedObject) {
+                updateGrabbedObjectTransform(delta);
+            } else if (renderer.xr.isPresenting) {
+                const vrHit1 = getControllerRaycastHit(controller1);
+                const vrHit2 = getControllerRaycastHit(controller2);
+                const vrHit = vrHit1 || vrHit2;
+                if (vrHit !== hoveredModel) {
+                    hoveredModel = vrHit;
+                    if (hoveredModel) triggerInteraction(hoveredModel, 'onHover');
                 }
             }
 
