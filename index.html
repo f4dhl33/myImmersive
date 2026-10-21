@@ -983,6 +983,20 @@
                         </div>
                     </div>
 
+                    <div class="collapsible subgroup collapsed" data-key="clipplane">
+                        <div class="collapsible-header subgroup-header">✂️ Visual Occlusion <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label class="checkbox-label" title="Treat this object's flat face as a cutting plane — any other object that crosses to the 'back' side of it gets visually clipped (not rendered) past that plane, during Preview/AR/VR. Typically used on an invisible wall (Hide Object Initially + Keep Collider Active While Hidden) matching a real-world wall, so virtual content doesn't visibly poke through it. The clip direction follows this object's local forward (+Z) axis — use 'Flip Direction' below if content is clipped on the wrong side.">
+                                <input type="checkbox" id="chk-clip-plane">
+                                <span>✂️ Clip Objects Behind This (Occlusion Plane)</span>
+                            </label>
+                            <label class="checkbox-label checkbox-label-child" id="label-clip-plane-flip" title="Flip which side of this object's face is considered 'behind' for clipping purposes.">
+                                <input type="checkbox" id="chk-clip-plane-flip">
+                                <span>↕️ Flip Clip Direction</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <div class="collapsible subgroup collapsed" data-key="bounce">
                         <div class="collapsible-header subgroup-header">⚡ Bounce <span class="toggle-arrow">▾</span></div>
                         <div class="collapsible-body subgroup-body">
@@ -1822,6 +1836,34 @@
             }
         });
 
+        // "Flip Clip Direction" cuma bermakna bila objek ni ditanda sebagai satah
+        // pemotong — sekat (bukan uncheck) child bila parent OFF, sama corak dengan
+        // Return on Release/Grabbable.
+        const chkClipPlane = document.getElementById('chk-clip-plane');
+        const chkClipPlaneFlip = document.getElementById('chk-clip-plane-flip');
+        const labelClipPlaneFlip = document.getElementById('label-clip-plane-flip');
+
+        function syncClipPlaneFlipAvailability() {
+            const enabled = chkClipPlane.checked;
+            chkClipPlaneFlip.disabled = !enabled;
+            labelClipPlaneFlip.classList.toggle('disabled', !enabled);
+        }
+
+        chkClipPlane.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.useAsClipPlane = this.checked;
+                scheduleAutoSave();
+            }
+            syncClipPlaneFlipAvailability();
+        });
+
+        chkClipPlaneFlip.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.clipPlaneFlip = this.checked;
+                scheduleAutoSave();
+            }
+        });
+
         const inputBounciness = document.getElementById('input-bounciness');
         inputBounciness.addEventListener('change', function() {
             let val = parseFloat(this.value);
@@ -1928,6 +1970,7 @@
         });
 
         syncReturnOnReleaseAvailability();
+        syncClipPlaneFlipAvailability();
 
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
@@ -2229,6 +2272,7 @@
             });
 
             physicsActive = true;
+            rebuildVisualClipPlanes();
         }
 
         // Disegerakkan setiap bingkai SEBELUM physicsWorld.step() — tambah/keluarkan badan
@@ -2257,6 +2301,54 @@
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
+            clearVisualClipPlanes();
+        }
+
+        // SATAH PEMOTONG VISUAL ("Clip Objects Behind This") — objek yang ditanda
+        // useAsClipPlane jadi sumber satah pemotong WebGL (THREE.Plane): mana-mana objek
+        // LAIN yang berada di sebelah "belakang" satah tu (ikut arah +Z tempatan objek
+        // sumber, boleh dibalik dengan clipPlaneFlip) tak dirender past satah tu. Guna untuk
+        // dinding tak kelihatan (Hide Object Initially + Keep Collider Active While Hidden)
+        // yang sepadan dengan dinding sebenar dalam AR, supaya kandungan maya tak "tembus"
+        // kelihatan melalui dinding tu.
+        function forEachMeshMaterial(root, fn) {
+            root.traverse(node => {
+                if (node.isMesh && node.material) {
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.forEach(fn);
+                }
+            });
+        }
+
+        let visualClipPlanes = [];
+        function rebuildVisualClipPlanes() {
+            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+            visualClipPlanes = [];
+
+            const worldPos = new THREE.Vector3();
+            const worldQuat = new THREE.Quaternion();
+            const normal = new THREE.Vector3();
+
+            loadedModelsList.forEach(wallMesh => {
+                if (!wallMesh.userData.useAsClipPlane) return;
+                wallMesh.getWorldPosition(worldPos);
+                wallMesh.getWorldQuaternion(worldQuat);
+                normal.set(0, 0, wallMesh.userData.clipPlaneFlip ? -1 : 1).applyQuaternion(worldQuat);
+                visualClipPlanes.push(new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldPos));
+            });
+
+            if (visualClipPlanes.length === 0) return;
+
+            renderer.localClippingEnabled = true;
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.useAsClipPlane) return; // dinding sumber tak kena potong dirinya
+                forEachMeshMaterial(mesh, m => { m.clippingPlanes = visualClipPlanes; });
+            });
+        }
+
+        function clearVisualClipPlanes() {
+            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+            visualClipPlanes = [];
         }
 
         // "Show Colliders" di luar Pratonton (mod Editing biasa) — tiada dunia fizik cannon.js
@@ -2487,6 +2579,8 @@
                     initialScale: ud.initialScale.toArray(),
                     initialVisibility: ud.initialVisibility,
                     colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
+                    useAsClipPlane: ud.useAsClipPlane || false,
+                    clipPlaneFlip: ud.clipPlaneFlip || false,
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
@@ -2600,6 +2694,8 @@
                         initialScale: new THREE.Vector3().fromArray(objData.initialScale),
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
+                        useAsClipPlane: objData.useAsClipPlane || false,
+                        clipPlaneFlip: objData.clipPlaneFlip || false,
                         interactions: objData.interactions || [],
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
@@ -2683,6 +2779,8 @@
                         mesh.userData.initialScale.fromArray(objData.initialScale);
                         mesh.userData.initialVisibility = objData.initialVisibility;
                         mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
+                        mesh.userData.useAsClipPlane = objData.useAsClipPlane || false;
+                        mesh.userData.clipPlaneFlip = objData.clipPlaneFlip || false;
                         mesh.userData.interactions = objData.interactions || [];
                         mesh.userData.isGrabbable = objData.isGrabbable || false;
                         mesh.userData.isSolid = objData.isSolid || false;
@@ -3892,6 +3990,8 @@
                 initialScale: new THREE.Vector3().copy(mesh.scale),
                 initialVisibility: type !== 'zone',
                 colliderActiveWhenHidden: false,
+                useAsClipPlane: false,
+                clipPlaneFlip: false,
                 interactions: [],
                 isGrabbable: false,
                 isSolid: false,
@@ -3963,6 +4063,8 @@
                         initialScale: new THREE.Vector3().copy(mesh.scale),
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
+                        useAsClipPlane: false,
+                        clipPlaneFlip: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,
@@ -4015,6 +4117,8 @@
                     mesh.userData.initialScale.fromArray(objData.initialScale);
                     mesh.userData.initialVisibility = objData.initialVisibility;
                     mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
+                    mesh.userData.useAsClipPlane = objData.useAsClipPlane || false;
+                    mesh.userData.clipPlaneFlip = objData.clipPlaneFlip || false;
                     mesh.userData.interactions = objData.interactions || [];
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
                     mesh.userData.isSolid = objData.isSolid || false;
@@ -5041,6 +5145,9 @@
             chkSolid.checked = !!model.userData.isSolid;
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
+            chkClipPlane.checked = !!model.userData.useAsClipPlane;
+            chkClipPlaneFlip.checked = !!model.userData.clipPlaneFlip;
+            syncClipPlaneFlipAvailability();
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             syncColliderTrimInputsFromModel(model);
             syncShapeAppearanceFromModel(model);
@@ -5074,6 +5181,9 @@
             chkSolid.checked = false;
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
+            chkClipPlane.checked = false;
+            chkClipPlaneFlip.checked = false;
+            syncClipPlaneFlipAvailability();
             inputBounciness.value = 0.4;
             syncColliderTrimInputsFromModel(null);
             syncShapeAppearanceFromModel(null);
@@ -5309,6 +5419,8 @@
                         initialScale: new THREE.Vector3(1, 1, 1),
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
+                        useAsClipPlane: false,
+                        clipPlaneFlip: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,

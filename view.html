@@ -525,6 +525,47 @@
             });
 
             physicsActive = true;
+            rebuildVisualClipPlanes();
+        }
+
+        function forEachMeshMaterial(root, fn) {
+            root.traverse(node => {
+                if (node.isMesh && node.material) {
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.forEach(fn);
+                }
+            });
+        }
+
+        let visualClipPlanes = [];
+        function rebuildVisualClipPlanes() {
+            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+            visualClipPlanes = [];
+
+            const worldPos = new THREE.Vector3();
+            const worldQuat = new THREE.Quaternion();
+            const normal = new THREE.Vector3();
+
+            loadedModelsList.forEach(wallMesh => {
+                if (!wallMesh.userData.useAsClipPlane) return;
+                wallMesh.getWorldPosition(worldPos);
+                wallMesh.getWorldQuaternion(worldQuat);
+                normal.set(0, 0, wallMesh.userData.clipPlaneFlip ? -1 : 1).applyQuaternion(worldQuat);
+                visualClipPlanes.push(new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldPos));
+            });
+
+            if (visualClipPlanes.length === 0) return;
+
+            renderer.localClippingEnabled = true;
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.useAsClipPlane) return;
+                forEachMeshMaterial(mesh, m => { m.clippingPlanes = visualClipPlanes; });
+            });
+        }
+
+        function clearVisualClipPlanes() {
+            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+            visualClipPlanes = [];
         }
 
         function syncPhysicsBodiesWithVisibility() {
@@ -547,6 +588,7 @@
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
+            clearVisualClipPlanes();
         }
 
         // RETICLE (penunjuk tap-to-place semasa AR)
