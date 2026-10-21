@@ -5383,6 +5383,19 @@
             });
         }
 
+        // Togol "Hide Camera Row" — sekadar declutter paparan senarai "3D Objects & Camera"
+        // semasa Editing (tak buang/pengaruhi objek Kamera itu sendiri), state kekal lepas
+        // reload (localStorage), konsisten dengan corak panel resize/collapsible lain.
+        // MESTI diisytiharkan di sini (SEBELUM renderObjectsList() dipanggil baris bawah) —
+        // kalau tidak, akan baling TDZ ReferenceError yang menghentikan SELURUH baki skrip
+        // (termasuk initApp() di hujung fail), pernah berlaku dan "sangkutkan" seluruh app.
+        const chkHideCameraRow = document.getElementById('chk-hide-camera-row');
+        chkHideCameraRow.checked = localStorage.getItem('hideCameraRowInList') === '1';
+        chkHideCameraRow.addEventListener('change', () => {
+            localStorage.setItem('hideCameraRowInList', chkHideCameraRow.checked ? '1' : '0');
+            renderObjectsList();
+        });
+
         renderObjectsList();
         renderMediaList();
 
@@ -5660,16 +5673,6 @@
         const bgColorPicker = document.getElementById('bg-color-picker');
         const chkArAutoPlace = document.getElementById('chk-ar-auto-place');
         const chkShowColliders = document.getElementById('chk-show-colliders');
-
-        // Togol "Hide Camera Row" — sekadar declutter paparan senarai "3D Objects & Camera"
-        // semasa Editing (tak buang/pengaruhi objek Kamera itu sendiri), state kekal lepas
-        // reload (localStorage), konsisten dengan corak panel resize/collapsible lain.
-        const chkHideCameraRow = document.getElementById('chk-hide-camera-row');
-        chkHideCameraRow.checked = localStorage.getItem('hideCameraRowInList') === '1';
-        chkHideCameraRow.addEventListener('change', () => {
-            localStorage.setItem('hideCameraRowInList', chkHideCameraRow.checked ? '1' : '0');
-            renderObjectsList();
-        });
 
         btnApplyBg.addEventListener('click', () => {
             scene.background = new THREE.Color(bgColorPicker.value);
