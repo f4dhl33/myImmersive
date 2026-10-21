@@ -37,9 +37,7 @@
         }
         #bottom-panel-col-objects .section-box { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         #bottom-panel-col-objects .hierarchy-list { flex: 1; max-height: none; min-height: 0; }
-        .objects-panel-header { display: flex; align-items: center; justify-content: space-between; }
-        .objects-panel-header h3 { margin-bottom: 10px; }
-        .camera-row-toggle { display: flex; align-items: center; gap: 3px; width: auto; margin: 0 0 10px 0; font-size: 12px; cursor: pointer; color: #aaa; }
+        .camera-row-toggle { display: flex; align-items: center; gap: 2px; width: auto; margin: 0 4px 0 0; font-size: 10px; cursor: pointer; color: #ffcc00; white-space: nowrap; }
         .camera-row-toggle input { width: auto; margin: 0; cursor: pointer; }
         #bottom-panel-col-left {
             flex: 1 1 40%;
@@ -149,6 +147,11 @@
         /* Kod warna paksi X/Y/Z (merah/hijau/biru) — sepadan dengan warna gizmo
            Move/Rotate/Scale (TransformControls) yang pengguna dah biasa nampak dalam
            viewport, supaya rujukan arah untuk Collider Trim & Precise Transform konsisten. */
+        /* Lumpuhkan & "grey out" kawalan editing objek (Transform/Camera/Physics Settings)
+           bila tiada objek dipilih — pointer-events:none sekat SEMUA interaksi (klik, drag,
+           taip) tanpa perlu tambah atribut disabled kat setiap input satu-satu. */
+        #object-editing-fields.panel-disabled { opacity: 0.4; pointer-events: none; filter: grayscale(0.6); }
+
         .axis-legend { font-size: 10px; color: #888; margin-bottom: 6px; }
         .axis-legend b.axis-x { color: #ff5252; background: none; border: none; padding: 0; }
         .axis-legend b.axis-y { color: #69f0ae; background: none; border: none; padding: 0; }
@@ -730,12 +733,7 @@
     <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja -->
     <div id="bottom-panel">
         <div id="bottom-panel-col-objects">
-            <div class="objects-panel-header">
-                <h3>📦 3D Objects & Camera</h3>
-                <label class="camera-row-toggle" title="Hide the camera frustum helper (the yellow/white lines in the 3D viewport) while editing — doesn't affect the camera object itself, still selectable from this list.">
-                    <input type="checkbox" id="chk-hide-camera-row">📷 Hide Helper
-                </label>
-            </div>
+            <h3>📦 3D Objects & Camera</h3>
             <div class="section-box">
                 <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
                 <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Deselect Object (Deselect All)</button>
@@ -871,6 +869,11 @@
 
         <div class="section-box">
             <div id="selected-object-name" class="selected-object-badge">No Object Selected</div>
+
+            <!-- Semua kawalan editing (Transform/Camera/Physics Settings) hanya berguna bila
+                 ada objek dipilih — "grey out" & lumpuhkan interaksi bahagian ni kalau tiada
+                 pilihan, togol via JS dalam selectObject()/deselectObject(). -->
+            <div id="object-editing-fields" class="panel-disabled">
 
             <!-- TRANSFORM (atas sekali) — Pos/Rot/Scale tepat, dengan Reset bersarang di bawahnya -->
             <div class="collapsible subgroup" data-key="transform">
@@ -1023,6 +1026,7 @@
 
                 </div>
             </div>
+            </div> <!-- /#object-editing-fields -->
         </div>
     </div>
 
@@ -1226,6 +1230,13 @@
         const cameraHelper = new THREE.CameraHelper(previewCameraMarker);
         scene.add(previewCameraMarker);
         scene.add(cameraHelper);
+
+        // Pilihan sorok "cameraHelper" (garis frustum kuning/putih) dalam viewport semasa
+        // Editing — butangnya dibina terus dalam baris "Initial Camera Position" (li dinamik,
+        // dibina semula setiap renderObjectsList()), jadi state SEBENAR disimpan di sini
+        // (bukan cache rujukan DOM, sebab elemen tu musnah & dibina semula setiap render).
+        let hideCameraHelperPref = localStorage.getItem('hideCameraHelperInViewport') === '1';
+        cameraHelper.visible = !hideCameraHelperPref;
 
         // KAWALAN GIZMO TRANSFORM
         const transformControls = new THREE.TransformControls(mainCamera, renderer.domElement);
@@ -1645,7 +1656,7 @@
                 modeTextLabel.innerText = "Interactive Editing";
 
                 gridHelper.visible = true;
-                cameraHelper.visible = !chkHideCameraRow.checked;
+                cameraHelper.visible = !hideCameraHelperPref;
 
                 // Reset keadaan genggam kalau pengguna keluar Pratonton semasa tengah menggenggam.
                 grabbedObject = null;
@@ -4898,7 +4909,8 @@
             selectedModel = model;
             transformControls.attach(model);
             document.getElementById('selected-object-name').textContent = model.userData.fileName || model.name;
-            
+            document.getElementById('object-editing-fields').classList.remove('panel-disabled');
+
             chkInitialHidden.checked = (model.userData.initialVisibility === false);
             chkGrabbable.checked = !!model.userData.isGrabbable;
             chkSolid.checked = !!model.userData.isSolid;
@@ -4930,6 +4942,7 @@
             selectedModel = null;
             transformControls.detach();
             document.getElementById('selected-object-name').textContent = "No Object Selected";
+            document.getElementById('object-editing-fields').classList.add('panel-disabled');
             chkInitialHidden.checked = false;
             chkGrabbable.checked = false;
             chkSolid.checked = false;
@@ -5270,11 +5283,26 @@
             const liCam = document.createElement('li');
             liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
             liCam.dataset.id = previewCameraMarker.userData.id;
-            liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
+            liCam.innerHTML = `
+                <span>${previewCameraMarker.userData.fileName}</span>
+                <label class="camera-row-toggle" title="Hide the camera frustum helper (yellow/white lines in the 3D viewport) while editing — doesn't affect the camera object itself.">
+                    <input type="checkbox" id="chk-hide-camera-row">📷
+                </label>
+            `;
             liCam.addEventListener('click', (e) => {
                 e.stopPropagation();
                 selectObject(previewCameraMarker);
             });
+
+            const chkHideCameraHelper = liCam.querySelector('#chk-hide-camera-row');
+            chkHideCameraHelper.checked = hideCameraHelperPref;
+            chkHideCameraHelper.addEventListener('click', (e) => e.stopPropagation());
+            chkHideCameraHelper.addEventListener('change', () => {
+                hideCameraHelperPref = chkHideCameraHelper.checked;
+                localStorage.setItem('hideCameraHelperInViewport', hideCameraHelperPref ? '1' : '0');
+                if (!isPreviewMode) cameraHelper.visible = !hideCameraHelperPref;
+            });
+
             tree.appendChild(liCam);
 
             if (loadedModelsList.length === 0) return;
@@ -5380,22 +5408,6 @@
                 }
             });
         }
-
-        // Togol "Hide Camera Row" — sekadar declutter paparan senarai "3D Objects & Camera"
-        // Togol "Hide Camera Helper" — sorok garis frustum kamera (cameraHelper, kuning/putih)
-        // DALAM VIEWPORT 3D semasa Editing, bukan baris dalam senarai (senarai sentiasa
-        // tunjuk "Initial Camera Position" — objek tu tetap perlu boleh dipilih). State
-        // kekal lepas reload (localStorage). MESTI diisytiharkan di sini (SEBELUM
-        // renderObjectsList() dipanggil baris bawah) — kalau tidak, akan baling TDZ
-        // ReferenceError yang menghentikan SELURUH baki skrip (termasuk initApp() di hujung
-        // fail), pernah berlaku dan "sangkutkan" seluruh app.
-        const chkHideCameraRow = document.getElementById('chk-hide-camera-row');
-        chkHideCameraRow.checked = localStorage.getItem('hideCameraHelperInViewport') === '1';
-        cameraHelper.visible = !chkHideCameraRow.checked;
-        chkHideCameraRow.addEventListener('change', () => {
-            localStorage.setItem('hideCameraHelperInViewport', chkHideCameraRow.checked ? '1' : '0');
-            if (!isPreviewMode) cameraHelper.visible = !chkHideCameraRow.checked;
-        });
 
         renderObjectsList();
         renderMediaList();
