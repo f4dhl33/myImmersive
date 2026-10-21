@@ -415,10 +415,10 @@
         .action-item-desc {
             font-size: 11px;
             color: #ccc;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 180px;
+            white-space: normal;
+            word-break: break-word;
+            flex: 1;
+            min-width: 0;
         }
 
         .display-none { display: none; }
@@ -4843,14 +4843,32 @@
             }
         }
 
-        function getActionSummaryText(act) {
+        // Selesaikan senarai ID sasaran jadi NAMA sebenar (bukan sekadar kiraan) — supaya
+        // "Registered Actions" cukup terperinci untuk debug (cth: toggle visibility ni
+        // sasar objek MANA sebenarnya), tanpa perlu buka modal/ubah pilihan dulu.
+        function resolveTargetNamesText(sourceModel, targetObjectIds) {
+            if (!targetObjectIds || targetObjectIds.length === 0) {
+                return `🎯 ${sourceModel ? sourceModel.userData.fileName : 'This Object'} (self)`;
+            }
+            const names = targetObjectIds.map(id => {
+                if (previewCameraMarker && id == previewCameraMarker.userData.id) {
+                    return previewCameraMarker.userData.fileName + (sourceModel && id == sourceModel.userData.id ? ' (self)' : '');
+                }
+                const found = loadedModelsList.find(o => o.userData.id == id);
+                if (!found) return '⚠️(deleted object)';
+                return found.userData.fileName + (sourceModel && id == sourceModel.userData.id ? ' (self)' : '');
+            });
+            return names.join(', ');
+        }
+
+        function getActionSummaryText(act, sourceModel) {
             if (act.action === 'popInfo') return `💬 ${act.noteTitle ? act.noteTitle + ': ' : ''}"${act.note || ''}"`;
-            if (act.action === 'toggleModelAnim') return `🎬 Animation (${act.animMode})`;
-            if (act.action === 'stepMove') return `🚗 Step Move (${act.stepX}, ${act.stepY}, ${act.stepZ})`;
-            if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibility (${act.targetObjectIds ? act.targetObjectIds.length : 1} target(s))`;
+            if (act.action === 'toggleModelAnim') return `🎬 Animation (${act.animMode}) → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
+            if (act.action === 'stepMove') return `🚗 Step Move (${act.stepX}, ${act.stepY}, ${act.stepZ}) → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
+            if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibility → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
             if (act.action === 'playSound') return `🎵 Audio: ${act.audioFile}`;
-            if (act.action === 'changeColor') return `🎨 Change Color`;
-            if (act.action === 'rotateAnim') return `↻ Manual Rotation`;
+            if (act.action === 'changeColor') return `🎨 Change Color → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
+            if (act.action === 'rotateAnim') return `↻ Manual Rotation → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
             if (act.action === 'changeScene') {
                 const meta = projectScenesMeta.find(s => s.id === act.targetSceneId);
                 return `🎬 Switch Scene: ${meta ? meta.name : '(scene deleted)'}`;
@@ -4884,9 +4902,9 @@
                 }
 
                 li.innerHTML = `
-                    <div style="display:flex; align-items:center; overflow:hidden;">
+                    <div style="display:flex; align-items:flex-start; gap:5px; flex:1; min-width:0;">
                         <span class="trigger-badge ${badgeClass}">${badgeText}</span>
-                        <span class="action-item-desc">${getActionSummaryText(act)}</span>
+                        <span class="action-item-desc" title="${getActionSummaryText(act, selectedModel)}">${getActionSummaryText(act, selectedModel)}</span>
                     </div>
                     <button class="btn-delete-obj" title="Delete This Action">✕</button>
                 `;
