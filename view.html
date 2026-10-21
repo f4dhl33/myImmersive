@@ -499,7 +499,7 @@
         }
 
         function buildPhysicsWorldFromScene() {
-            physicsBodies.forEach(pb => physicsWorld.removeBody(pb.body));
+            physicsBodies.forEach(pb => { if (pb.inWorld) physicsWorld.removeBody(pb.body); });
             physicsBodies = [];
 
             loadedModelsList.forEach(mesh => {
@@ -508,8 +508,11 @@
 
                 try {
                     const body = createPhysicsBodyForMesh(mesh);
-                    physicsWorld.addBody(body);
-                    physicsBodies.push({ mesh, body });
+                    // Collider objek tersembunyi (visible=false) tak dimasukkan ke dunia fizik —
+                    // disegerakkan setiap bingkai ikut mesh.visible semasa (lihat animate()).
+                    const inWorld = mesh.visible !== false;
+                    if (inWorld) physicsWorld.addBody(body);
+                    physicsBodies.push({ mesh, body, inWorld });
                     mesh.userData._physicsBody = body;
                 } catch (e) {
                     console.error('[Physics] Failed to build physics body for "' + (mesh.userData.fileName || mesh.name) + '" — skipping this object:', e);
@@ -519,10 +522,23 @@
             physicsActive = true;
         }
 
+        function syncPhysicsBodiesWithVisibility() {
+            physicsBodies.forEach(pb => {
+                const shouldBeInWorld = pb.mesh.visible !== false;
+                if (shouldBeInWorld && !pb.inWorld) {
+                    physicsWorld.addBody(pb.body);
+                    pb.inWorld = true;
+                } else if (!shouldBeInWorld && pb.inWorld) {
+                    physicsWorld.removeBody(pb.body);
+                    pb.inWorld = false;
+                }
+            });
+        }
+
         function teardownPhysicsWorld() {
             physicsActive = false;
             physicsBodies.forEach(pb => {
-                physicsWorld.removeBody(pb.body);
+                if (pb.inWorld) physicsWorld.removeBody(pb.body);
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
@@ -2020,8 +2036,10 @@
 
             // FIZIK (graviti/pelanggaran/bounce) — tunggu content diletak dulu dalam AR.
             if (physicsActive && (!isARSession || isPlaced)) {
+                syncPhysicsBodiesWithVisibility();
                 physicsWorld.step(1 / 60, delta, 10);
                 physicsBodies.forEach(pb => {
+                    if (!pb.inWorld) return;
                     if (pb.body.type !== CANNON.Body.STATIC) {
                         pb.mesh.position.copy(pb.body.position);
                         pb.mesh.quaternion.copy(pb.body.quaternion);

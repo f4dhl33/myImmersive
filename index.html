@@ -2176,7 +2176,7 @@
         // Dipanggil setiap kali Pratonton/VR/AR dimasuki, atau bila scene ditukar semasa aktif.
         function buildPhysicsWorldFromScene() {
             physicsBodies.forEach(pb => {
-                physicsWorld.removeBody(pb.body);
+                if (pb.inWorld) physicsWorld.removeBody(pb.body);
                 if (pb.debugMesh) contentRoot.remove(pb.debugMesh);
             });
             physicsBodies = [];
@@ -2189,13 +2189,20 @@
                 // pembinaan fizik untuk SEMUA objek lain dalam scene.
                 try {
                     const { body, shape, offset } = createPhysicsBodyForMesh(mesh);
-                    physicsWorld.addBody(body);
+
+                    // Collider objek yang TERSEMBUNYI (visible=false) tak dimasukkan ke dunia
+                    // fizik lagi — objek tak kelihatan sepatutnya tak berlanggar/menyekat apa-apa.
+                    // Disegerakkan setiap bingkai (lihat animate()) ikut mesh.visible SEMASA,
+                    // supaya bila objek ditunjuk/sorok (cth: via aksi "Hide/Show Object" semasa
+                    // Pratonton), colliernya turut aktif/nyahaktif secara langsung.
+                    const inWorld = mesh.visible !== false;
+                    if (inWorld) physicsWorld.addBody(body);
 
                     const debugMesh = buildPhysicsDebugMesh(shape, offset);
-                    debugMesh.visible = chkShowColliders.checked;
+                    debugMesh.visible = chkShowColliders.checked && inWorld;
                     contentRoot.add(debugMesh);
 
-                    physicsBodies.push({ mesh, body, debugMesh });
+                    physicsBodies.push({ mesh, body, debugMesh, inWorld });
                     mesh.userData._physicsBody = body;
                 } catch (e) {
                     console.error('[Physics] Failed to build physics body for "' + (mesh.userData.fileName || mesh.name) + '" — skipping this object:', e);
@@ -2205,10 +2212,28 @@
             physicsActive = true;
         }
 
+        // Disegerakkan setiap bingkai SEBELUM physicsWorld.step() — tambah/keluarkan badan
+        // dari dunia fizik ikut mesh.visible SEMASA berbanding keadaan "inWorld" yang disimpan,
+        // supaya togol visibility (initial atau semasa Pratonton via aksi Hide/Show) terus
+        // aktif/nyahaktifkan collider objek tu dengan segera, bukan hanya masa scene dibina.
+        function syncPhysicsBodiesWithVisibility() {
+            physicsBodies.forEach(pb => {
+                const shouldBeInWorld = pb.mesh.visible !== false;
+                if (shouldBeInWorld && !pb.inWorld) {
+                    physicsWorld.addBody(pb.body);
+                    pb.inWorld = true;
+                } else if (!shouldBeInWorld && pb.inWorld) {
+                    physicsWorld.removeBody(pb.body);
+                    pb.inWorld = false;
+                }
+                if (pb.debugMesh) pb.debugMesh.visible = chkShowColliders.checked && shouldBeInWorld;
+            });
+        }
+
         function teardownPhysicsWorld() {
             physicsActive = false;
             physicsBodies.forEach(pb => {
-                physicsWorld.removeBody(pb.body);
+                if (pb.inWorld) physicsWorld.removeBody(pb.body);
                 if (pb.debugMesh) contentRoot.remove(pb.debugMesh);
                 delete pb.mesh.userData._physicsBody;
             });
@@ -2232,6 +2257,7 @@
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
+                if (mesh.visible === false) return; // objek tersembunyi — tiada collider aktif untuknya
 
                 try {
                     const { shape, offset } = buildPhysicsShapeForMesh(mesh);
@@ -5653,8 +5679,10 @@
             // dalam AR tunggu content diletak dulu (elak simulasi "tak nampak" berjalan
             // sebelum pengguna tap-to-place).
             if (physicsActive && isPreviewMode && (!isARSession || isPlaced)) {
+                syncPhysicsBodiesWithVisibility();
                 physicsWorld.step(1 / 60, delta, 10);
                 physicsBodies.forEach(pb => {
+                    if (!pb.inWorld) return; // objek tersembunyi — tiada badan dlm dunia fizik, tiada posisi utk disegerak
                     if (pb.body.type !== CANNON.Body.STATIC) {
                         pb.mesh.position.copy(pb.body.position);
                         pb.mesh.quaternion.copy(pb.body.quaternion);
@@ -5771,7 +5799,7 @@
 
         chkShowColliders.addEventListener('change', () => {
             physicsBodies.forEach(pb => {
-                if (pb.debugMesh) pb.debugMesh.visible = chkShowColliders.checked;
+                if (pb.debugMesh) pb.debugMesh.visible = chkShowColliders.checked && pb.inWorld;
             });
             buildEditColliderDebug(); // kemaskini serta-merta untuk mod Editing (bukan Pratonton)
         });
