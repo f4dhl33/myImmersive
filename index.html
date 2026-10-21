@@ -133,8 +133,14 @@
         .collapsible.collapsed > .collapsible-body { display: none; }
 
         .subgroup { margin-bottom: 14px; }
-        .subgroup-header { font-size: 11px; font-weight: bold; color: #ccc; padding: 6px 2px; border-bottom: 1px solid #333; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .subgroup-header { font-size: 12px; font-weight: bold; color: #ddd; padding: 6px 2px; border-bottom: 1px solid #333; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
         .subgroup-header .toggle-arrow { color: #666; }
+
+        /* Tajuk tab PERINGKAT ATAS (Transform / Camera Controls and Settings / Physics
+           Settings) — lebih besar & menonjol berbanding sub-seksyen bersarang di dalamnya,
+           supaya senang beza "tab" dengan "isi kandungan". */
+        .subgroup-header-main { font-size: 14px; color: #4fc3f7; padding: 9px 6px; border-bottom: 2px solid #007acc; letter-spacing: 1px; }
+        .subgroup-header-main .toggle-arrow { color: #4fc3f7; font-size: 12px; }
 
         /* Kod warna paksi X/Y/Z (merah/hijau/biru) — sepadan dengan warna gizmo
            Move/Rotate/Scale (TransformControls) yang pengguna dah biasa nampak dalam
@@ -851,7 +857,7 @@
 
             <!-- TRANSFORM (atas sekali) — Pos/Rot/Scale tepat, dengan Reset bersarang di bawahnya -->
             <div class="collapsible subgroup" data-key="transform">
-                <div class="collapsible-header subgroup-header">📐 Transform <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-header subgroup-header subgroup-header-main">📐 Transform <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
                     <div class="axis-legend"><b class="axis-x">● X</b> &nbsp; <b class="axis-y">● Y</b> &nbsp; <b class="axis-z">● Z</b> (matches the Move/Rotate/Scale gizmo colors in the viewport)</div>
                     <div class="transform-numeric-row">
@@ -887,7 +893,7 @@
 
             <!-- CAMERA CONTROLS AND SETTINGS -->
             <div class="collapsible subgroup" data-key="cameracontrols">
-                <div class="collapsible-header subgroup-header">🎥 Camera Controls and Settings <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-header subgroup-header subgroup-header-main">🎥 Camera Controls and Settings <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
                     <label>Camera Controls & Movement:</label>
                     <div class="btn-action-group">
@@ -914,7 +920,7 @@
             <!-- PHYSICS SETTINGS (bawah sekali) — Visibility/Grab/Solid/Bounce/Collider Shape
                  bersarang sebagai sub-seksyen dalam SATU tab ni. -->
             <div class="collapsible subgroup collapsed" data-key="physicssettings">
-                <div class="collapsible-header subgroup-header">⚙️ Physics Settings <span class="toggle-arrow">▾</span></div>
+                <div class="collapsible-header subgroup-header subgroup-header-main">⚙️ Physics Settings <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
 
                     <div class="collapsible subgroup" data-key="visibility">
