@@ -4036,12 +4036,16 @@
                 if (loadedModelsList.length > 0) {
                     const visibleObjects = loadedModelsList.filter(o => o.visible);
                     const intersects = raycaster.intersectObjects(visibleObjects, true);
+                    console.log('[Click] visibleObjects=', visibleObjects.map(o => o.userData.fileName + ':' + o.visible), 'intersects=', intersects.length);
                     if (intersects.length > 0) {
                         let hitModel = intersects[0].object;
                         while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                             hitModel = hitModel.parent;
                         }
+                        console.log('[Click] hitModel=', hitModel.userData.fileName || hitModel.name);
                         triggerInteraction(hitModel, 'onClick', event.clientX, event.clientY);
+                    } else {
+                        console.log('[Click] NO intersection found at this click.');
                     }
                 }
             } else {
@@ -4707,13 +4711,16 @@
 
         // TRIGGER LOGIC
         function triggerInteraction(model, eventType, clientX, clientY) {
+            console.log('[Trigger] triggerInteraction called for', model.userData.fileName || model.name, 'eventType=', eventType, 'interactions=', model.userData.interactions);
             if (!model.userData.interactions || !Array.isArray(model.userData.interactions)) return;
 
             const matchingActions = model.userData.interactions.filter(act => act.trigger === eventType);
+            console.log('[Trigger] matchingActions count=', matchingActions.length);
             if (matchingActions.length === 0) return;
 
             matchingActions.forEach(config => {
                 const targets = getTargetObjects(model, config.targetObjectIds);
+                console.log('[Trigger] action=', config.action, 'targetObjectIds=', config.targetObjectIds, 'resolved targets=', targets.map(t => t.userData.fileName + ' visible=' + t.visible));
 
                 // 1. ANIMATION TOGGLE
                 if (config.action === 'toggleModelAnim') {
