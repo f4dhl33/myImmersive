@@ -628,8 +628,13 @@
                         kind: 'model',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
-                        initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
-                        initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
+                        // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
+                        // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
+                        // BUKAN objData.initialPosition (itu posisi masa objek PERTAMA kali
+                        // dicipta/upload dalam Editor — tak pernah dikemaskini lepas tu, jadi
+                        // lapuk/jauh berbeza kalau objek dah digerakkan sebelum disimpan).
+                        initialPosition: new THREE.Vector3().fromArray(objData.position),
+                        initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
@@ -686,8 +691,8 @@
                         kind: 'image',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
-                        initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
-                        initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
+                        initialPosition: new THREE.Vector3().fromArray(objData.position),
+                        initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
@@ -865,8 +870,8 @@
                 primType: type,
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
-                initialPosition: new THREE.Vector3().fromArray(objData.initialPosition || objData.position),
-                initialRotation: new THREE.Euler().fromArray(objData.initialRotation || objData.rotation),
+                initialPosition: new THREE.Vector3().fromArray(objData.position),
+                initialRotation: new THREE.Euler().fromArray(objData.rotation),
                 isGrabbable: objData.isGrabbable || false,
                 isSolid: objData.isSolid || false,
                 returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,

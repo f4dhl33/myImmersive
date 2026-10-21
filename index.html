@@ -4455,8 +4455,19 @@
         // ditanda) — kekal DINAMIK (bukan statik) supaya graviti/pelanggaran tetap terpakai
         // selepas kembali (contoh: kalau tempat asal tu di atas meja, ia terus berehat di situ).
         function returnObjectToOriginalTransform(obj) {
-            obj.position.copy(obj.userData.initialPosition);
-            obj.quaternion.setFromEuler(obj.userData.initialRotation);
+            // Guna snapshot kedudukan SEBELUM Pratonton dimasuki (previewObjectSnapshot) —
+            // itu "kedudukan asal" yang pengguna maksudkan (macam dalam Editor sebelum test),
+            // BUKAN userData.initialPosition (itu posisi masa objek PERTAMA kali dicipta/
+            // upload, boleh dah lapuk/jauh berbeza lepas objek digerakkan dalam Editor —
+            // field tu reserved untuk butang "↺ Reset Position/Reset Entire Object").
+            const snap = previewObjectSnapshot && previewObjectSnapshot.get(obj.userData.id);
+            if (snap) {
+                obj.position.copy(snap.position);
+                obj.quaternion.copy(snap.quaternion);
+            } else {
+                obj.position.copy(obj.userData.initialPosition);
+                obj.quaternion.setFromEuler(obj.userData.initialRotation);
+            }
 
             const body = obj.userData._physicsBody;
             if (body) {
