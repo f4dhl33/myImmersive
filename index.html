@@ -849,89 +849,45 @@
         <div class="section-box">
             <div id="selected-object-name" class="selected-object-badge">No Object Selected</div>
 
-            <div class="collapsible subgroup" data-key="visibility">
-                <div class="collapsible-header subgroup-header">👁️ Visibility <span class="toggle-arrow">▾</span></div>
+            <!-- TRANSFORM (atas sekali) — Pos/Rot/Scale tepat, dengan Reset bersarang di bawahnya -->
+            <div class="collapsible subgroup" data-key="transform">
+                <div class="collapsible-header subgroup-header">📐 Transform <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="chk-initial-hidden">
-                        <span>🙈 Hide Object Initially</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="collapsible subgroup" data-key="grab">
-                <div class="collapsible-header subgroup-header">🤏 Grab <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <label class="checkbox-label" title="Object follows physics: gravity, collision & bounce during Preview/AR/VR, and can be grabbed using a controller or mouse.">
-                        <input type="checkbox" id="chk-grabbable">
-                        <span>🤏 Grabbable & Movable</span>
-                    </label>
-
-                    <label class="checkbox-label checkbox-label-child" id="label-return-on-release" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor. Only applies to Grabbable objects.">
-                        <input type="checkbox" id="chk-return-on-release">
-                        <span>🔄 Return to Original on Release</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="collapsible subgroup" data-key="solid">
-                <div class="collapsible-header subgroup-header">🧱 Solid <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
-                        <input type="checkbox" id="chk-solid">
-                        <span>🧱 Solid (physics collider — prevents pass-through)</span>
-                    </label>
-                </div>
-            </div>
-
-            <div class="collapsible subgroup collapsed" data-key="bounce">
-                <div class="collapsible-header subgroup-header">⚡ Bounce <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
-                    <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
-                </div>
-            </div>
-
-            <div class="collapsible subgroup collapsed" data-key="collidershape">
-                <div class="collapsible-header subgroup-header">📦 Collider Shape <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <label title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview/Editing) if the magenta wireframe doesn't match how the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
-                    <div class="axis-legend"><b class="axis-x">● X</b> = left/right &nbsp; <b class="axis-y">● Y</b> = down/up &nbsp; <b class="axis-z">● Z</b> = back/front</div>
+                    <div class="axis-legend"><b class="axis-x">● X</b> &nbsp; <b class="axis-y">● Y</b> &nbsp; <b class="axis-z">● Z</b> (matches the Move/Rotate/Scale gizmo colors in the viewport)</div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label axis-x">◀ X ▶</span>
-                        <input type="number" class="axis-x" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face (left)">
-                        <input type="number" class="axis-x" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face (right)">
+                        <span class="transform-axis-label">Pos</span>
+                        <input type="number" class="axis-x" id="input-pos-x" step="0.01" placeholder="X">
+                        <input type="number" class="axis-y" id="input-pos-y" step="0.01" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-pos-z" step="0.01" placeholder="Z">
                     </div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label axis-y">▼ Y ▲</span>
-                        <input type="number" class="axis-y" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y face (bottom)">
-                        <input type="number" class="axis-y" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y face (top)">
+                        <span class="transform-axis-label">Rot°</span>
+                        <input type="number" class="axis-x" id="input-rot-x" step="1" placeholder="X">
+                        <input type="number" class="axis-y" id="input-rot-y" step="1" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-rot-z" step="1" placeholder="Z">
                     </div>
                     <div class="transform-numeric-row">
-                        <span class="transform-axis-label axis-z">⊖ Z ⊕</span>
-                        <input type="number" class="axis-z" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face (back)">
-                        <input type="number" class="axis-z" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face (front)">
+                        <span class="transform-axis-label">Scale</span>
+                        <input type="number" class="axis-x" id="input-scale-x" step="0.01" placeholder="X">
+                        <input type="number" class="axis-y" id="input-scale-y" step="0.01" placeholder="Y">
+                        <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
+                    </div>
+
+                    <div class="collapsible subgroup collapsed" data-key="reset" style="margin-top:10px;">
+                        <div class="collapsible-header subgroup-header">↺ Reset <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Position</button>
+                            <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Rotation</button>
+                            <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Scale</button>
+                            <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Entire Object</button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="collapsible subgroup" id="shape-appearance-section" data-key="appearance" style="display:none;">
-                <div class="collapsible-header subgroup-header">🎨 Basic Shape Appearance <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Color</span>
-                        <input type="color" id="input-shape-color" value="#cccccc" style="flex:1; height: 26px; padding: 0; border: none; cursor: pointer;">
-                    </div>
-                    <div class="btn-action-group">
-                        <button id="btn-shape-texture" class="btn-secondary">🖼️ Apply Texture...</button>
-                        <button id="btn-shape-texture-clear" class="btn-secondary">✖ Clear Texture</button>
-                    </div>
-                    <input type="file" id="input-shape-texture-file" accept="image/*" style="display:none;">
-                </div>
-            </div>
-
-            <div class="collapsible subgroup" data-key="cameramode">
-                <div class="collapsible-header subgroup-header">🎥 Camera & Mode <span class="toggle-arrow">▾</span></div>
+            <!-- CAMERA CONTROLS AND SETTINGS -->
+            <div class="collapsible subgroup" data-key="cameracontrols">
+                <div class="collapsible-header subgroup-header">🎥 Camera Controls and Settings <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
                     <label>Camera Controls & Movement:</label>
                     <div class="btn-action-group">
@@ -955,38 +911,93 @@
                 </div>
             </div>
 
-            <div class="collapsible subgroup collapsed" data-key="transform">
-                <div class="collapsible-header subgroup-header">📐 Precise Transform <span class="toggle-arrow">▾</span></div>
+            <!-- PHYSICS SETTINGS (bawah sekali) — Visibility/Grab/Solid/Bounce/Collider Shape
+                 bersarang sebagai sub-seksyen dalam SATU tab ni. -->
+            <div class="collapsible subgroup collapsed" data-key="physicssettings">
+                <div class="collapsible-header subgroup-header">⚙️ Physics Settings <span class="toggle-arrow">▾</span></div>
                 <div class="collapsible-body subgroup-body">
-                    <div class="axis-legend"><b class="axis-x">● X</b> &nbsp; <b class="axis-y">● Y</b> &nbsp; <b class="axis-z">● Z</b> (matches the Move/Rotate/Scale gizmo colors in the viewport)</div>
-                    <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Pos</span>
-                        <input type="number" class="axis-x" id="input-pos-x" step="0.01" placeholder="X">
-                        <input type="number" class="axis-y" id="input-pos-y" step="0.01" placeholder="Y">
-                        <input type="number" class="axis-z" id="input-pos-z" step="0.01" placeholder="Z">
-                    </div>
-                    <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Rot°</span>
-                        <input type="number" class="axis-x" id="input-rot-x" step="1" placeholder="X">
-                        <input type="number" class="axis-y" id="input-rot-y" step="1" placeholder="Y">
-                        <input type="number" class="axis-z" id="input-rot-z" step="1" placeholder="Z">
-                    </div>
-                    <div class="transform-numeric-row">
-                        <span class="transform-axis-label">Scale</span>
-                        <input type="number" class="axis-x" id="input-scale-x" step="0.01" placeholder="X">
-                        <input type="number" class="axis-y" id="input-scale-y" step="0.01" placeholder="Y">
-                        <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
-                    </div>
-                </div>
-            </div>
 
-            <div class="collapsible subgroup collapsed" data-key="reset">
-                <div class="collapsible-header subgroup-header">↺ Reset <span class="toggle-arrow">▾</span></div>
-                <div class="collapsible-body subgroup-body">
-                    <button id="btn-reset-pos" class="btn-reset-single">↺ Reset Position</button>
-                    <button id="btn-reset-rot" class="btn-reset-single">↺ Reset Rotation</button>
-                    <button id="btn-reset-scale" class="btn-reset-single">↺ Reset Scale</button>
-                    <button id="btn-reset-all" class="btn-reset-single btn-reset-all">↺ Reset Entire Object</button>
+                    <div class="collapsible subgroup" data-key="visibility">
+                        <div class="collapsible-header subgroup-header">👁️ Visibility <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="chk-initial-hidden">
+                                <span>🙈 Hide Object Initially</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="collapsible subgroup" data-key="grab">
+                        <div class="collapsible-header subgroup-header">🤏 Grab <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label class="checkbox-label" title="Object follows physics: gravity, collision & bounce during Preview/AR/VR, and can be grabbed using a controller or mouse.">
+                                <input type="checkbox" id="chk-grabbable">
+                                <span>🤏 Grabbable & Movable</span>
+                            </label>
+
+                            <label class="checkbox-label checkbox-label-child" id="label-return-on-release" title="When released (and it did not successfully dock into any Trigger Zone), the object snaps back to the position/rotation it was placed at in the editor. Only applies to Grabbable objects.">
+                                <input type="checkbox" id="chk-return-on-release">
+                                <span>🔄 Return to Original on Release</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="collapsible subgroup" data-key="solid">
+                        <div class="collapsible-header subgroup-header">🧱 Solid <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label class="checkbox-label" title="Static physics collider (e.g. floor, table) — 'Grabbable' objects will collide & bounce off it instead of passing through.">
+                                <input type="checkbox" id="chk-solid">
+                                <span>🧱 Solid (physics collider — prevents pass-through)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="collapsible subgroup collapsed" data-key="bounce">
+                        <div class="collapsible-header subgroup-header">⚡ Bounce <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label for="input-bounciness" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
+                            <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
+                        </div>
+                    </div>
+
+                    <div class="collapsible subgroup collapsed" data-key="collidershape">
+                        <div class="collapsible-header subgroup-header">📦 Collider Shape <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <label title="Shrinks the auto-generated physics collider inward from each face independently, in meters. Use this with 'Show Colliders' (top bar, visible during Preview/Editing) if the magenta wireframe doesn't match how the model actually looks — some downloaded 3D files contain invisible/near-transparent extra geometry that makes the auto-detected collider bigger than the real model.">📦 Collider Trim (m) — shrink per face:</label>
+                            <div class="axis-legend"><b class="axis-x">● X</b> = left/right &nbsp; <b class="axis-y">● Y</b> = down/up &nbsp; <b class="axis-z">● Z</b> = back/front</div>
+                            <div class="transform-numeric-row">
+                                <span class="transform-axis-label axis-x">◀ X ▶</span>
+                                <input type="number" class="axis-x" id="input-trim-nx" min="0" step="0.01" value="0" title="Trim from -X face (left)">
+                                <input type="number" class="axis-x" id="input-trim-px" min="0" step="0.01" value="0" title="Trim from +X face (right)">
+                            </div>
+                            <div class="transform-numeric-row">
+                                <span class="transform-axis-label axis-y">▼ Y ▲</span>
+                                <input type="number" class="axis-y" id="input-trim-ny" min="0" step="0.01" value="0" title="Trim from -Y face (bottom)">
+                                <input type="number" class="axis-y" id="input-trim-py" min="0" step="0.01" value="0" title="Trim from +Y face (top)">
+                            </div>
+                            <div class="transform-numeric-row">
+                                <span class="transform-axis-label axis-z">⊖ Z ⊕</span>
+                                <input type="number" class="axis-z" id="input-trim-nz" min="0" step="0.01" value="0" title="Trim from -Z face (back)">
+                                <input type="number" class="axis-z" id="input-trim-pz" min="0" step="0.01" value="0" title="Trim from +Z face (front)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="collapsible subgroup" id="shape-appearance-section" data-key="appearance" style="display:none;">
+                        <div class="collapsible-header subgroup-header">🎨 Basic Shape Appearance <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-body subgroup-body">
+                            <div class="transform-numeric-row">
+                                <span class="transform-axis-label">Color</span>
+                                <input type="color" id="input-shape-color" value="#cccccc" style="flex:1; height: 26px; padding: 0; border: none; cursor: pointer;">
+                            </div>
+                            <div class="btn-action-group">
+                                <button id="btn-shape-texture" class="btn-secondary">🖼️ Apply Texture...</button>
+                                <button id="btn-shape-texture-clear" class="btn-secondary">✖ Clear Texture</button>
+                            </div>
+                            <input type="file" id="input-shape-texture-file" accept="image/*" style="display:none;">
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
