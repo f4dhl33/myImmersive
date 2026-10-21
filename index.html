@@ -950,6 +950,11 @@
                                 <input type="checkbox" id="chk-initial-hidden">
                                 <span>🙈 Hide Object Initially</span>
                             </label>
+
+                            <label class="checkbox-label" title="By default, hiding an object (initially or via a Hide/Show Object action) also deactivates its physics collider. Turn this ON to keep the collider active even while hidden — useful for an invisible wall/blocker (e.g. matching a real-world wall in AR) that should still stop Grabbable objects or cut off a waypoint path, without rendering anything visible.">
+                                <input type="checkbox" id="chk-collider-active-when-hidden">
+                                <span>🧱 Keep Collider Active While Hidden</span>
+                            </label>
                         </div>
                     </div>
 
@@ -1779,6 +1784,14 @@
             }
         });
 
+        const chkColliderActiveWhenHidden = document.getElementById('chk-collider-active-when-hidden');
+        chkColliderActiveWhenHidden.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.colliderActiveWhenHidden = this.checked;
+                scheduleAutoSave();
+            }
+        });
+
         const chkGrabbable = document.getElementById('chk-grabbable');
         const chkReturnOnRelease = document.getElementById('chk-return-on-release');
         const labelReturnOnRelease = document.getElementById('label-return-on-release');
@@ -2171,6 +2184,13 @@
             return debugMesh;
         }
 
+        // Objek nampak → collider aktif. Objek tersembunyi → collider TAK aktif, KECUALI
+        // ditanda khas "Keep Collider Active While Hidden" (cth: dinding/penyekat tak
+        // kelihatan untuk motong laluan waypoint di sebalik dinding sebenar dalam AR).
+        function shouldColliderBeActive(mesh) {
+            return mesh.visible !== false || mesh.userData.colliderActiveWhenHidden === true;
+        }
+
         // Bina semula dunia fizik daripada kedudukan SEMASA setiap objek "Boleh Diambil"
         // (badan dinamik — kena graviti, boleh melantun) & "Pepejal" (badan statik — perengkuh).
         // Dipanggil setiap kali Pratonton/VR/AR dimasuki, atau bila scene ditukar semasa aktif.
@@ -2191,11 +2211,10 @@
                     const { body, shape, offset } = createPhysicsBodyForMesh(mesh);
 
                     // Collider objek yang TERSEMBUNYI (visible=false) tak dimasukkan ke dunia
-                    // fizik lagi — objek tak kelihatan sepatutnya tak berlanggar/menyekat apa-apa.
-                    // Disegerakkan setiap bingkai (lihat animate()) ikut mesh.visible SEMASA,
-                    // supaya bila objek ditunjuk/sorok (cth: via aksi "Hide/Show Object" semasa
-                    // Pratonton), colliernya turut aktif/nyahaktif secara langsung.
-                    const inWorld = mesh.visible !== false;
+                    // fizik lagi (kecuali ditanda "Keep Collider Active While Hidden" — cth:
+                    // dinding/penyekat tak kelihatan). Disegerakkan setiap bingkai ikut
+                    // mesh.visible SEMASA (lihat syncPhysicsBodiesWithVisibility di animate()).
+                    const inWorld = shouldColliderBeActive(mesh);
                     if (inWorld) physicsWorld.addBody(body);
 
                     const debugMesh = buildPhysicsDebugMesh(shape, offset);
@@ -2218,7 +2237,7 @@
         // aktif/nyahaktifkan collider objek tu dengan segera, bukan hanya masa scene dibina.
         function syncPhysicsBodiesWithVisibility() {
             physicsBodies.forEach(pb => {
-                const shouldBeInWorld = pb.mesh.visible !== false;
+                const shouldBeInWorld = shouldColliderBeActive(pb.mesh);
                 if (shouldBeInWorld && !pb.inWorld) {
                     physicsWorld.addBody(pb.body);
                     pb.inWorld = true;
@@ -2257,7 +2276,7 @@
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
-                if (mesh.visible === false) return; // objek tersembunyi — tiada collider aktif untuknya
+                if (!shouldColliderBeActive(mesh)) return;
 
                 try {
                     const { shape, offset } = buildPhysicsShapeForMesh(mesh);
@@ -2467,6 +2486,7 @@
                     initialRotation: [ud.initialRotation.x, ud.initialRotation.y, ud.initialRotation.z],
                     initialScale: ud.initialScale.toArray(),
                     initialVisibility: ud.initialVisibility,
+                    colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
@@ -2579,6 +2599,7 @@
                         initialRotation: new THREE.Euler(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]),
                         initialScale: new THREE.Vector3().fromArray(objData.initialScale),
                         initialVisibility: objData.initialVisibility,
+                        colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         interactions: objData.interactions || [],
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
@@ -2661,6 +2682,7 @@
                         mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
                         mesh.userData.initialScale.fromArray(objData.initialScale);
                         mesh.userData.initialVisibility = objData.initialVisibility;
+                        mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
                         mesh.userData.interactions = objData.interactions || [];
                         mesh.userData.isGrabbable = objData.isGrabbable || false;
                         mesh.userData.isSolid = objData.isSolid || false;
@@ -3869,6 +3891,7 @@
                 initialRotation: new THREE.Euler().copy(mesh.rotation),
                 initialScale: new THREE.Vector3().copy(mesh.scale),
                 initialVisibility: type !== 'zone',
+                colliderActiveWhenHidden: false,
                 interactions: [],
                 isGrabbable: false,
                 isSolid: false,
@@ -3939,6 +3962,7 @@
                         initialRotation: new THREE.Euler().copy(mesh.rotation),
                         initialScale: new THREE.Vector3().copy(mesh.scale),
                         initialVisibility: true,
+                        colliderActiveWhenHidden: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,
@@ -3990,6 +4014,7 @@
                     mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
                     mesh.userData.initialScale.fromArray(objData.initialScale);
                     mesh.userData.initialVisibility = objData.initialVisibility;
+                    mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
                     mesh.userData.interactions = objData.interactions || [];
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
                     mesh.userData.isSolid = objData.isSolid || false;
@@ -5011,6 +5036,7 @@
             document.getElementById('object-editing-fields').classList.remove('panel-disabled');
 
             chkInitialHidden.checked = (model.userData.initialVisibility === false);
+            chkColliderActiveWhenHidden.checked = !!model.userData.colliderActiveWhenHidden;
             chkGrabbable.checked = !!model.userData.isGrabbable;
             chkSolid.checked = !!model.userData.isSolid;
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
@@ -5043,6 +5069,7 @@
             document.getElementById('selected-object-name').textContent = "No Object Selected";
             document.getElementById('object-editing-fields').classList.add('panel-disabled');
             chkInitialHidden.checked = false;
+            chkColliderActiveWhenHidden.checked = false;
             chkGrabbable.checked = false;
             chkSolid.checked = false;
             chkReturnOnRelease.checked = false;
@@ -5281,6 +5308,7 @@
                         initialRotation: new THREE.Euler(),
                         initialScale: new THREE.Vector3(1, 1, 1),
                         initialVisibility: true,
+                        colliderActiveWhenHidden: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,

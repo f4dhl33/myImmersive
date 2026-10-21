@@ -498,6 +498,13 @@
             return body;
         }
 
+        // Objek nampak → collider aktif. Objek tersembunyi → collider TAK aktif, KECUALI
+        // ditanda khas "Keep Collider Active While Hidden" (cth: dinding/penyekat tak
+        // kelihatan untuk motong laluan waypoint di sebalik dinding sebenar dalam AR).
+        function shouldColliderBeActive(mesh) {
+            return mesh.visible !== false || mesh.userData.colliderActiveWhenHidden === true;
+        }
+
         function buildPhysicsWorldFromScene() {
             physicsBodies.forEach(pb => { if (pb.inWorld) physicsWorld.removeBody(pb.body); });
             physicsBodies = [];
@@ -508,9 +515,7 @@
 
                 try {
                     const body = createPhysicsBodyForMesh(mesh);
-                    // Collider objek tersembunyi (visible=false) tak dimasukkan ke dunia fizik —
-                    // disegerakkan setiap bingkai ikut mesh.visible semasa (lihat animate()).
-                    const inWorld = mesh.visible !== false;
+                    const inWorld = shouldColliderBeActive(mesh);
                     if (inWorld) physicsWorld.addBody(body);
                     physicsBodies.push({ mesh, body, inWorld });
                     mesh.userData._physicsBody = body;
@@ -524,7 +529,7 @@
 
         function syncPhysicsBodiesWithVisibility() {
             physicsBodies.forEach(pb => {
-                const shouldBeInWorld = pb.mesh.visible !== false;
+                const shouldBeInWorld = shouldColliderBeActive(pb.mesh);
                 if (shouldBeInWorld && !pb.inWorld) {
                     physicsWorld.addBody(pb.body);
                     pb.inWorld = true;
@@ -657,6 +662,7 @@
                         kind: 'model',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
                         // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
                         // BUKAN objData.initialPosition (itu posisi masa objek PERTAMA kali
@@ -720,6 +726,7 @@
                         kind: 'image',
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
+                        colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         initialPosition: new THREE.Vector3().fromArray(objData.position),
                         initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
@@ -899,6 +906,7 @@
                 primType: type,
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
+                colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                 initialPosition: new THREE.Vector3().fromArray(objData.position),
                 initialRotation: new THREE.Euler().fromArray(objData.rotation),
                 isGrabbable: objData.isGrabbable || false,
