@@ -732,8 +732,8 @@
         <div id="bottom-panel-col-objects">
             <div class="objects-panel-header">
                 <h3>📦 3D Objects & Camera</h3>
-                <label class="camera-row-toggle" title="Hide the 'Initial Camera Position' row from this list while editing — doesn't delete it, just decluttered from view.">
-                    <input type="checkbox" id="chk-hide-camera-row">📷
+                <label class="camera-row-toggle" title="Hide the camera frustum helper (the yellow/white lines in the 3D viewport) while editing — doesn't affect the camera object itself, still selectable from this list.">
+                    <input type="checkbox" id="chk-hide-camera-row">📷 Hide Helper
                 </label>
             </div>
             <div class="section-box">
@@ -1645,7 +1645,7 @@
                 modeTextLabel.innerText = "Interactive Editing";
 
                 gridHelper.visible = true;
-                cameraHelper.visible = true;
+                cameraHelper.visible = !chkHideCameraRow.checked;
 
                 // Reset keadaan genggam kalau pengguna keluar Pratonton semasa tengah menggenggam.
                 grabbedObject = null;
@@ -5267,17 +5267,15 @@
             const tree = document.getElementById('hierarchy-tree-objects');
             tree.innerHTML = "";
 
-            if (!chkHideCameraRow.checked) {
-                const liCam = document.createElement('li');
-                liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
-                liCam.dataset.id = previewCameraMarker.userData.id;
-                liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
-                liCam.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    selectObject(previewCameraMarker);
-                });
-                tree.appendChild(liCam);
-            }
+            const liCam = document.createElement('li');
+            liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
+            liCam.dataset.id = previewCameraMarker.userData.id;
+            liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
+            liCam.addEventListener('click', (e) => {
+                e.stopPropagation();
+                selectObject(previewCameraMarker);
+            });
+            tree.appendChild(liCam);
 
             if (loadedModelsList.length === 0) return;
 
@@ -5384,16 +5382,19 @@
         }
 
         // Togol "Hide Camera Row" — sekadar declutter paparan senarai "3D Objects & Camera"
-        // semasa Editing (tak buang/pengaruhi objek Kamera itu sendiri), state kekal lepas
-        // reload (localStorage), konsisten dengan corak panel resize/collapsible lain.
-        // MESTI diisytiharkan di sini (SEBELUM renderObjectsList() dipanggil baris bawah) —
-        // kalau tidak, akan baling TDZ ReferenceError yang menghentikan SELURUH baki skrip
-        // (termasuk initApp() di hujung fail), pernah berlaku dan "sangkutkan" seluruh app.
+        // Togol "Hide Camera Helper" — sorok garis frustum kamera (cameraHelper, kuning/putih)
+        // DALAM VIEWPORT 3D semasa Editing, bukan baris dalam senarai (senarai sentiasa
+        // tunjuk "Initial Camera Position" — objek tu tetap perlu boleh dipilih). State
+        // kekal lepas reload (localStorage). MESTI diisytiharkan di sini (SEBELUM
+        // renderObjectsList() dipanggil baris bawah) — kalau tidak, akan baling TDZ
+        // ReferenceError yang menghentikan SELURUH baki skrip (termasuk initApp() di hujung
+        // fail), pernah berlaku dan "sangkutkan" seluruh app.
         const chkHideCameraRow = document.getElementById('chk-hide-camera-row');
-        chkHideCameraRow.checked = localStorage.getItem('hideCameraRowInList') === '1';
+        chkHideCameraRow.checked = localStorage.getItem('hideCameraHelperInViewport') === '1';
+        cameraHelper.visible = !chkHideCameraRow.checked;
         chkHideCameraRow.addEventListener('change', () => {
-            localStorage.setItem('hideCameraRowInList', chkHideCameraRow.checked ? '1' : '0');
-            renderObjectsList();
+            localStorage.setItem('hideCameraHelperInViewport', chkHideCameraRow.checked ? '1' : '0');
+            if (!isPreviewMode) cameraHelper.visible = !chkHideCameraRow.checked;
         });
 
         renderObjectsList();
