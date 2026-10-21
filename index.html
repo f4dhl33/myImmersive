@@ -36,7 +36,11 @@
             flex-direction: column;
         }
         #bottom-panel-col-objects .section-box { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-        #bottom-panel-col-objects .hierarchy-list { flex: 1; }
+        #bottom-panel-col-objects .hierarchy-list { flex: 1; max-height: none; min-height: 0; }
+        .objects-panel-header { display: flex; align-items: center; justify-content: space-between; }
+        .objects-panel-header h3 { margin-bottom: 10px; }
+        .camera-row-toggle { display: flex; align-items: center; gap: 3px; width: auto; margin: 0 0 10px 0; font-size: 12px; cursor: pointer; color: #aaa; }
+        .camera-row-toggle input { width: auto; margin: 0; cursor: pointer; }
         #bottom-panel-col-left {
             flex: 1 1 40%;
             min-width: 300px;
@@ -320,12 +324,12 @@
             padding: 5px;
         }
         .hierarchy-item {
-            padding: 5px 8px;
+            padding: 3px 6px;
             font-size: 11px;
             color: #ddd;
             cursor: pointer;
             border-radius: 3px;
-            margin-bottom: 3px;
+            margin-bottom: 2px;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -365,6 +369,14 @@
             padding: 2px 5px; font-size: 10px; cursor: pointer; margin: 0; width: auto;
         }
         .btn-delete-obj:hover { background: #b92c28; }
+
+        /* Butang aksi baris objek (pensel rename) — saiz SAMA dengan btn-delete-obj supaya
+           semua ikon dalam satu baris konsisten (bukan guna saiz butang lalai yang besar). */
+        .btn-rename-obj {
+            background: #0e639c; color: white; border: none; border-radius: 3px;
+            padding: 2px 5px; font-size: 10px; cursor: pointer; margin: 0 4px 0 0; width: auto;
+        }
+        .btn-rename-obj:hover { background: #1177bb; }
 
         .btn-play-audio {
             background: #28a745; color: white; border: none; border-radius: 3px;
@@ -718,7 +730,12 @@
     <!-- PANEL BAWAH — Panel Interaksi (Trigger/Tindakan), di bawah canvas sahaja -->
     <div id="bottom-panel">
         <div id="bottom-panel-col-objects">
-            <h3>📦 3D Objects & Camera</h3>
+            <div class="objects-panel-header">
+                <h3>📦 3D Objects & Camera</h3>
+                <label class="camera-row-toggle" title="Hide the 'Initial Camera Position' row from this list while editing — doesn't delete it, just decluttered from view.">
+                    <input type="checkbox" id="chk-hide-camera-row">📷
+                </label>
+            </div>
             <div class="section-box">
                 <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
                 <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Deselect Object (Deselect All)</button>
@@ -5250,15 +5267,17 @@
             const tree = document.getElementById('hierarchy-tree-objects');
             tree.innerHTML = "";
 
-            const liCam = document.createElement('li');
-            liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
-            liCam.dataset.id = previewCameraMarker.userData.id;
-            liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
-            liCam.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectObject(previewCameraMarker);
-            });
-            tree.appendChild(liCam);
+            if (!chkHideCameraRow.checked) {
+                const liCam = document.createElement('li');
+                liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
+                liCam.dataset.id = previewCameraMarker.userData.id;
+                liCam.innerHTML = `<span>${previewCameraMarker.userData.fileName}</span>`;
+                liCam.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectObject(previewCameraMarker);
+                });
+                tree.appendChild(liCam);
+            }
 
             if (loadedModelsList.length === 0) return;
 
@@ -5266,14 +5285,12 @@
                 const li = document.createElement('li');
                 li.className = `hierarchy-item ${selectedModel === model ? 'selected' : ''}`;
                 li.dataset.id = model.userData.id;
-                
-                const isHiddenInit = (model.userData.initialVisibility === false);
-                const visIcon = isHiddenInit ? '🙈' : '👁️';
-                
+
+                // Nota: togol "visible/hidden initial" (👁️) sengaja dibuang dari sini — dah
+                // ada dalam panel kanan (Physics Settings → Visibility), tak perlu duplikat.
                 li.innerHTML = `
                     <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-vis-obj ${isHiddenInit ? 'hidden-state' : ''}" title="Toggle Initial Visibility in Preview Mode">${visIcon}</button>
                         <button class="btn-rename-obj" title="Rename Object">✏️</button>
                         <button class="btn-delete-obj" title="Delete This Model">✕</button>
                     </div>
@@ -5282,17 +5299,6 @@
                 li.addEventListener('click', (e) => {
                     e.stopPropagation();
                     selectObject(model);
-                });
-
-                const btnVis = li.querySelector('.btn-vis-obj');
-                btnVis.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    model.userData.initialVisibility = !model.userData.initialVisibility;
-                    if (selectedModel === model) {
-                        chkInitialHidden.checked = (model.userData.initialVisibility === false);
-                    }
-                    renderObjectsList();
-                    scheduleAutoSave();
                 });
 
                 const btnRename = li.querySelector('.btn-rename-obj');
@@ -5654,6 +5660,16 @@
         const bgColorPicker = document.getElementById('bg-color-picker');
         const chkArAutoPlace = document.getElementById('chk-ar-auto-place');
         const chkShowColliders = document.getElementById('chk-show-colliders');
+
+        // Togol "Hide Camera Row" — sekadar declutter paparan senarai "3D Objects & Camera"
+        // semasa Editing (tak buang/pengaruhi objek Kamera itu sendiri), state kekal lepas
+        // reload (localStorage), konsisten dengan corak panel resize/collapsible lain.
+        const chkHideCameraRow = document.getElementById('chk-hide-camera-row');
+        chkHideCameraRow.checked = localStorage.getItem('hideCameraRowInList') === '1';
+        chkHideCameraRow.addEventListener('change', () => {
+            localStorage.setItem('hideCameraRowInList', chkHideCameraRow.checked ? '1' : '0');
+            renderObjectsList();
+        });
 
         btnApplyBg.addEventListener('click', () => {
             scene.background = new THREE.Color(bgColorPicker.value);
