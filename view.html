@@ -1253,8 +1253,10 @@
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
 
-            // GENGGAM MOUSE (desktop, bukan sesi XR) — mula genggam serta-merta kalau klik
-            // kena objek "Boleh Diambil", sebelum apa-apa semakan jarak/threshold klik.
+            // GENGGAM MOUSE (desktop, bukan sesi XR) — JANGAN genggam serta-merta; simpan
+            // sebagai CALON dulu, cuma sahkan jadi genggaman sebenar kalau mouse betul-betul
+            // bergerak melepasi threshold 5px (lihat pointermove) — kalau tidak (klik tulen),
+            // pointerup jatuh terus ke laluan klik/onClick biasa di bawah.
             if (!renderer.xr.isPresenting && !grabbedObject && event.button === 0) {
                 const rect = renderer.domElement.getBoundingClientRect();
                 mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1269,7 +1271,7 @@
                         hitModel = hitModel.parent;
                     }
                     if (hitModel.userData.isGrabbable) {
-                        startMouseGrab(hitModel, intersects[0].point);
+                        pendingGrabCandidate = { hitModel, point: intersects[0].point.clone() };
                         try { renderer.domElement.setPointerCapture(event.pointerId); } catch (e) {}
                     }
                 }
@@ -1285,6 +1287,11 @@
                 try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
                 onControllerSelectEnd();
                 return;
+            }
+
+            if (pendingGrabCandidate) {
+                pendingGrabCandidate = null;
+                try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
             }
 
             const deltaX = Math.abs(event.clientX - pointerDownPos.x);
@@ -1311,6 +1318,17 @@
         });
 
         renderer.domElement.addEventListener('pointermove', (event) => {
+            if (pendingGrabCandidate && !isMouseGrabbing) {
+                const dX = Math.abs(event.clientX - pointerDownPos.x);
+                const dY = Math.abs(event.clientY - pointerDownPos.y);
+                if (dX > 5 || dY > 5) {
+                    startMouseGrab(pendingGrabCandidate.hitModel, pendingGrabCandidate.point);
+                    pendingGrabCandidate = null;
+                } else {
+                    return;
+                }
+            }
+
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -1824,6 +1842,7 @@
         const mouseGrabPlane = new THREE.Plane();
         const mouseGrabPlaneNormal = new THREE.Vector3();
         let isMouseGrabbing = false;
+        let pendingGrabCandidate = null; // {hitModel, point} — ditetapkan di pointerdown, disahkan di pointermove
 
         function startMouseGrab(hitModel, grabPoint) {
             grabbedObject = hitModel;

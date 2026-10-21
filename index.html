@@ -3983,8 +3983,12 @@
             pointerDownPos.x = event.clientX;
             pointerDownPos.y = event.clientY;
 
-            // GENGGAM MOUSE (Desktop Preview, bukan sesi XR) — mula genggam serta-merta kalau
-            // klik kena objek "Boleh Diambil", sebelum apa-apa semakan jarak/threshold klik.
+            // GENGGAM MOUSE (Desktop Preview, bukan sesi XR) — JANGAN genggam serta-merta pada
+            // pointerdown (itu buat objek "Boleh Diambil" TAK PERNAH boleh diklik untuk
+            // interaksi — setiap sentuhan dianggap genggam walaupun tak digerakkan langsung).
+            // Simpan sebagai CALON dulu; genggaman sebenar cuma bermula kalau mouse betul-betul
+            // bergerak melepasi threshold 5px (lihat pointermove) — kalau tidak (klik tulen,
+            // tiada drag), pointerup jatuh terus ke laluan klik/onClick biasa di bawah.
             if (isPreviewMode && !renderer.xr.isPresenting && !grabbedObject && event.button === 0) {
                 const rect = renderer.domElement.getBoundingClientRect();
                 mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -3999,7 +4003,7 @@
                         hitModel = hitModel.parent;
                     }
                     if (hitModel.userData.isGrabbable) {
-                        startMouseGrab(hitModel, intersects[0].point);
+                        pendingGrabCandidate = { hitModel, point: intersects[0].point.clone() };
                         // Pastikan pointerup/pointermove terus sasar canvas ni walaupun kursor
                         // bergerak keluar sempadannya semasa drag (elak objek "tersangkut" genggam).
                         try { renderer.domElement.setPointerCapture(event.pointerId); } catch (e) {}
@@ -4019,6 +4023,15 @@
                 return;
             }
 
+            if (pendingGrabCandidate) {
+                // Calon genggam yang tak pernah melepasi threshold drag — ini sebenarnya KLIK
+                // tulen pada objek "Boleh Diambil", bukan niat nak drag. Lepaskan capture dan
+                // biar ia jatuh terus ke laluan klik biasa di bawah supaya onClick dia (kalau
+                // ada) tetap sempat jalan.
+                pendingGrabCandidate = null;
+                try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
+            }
+
             if (isDraggingGizmo) return;
 
             const deltaX = Math.abs(event.clientX - pointerDownPos.x);
@@ -4036,16 +4049,12 @@
                 if (loadedModelsList.length > 0) {
                     const visibleObjects = loadedModelsList.filter(o => o.visible);
                     const intersects = raycaster.intersectObjects(visibleObjects, true);
-                    console.log('[Click] visibleObjects=', visibleObjects.map(o => o.userData.fileName + ':' + o.visible), 'intersects=', intersects.length);
                     if (intersects.length > 0) {
                         let hitModel = intersects[0].object;
                         while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
                             hitModel = hitModel.parent;
                         }
-                        console.log('[Click] hitModel=', hitModel.userData.fileName || hitModel.name);
                         triggerInteraction(hitModel, 'onClick', event.clientX, event.clientY);
-                    } else {
-                        console.log('[Click] NO intersection found at this click.');
                     }
                 }
             } else {
@@ -4067,6 +4076,21 @@
         // HOVER EVENT
         renderer.domElement.addEventListener('pointermove', (event) => {
             if (!isPreviewMode) return;
+
+            // Ada calon genggam tertunda (pointerdown kena objek Boleh Diambil) — cuma SAHKAN
+            // jadi genggaman sebenar bila mouse betul-betul bergerak melepasi threshold 5px
+            // (sama macam threshold klik). Sementara belum melepasi, anggap ia masih mungkin
+            // klik tulen — jangan proses hover lagi (elak gangguan visual semasa menunggu).
+            if (pendingGrabCandidate && !isMouseGrabbing) {
+                const dX = Math.abs(event.clientX - pointerDownPos.x);
+                const dY = Math.abs(event.clientY - pointerDownPos.y);
+                if (dX > 5 || dY > 5) {
+                    startMouseGrab(pendingGrabCandidate.hitModel, pendingGrabCandidate.point);
+                    pendingGrabCandidate = null;
+                } else {
+                    return;
+                }
+            }
 
             const rect = renderer.domElement.getBoundingClientRect();
             mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -4621,6 +4645,7 @@
         const mouseGrabPlane = new THREE.Plane();
         const mouseGrabPlaneNormal = new THREE.Vector3();
         let isMouseGrabbing = false;
+        let pendingGrabCandidate = null; // {hitModel, point} — ditetapkan di pointerdown, disahkan di pointermove
 
         function startMouseGrab(hitModel, grabPoint) {
             grabbedObject = hitModel;
@@ -4711,16 +4736,13 @@
 
         // TRIGGER LOGIC
         function triggerInteraction(model, eventType, clientX, clientY) {
-            console.log('[Trigger] triggerInteraction called for', model.userData.fileName || model.name, 'eventType=', eventType, 'interactions=', model.userData.interactions);
             if (!model.userData.interactions || !Array.isArray(model.userData.interactions)) return;
 
             const matchingActions = model.userData.interactions.filter(act => act.trigger === eventType);
-            console.log('[Trigger] matchingActions count=', matchingActions.length);
             if (matchingActions.length === 0) return;
 
             matchingActions.forEach(config => {
                 const targets = getTargetObjects(model, config.targetObjectIds);
-                console.log('[Trigger] action=', config.action, 'targetObjectIds=', config.targetObjectIds, 'resolved targets=', targets.map(t => t.userData.fileName + ' visible=' + t.visible));
 
                 // 1. ANIMATION TOGGLE
                 if (config.action === 'toggleModelAnim') {
