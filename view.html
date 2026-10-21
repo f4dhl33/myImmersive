@@ -411,15 +411,24 @@
             mesh.position.set(0, 0, 0);
             mesh.updateMatrixWorld(true);
 
-            const box = computeVisibleWorldBox3(mesh);
-            const size = new THREE.Vector3();
-            const center = new THREE.Vector3();
-            box.getSize(size);
-            box.getCenter(center);
-
-            mesh.quaternion.copy(savedQuat);
-            mesh.position.copy(savedPos);
-            mesh.updateMatrixWorld(true);
+            // PENTING: position/quaternion MESTI dipulihkan tak kira apa jadi semasa
+            // pengiraan — kalau tidak, objek "terperangkap" di (0,0,0)/identity secara kekal.
+            let size, center;
+            try {
+                const box = computeVisibleWorldBox3(mesh);
+                size = new THREE.Vector3();
+                center = new THREE.Vector3();
+                box.getSize(size);
+                box.getCenter(center);
+            } catch (e) {
+                console.error('[Physics] computeVisibleWorldBox3 failed for "' + (mesh.userData.fileName || mesh.name) + '" — using a small fallback box:', e);
+                size = new THREE.Vector3(0.5, 0.5, 0.5);
+                center = new THREE.Vector3(0, 0, 0);
+            } finally {
+                mesh.quaternion.copy(savedQuat);
+                mesh.position.copy(savedPos);
+                mesh.updateMatrixWorld(true);
+            }
 
             size.x = Math.max(size.x, 0.02);
             size.y = Math.max(size.y, 0.02);
@@ -497,10 +506,14 @@
                 if (mesh.userData.primType === 'zone') return;
                 if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
 
-                const body = createPhysicsBodyForMesh(mesh);
-                physicsWorld.addBody(body);
-                physicsBodies.push({ mesh, body });
-                mesh.userData._physicsBody = body;
+                try {
+                    const body = createPhysicsBodyForMesh(mesh);
+                    physicsWorld.addBody(body);
+                    physicsBodies.push({ mesh, body });
+                    mesh.userData._physicsBody = body;
+                } catch (e) {
+                    console.error('[Physics] Failed to build physics body for "' + (mesh.userData.fileName || mesh.name) + '" — skipping this object:', e);
+                }
             });
 
             physicsActive = true;
