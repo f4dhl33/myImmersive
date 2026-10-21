@@ -1338,7 +1338,7 @@
             if (isMouseGrabbing && grabbedObject) {
                 const target = new THREE.Vector3();
                 if (raycaster.ray.intersectPlane(mouseGrabPlane, target)) {
-                    mouseGrabProxy.position.copy(target);
+                    mouseGrabProxy.position.lerp(target, 0.6);
                 }
                 return;
             }
@@ -1643,6 +1643,7 @@
         // pelanggaran fizik sebenar. Bila dilepas, graviti + pelanggaran + bounce
         // (cannon.js) ambil alih terus.
         const GRAB_MAX_SPEED = 6;
+        const GRAB_VELOCITY_BLEND = 0.55;
         function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;
@@ -1670,13 +1671,17 @@
                 obj.parent.worldToLocal(newWorldPos);
 
                 if (body) {
-                    const dtSafe = Math.max(delta || 1 / 60, 1 / 120);
+                    const dtSafe = Math.max(delta || 1 / 60, 1 / 60);
                     const vx = (newWorldPos.x - body.position.x) / dtSafe;
                     const vy = (newWorldPos.y - body.position.y) / dtSafe;
                     const vz = (newWorldPos.z - body.position.z) / dtSafe;
                     const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
                     const scale = speed > GRAB_MAX_SPEED ? GRAB_MAX_SPEED / speed : 1;
-                    body.velocity.set(vx * scale, vy * scale, vz * scale);
+                    body.velocity.set(
+                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, GRAB_VELOCITY_BLEND),
+                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, GRAB_VELOCITY_BLEND),
+                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, GRAB_VELOCITY_BLEND)
+                    );
                     body.angularVelocity.set(0, 0, 0);
                 } else {
                     obj.position.copy(newWorldPos);
