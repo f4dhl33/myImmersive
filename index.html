@@ -2317,7 +2317,6 @@
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true; // mesti direndr untuk tulis depth — "Hide Object Initially" tak terpakai di sini
-                let matCount = 0;
                 mesh.traverse(node => {
                     if (!node.isMesh) return;
                     node.frustumCulled = false;
@@ -2325,9 +2324,7 @@
                         node.userData._preOccluderMaterial = node.material; // simpan untuk pulih semula
                     }
                     node.material = invisibleOccluderMaterial;
-                    matCount++;
                 });
-                console.log('[Occluder] "' + (mesh.userData.fileName || mesh.name) + '" visible=' + mesh.visible + ' nodesTouched=' + matCount);
             });
         }
 
