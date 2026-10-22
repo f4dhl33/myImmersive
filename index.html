@@ -899,6 +899,12 @@
                         <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
                     </div>
 
+                    <label style="margin-top: 10px;" title="Keyboard shortcuts Ctrl+C / Ctrl+V also work (while not typing in a text field).">Copy / Paste:</label>
+                    <div class="btn-action-group">
+                        <button id="btn-copy-object" class="btn-secondary" title="Copy the selected object (Ctrl+C)">📋 Copy</button>
+                        <button id="btn-paste-object" class="btn-secondary" title="Paste a new copy of the last copied object (Ctrl+V)">📄 Paste</button>
+                    </div>
+
                     <div class="collapsible subgroup collapsed" data-key="reset" style="margin-top:10px;">
                         <div class="collapsible-header subgroup-header">↺ Reset <span class="toggle-arrow">▾</span></div>
                         <div class="collapsible-body subgroup-body">
@@ -2791,41 +2797,49 @@
                 } else if (objData.kind === 'image') {
                     await restoreImageFromUrl(objData);
                 } else {
-                    const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
-                    if (mesh) {
-                        mesh.position.fromArray(objData.position);
-                        mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
-                        mesh.scale.fromArray(objData.scale);
-                        mesh.userData.initialPosition.fromArray(objData.initialPosition);
-                        mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
-                        mesh.userData.initialScale.fromArray(objData.initialScale);
-                        mesh.userData.initialVisibility = objData.initialVisibility;
-                        mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
-                        mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
-                        mesh.userData.interactions = objData.interactions || [];
-                        mesh.userData.isGrabbable = objData.isGrabbable || false;
-                        mesh.userData.isSolid = objData.isSolid || false;
-                        mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
-                        mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
-                        mesh.userData.colliderTrim = objData.colliderTrim || null;
-                        if (isBasicShapeMesh(mesh)) {
-                            if (objData.customColor) {
-                                mesh.material.color.set(objData.customColor);
-                                mesh.userData.customColor = objData.customColor;
-                            }
-                            if (objData.customTextureUrl) {
-                                mesh.userData.customTextureUrl = objData.customTextureUrl;
-                                shapeTextureLoader.load(objData.customTextureUrl, (tex) => {
-                                    mesh.material.map = tex;
-                                    mesh.material.needsUpdate = true;
-                                });
-                            }
-                        }
-                        if (objData.primType === 'waypoint') rebuildWaypointPath();
-                    }
+                    restorePrimitiveFromData(objData);
                 }
             }
             recenterOrbitPivot();
+        }
+
+        // Bina semula primitif (box/sphere/cylinder/plane/zone/waypoint/text) daripada
+        // objData — dikongsi antara applySceneDataToViewport() (muat scene) DAN
+        // pasteCopiedObject() (copy/paste), elak duplikasi logik.
+        function restorePrimitiveFromData(objData) {
+            const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
+            if (!mesh) return null;
+
+            mesh.position.fromArray(objData.position);
+            mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
+            mesh.scale.fromArray(objData.scale);
+            mesh.userData.initialPosition.fromArray(objData.initialPosition);
+            mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
+            mesh.userData.initialScale.fromArray(objData.initialScale);
+            mesh.userData.initialVisibility = objData.initialVisibility;
+            mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
+            mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
+            mesh.userData.interactions = objData.interactions || [];
+            mesh.userData.isGrabbable = objData.isGrabbable || false;
+            mesh.userData.isSolid = objData.isSolid || false;
+            mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
+            mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
+            mesh.userData.colliderTrim = objData.colliderTrim || null;
+            if (isBasicShapeMesh(mesh)) {
+                if (objData.customColor) {
+                    mesh.material.color.set(objData.customColor);
+                    mesh.userData.customColor = objData.customColor;
+                }
+                if (objData.customTextureUrl) {
+                    mesh.userData.customTextureUrl = objData.customTextureUrl;
+                    shapeTextureLoader.load(objData.customTextureUrl, (tex) => {
+                        mesh.material.map = tex;
+                        mesh.material.needsUpdate = true;
+                    });
+                }
+            }
+            if (objData.primType === 'waypoint') rebuildWaypointPath();
+            return mesh;
         }
 
         async function loadProjectIntoEditor(projectId) {
@@ -5251,6 +5265,110 @@
             recenterOrbitPivot();
             scheduleAutoSave();
         }
+
+        // ---------------------------------------------------------------
+        // COPY / PASTE OBJEK — serialize objek dipilih ke format objData yang SAMA
+        // dengan simpan/muat projek, lepas tu "paste" guna fungsi bina-semula sedia ada
+        // (restoreModelFromUrl/restoreImageFromUrl/restorePrimitiveFromData) dengan ID
+        // baharu & kedudukan diselar sedikit, supaya salinan konsisten dengan cara projek
+        // sebenar dimuat (tak perlu tulis logik berasingan).
+        // ---------------------------------------------------------------
+        let copiedObjectData = null;
+
+        function serializeOneObjectForCopy(m) {
+            const ud = m.userData;
+            return {
+                fileName: ud.fileName,
+                kind: ud.kind || 'model',
+                primType: ud.primType || null,
+                textContent: ud.textContent !== undefined ? ud.textContent : null,
+                fileUrl: (ud.kind === 'model' || ud.kind === 'image') ? (ud.sourceUrl || null) : null,
+                fileExt: ud.fileExt || null,
+                position: m.position.toArray(),
+                rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+                scale: m.scale.toArray(),
+                initialVisibility: ud.initialVisibility,
+                colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
+                invisibleOccluder: ud.invisibleOccluder || false,
+                interactions: JSON.parse(JSON.stringify(ud.interactions || [])),
+                isGrabbable: ud.isGrabbable || false,
+                isSolid: ud.isSolid || false,
+                returnToOriginalOnRelease: ud.returnToOriginalOnRelease || false,
+                bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4,
+                colliderTrim: ud.colliderTrim ? JSON.parse(JSON.stringify(ud.colliderTrim)) : null,
+                customColor: ud.customColor || null,
+                customTextureUrl: ud.customTextureUrl || null
+            };
+        }
+
+        function copySelectedObject() {
+            if (isPreviewMode) return;
+            if (!selectedModel || selectedModel === previewCameraMarker) {
+                alert('Please select an object first (the Main Camera cannot be copied).');
+                return;
+            }
+            copiedObjectData = serializeOneObjectForCopy(selectedModel);
+            setSaveStatusText('📋 Copied "' + (copiedObjectData.fileName || 'object') + '"');
+        }
+
+        async function pasteCopiedObject() {
+            if (isPreviewMode) return;
+            if (!copiedObjectData) {
+                alert('Nothing copied yet — select an object and press Ctrl+C (or the Copy button) first.');
+                return;
+            }
+
+            const objData = JSON.parse(JSON.stringify(copiedObjectData));
+            objData.id = Date.now() + Math.random();
+            // Anjak sedikit (bukan bertindih terus di atas asal) supaya nampak terus ada 2 objek.
+            objData.position = [objData.position[0] + 0.4, objData.position[1], objData.position[2] + 0.4];
+            objData.initialPosition = objData.position.slice();
+            objData.initialRotation = objData.rotation.slice();
+            objData.initialScale = objData.scale.slice();
+            // targetObjectIds dalam interactions kekal menunjuk ke objek LAIN yang disasarkan
+            // (contoh: "onClick, hide object X") — objek itu tak berubah, jadi tak perlu diselaraskan.
+            // Cuma beri id baharu pada setiap interaction entry itu sendiri.
+            objData.interactions = (objData.interactions || []).map(act => ({
+                ...act,
+                id: Date.now() + Math.random()
+            }));
+
+            let newMesh = null;
+            if (objData.kind === 'model') {
+                newMesh = await restoreModelFromUrl(objData);
+            } else if (objData.kind === 'image') {
+                newMesh = await restoreImageFromUrl(objData);
+            } else {
+                newMesh = restorePrimitiveFromData(objData);
+            }
+
+            if (newMesh) {
+                renderObjectsList();
+                selectObject(newMesh);
+                recenterOrbitPivot();
+                scheduleAutoSave();
+                setSaveStatusText('📄 Pasted "' + (newMesh.userData.fileName || 'object') + '"');
+            }
+        }
+
+        document.getElementById('btn-copy-object').addEventListener('click', copySelectedObject);
+        document.getElementById('btn-paste-object').addEventListener('click', () => { pasteCopiedObject(); });
+
+        // Pintasan papan kekunci Ctrl+C / Ctrl+V — hanya semasa Editing (bukan Pratonton)
+        // dan BUKAN semasa menaip dalam input/textarea (elak rampas clipboard teks biasa).
+        document.addEventListener('keydown', (event) => {
+            if (isPreviewMode) return;
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (document.activeElement && document.activeElement.isContentEditable)) return;
+            if (!(event.ctrlKey || event.metaKey)) return;
+
+            if (event.key === 'c' || event.key === 'C') {
+                copySelectedObject();
+            } else if (event.key === 'v' || event.key === 'V') {
+                event.preventDefault();
+                pasteCopiedObject();
+            }
+        });
 
         // TAMBAH TINDAKAN KE SENARAI
         document.getElementById('btn-save-interaction').addEventListener('click', () => {
