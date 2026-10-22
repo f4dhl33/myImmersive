@@ -537,18 +537,24 @@
             });
         }
 
+        const invisibleOccluderMaterial = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: true,
+            depthTest: true,
+            transparent: false
+        });
+
         function applyInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true;
                 mesh.traverse(node => {
-                    if (node.isMesh) node.frustumCulled = false;
-                });
-                forEachMeshMaterial(mesh, m => {
-                    m.colorWrite = false;
-                    m.depthWrite = true;
-                    m.depthTest = true;
-                    m.transparent = false;
+                    if (!node.isMesh) return;
+                    node.frustumCulled = false;
+                    if (!node.userData._preOccluderMaterial) {
+                        node.userData._preOccluderMaterial = node.material;
+                    }
+                    node.material = invisibleOccluderMaterial;
                 });
             });
         }
@@ -556,7 +562,13 @@
         function clearInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
-                forEachMeshMaterial(mesh, m => { m.colorWrite = true; });
+                mesh.traverse(node => {
+                    if (!node.isMesh) return;
+                    if (node.userData._preOccluderMaterial) {
+                        node.material = node.userData._preOccluderMaterial;
+                        delete node.userData._preOccluderMaterial;
+                    }
+                });
             });
         }
 
