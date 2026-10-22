@@ -978,9 +978,9 @@
                         <span>👻 Invisible Occluder</span>
                     </label>
 
-                    <label class="checkbox-label" title="Punches a hole through any Invisible Occluder exactly where this object is actually visible from the camera's current angle — revealing whatever is truly there (normal depth-correct rendering), not necessarily this object itself. Use for a 'scanner' effect: a bag is set as Invisible Occluder (hides its exterior but still blocks the view of its contents), and the items inside get this flag so the occluder no longer hides them specifically — items still correctly hide behind any OTHER real/solid object as normal. Note the hole is shared by all occluders in the scene (can't target just one specific occluder if there are several).">
+                    <label class="checkbox-label" title="Turns this object into an invisible 'cutting shape': it never renders itself, but its 2D silhouette (from the camera's current angle) punches a hole through any Invisible Occluder, extruded through all depth like a CAD cutout — revealing whatever is actually behind the occluder there (e.g. another object, or the scene background). Use it to carve a window-shaped opening into an invisible wall/bag, etc. Note the hole is shared by all occluders in the scene (can't target just one specific occluder if there are several), and only this object's solid/opaque parts count toward the cut shape (fully transparent sub-parts are ignored).">
                         <input type="checkbox" id="chk-visible-through-occluder">
-                        <span>🔍 Visible Through Occluder (X-Ray)</span>
+                        <span>🔍 Visible Through Occluder (Cutout Shape)</span>
                     </label>
 
                     <label for="input-bounciness" style="margin-top:10px;" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
@@ -1846,10 +1846,10 @@
         });
 
         // "Visible Through Occluder" — sisi lain pasangan dgn Invisible Occluder: objek
-        // bertanda ni menebuk LUBANG pada mana-mana Invisible Occluder tepat di siluetnya
-        // (lihat applyOccluderBypassOverrides, teknik stencil buffer), mendedahkan apa yang
-        // sebenarnya ada di situ (cth: barang dalam beg untuk kesan "scanner" — beg jadi
-        // occluder, barang dalam beg dapat flag ni supaya tak disembunyikan oleh beg tu).
+        // bertanda ni jadi "alat potong" tak kelihatan — bentuk siluetnya menebuk LUBANG
+        // pada mana-mana Invisible Occluder (lihat applyOccluderBypassOverrides, teknik
+        // stencil buffer, macam extrude-cut CAD), mendedahkan apa yang sebenarnya ada di
+        // belakang occluder di situ. Objek ni sendiri TAK PERNAH dirender.
         const chkVisibleThroughOccluder = document.getElementById('chk-visible-through-occluder');
         chkVisibleThroughOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
@@ -2367,50 +2367,52 @@
             });
         }
 
-        // "Visible Through Occluder" (kesan scanner/X-ray) — TEBUK LUBANG pada Invisible
-        // Occluder tepat di siluet objek ni (dari sudut kamera semasa), dedahkan apa yang
-        // SEBENARNYA ada di belakang occluder di situ (ikut depth sebenar objek lain — BUKAN
-        // objek ni sendiri "dipaksa" sentiasa di atas). Guna STENCIL BUFFER:
-        //   1. Objek ni (renderOrder sangat rendah, dilukis AWAL) tanda stencil=1 di mana2
-        //      pixel yang ia LULUS ujian depth normalnya sendiri (i.e. memang kelihatan dr
-        //      situ) — rupa/depth/warna objek ni sendiri TIDAK diubah langsung.
-        //      stencilZFail=KEEP bermakna kalau ada objek lain yg lagi dekat dah lukis situ
-        //      dulu, stencil TAK ditanda (betul — tiada sebab nak tebuk lubang di situ pun).
+        // "Visible Through Occluder" — objek ni jadi "alat potong" (macam extrude-cut CAD):
+        // bentuk 2D siluetnya (dari sudut kamera semasa), diekstrud merentasi SEMUA depth,
+        // menebuk LUBANG pada Invisible Occluder — objek ni SENDIRI KEKAL TAK KELIHATAN
+        // (colorWrite=false, sama macam occluder), cuma bentuknya yang penting. Guna STENCIL
+        // BUFFER:
+        //   1. Objek ni (renderOrder sangat rendah, dilukis AWAL; depthTest=false supaya
+        //      "memotong" tak kira apa jua kedudukan sebenar objek lain) tanda stencil=1 di
+        //      mana2 pixel siluetnya — tiada warna/depth ditulis (ia sendiri tak nampak).
         //   2. Occluder (lihat invisibleOccluderMaterial) diuji against stencil tu: cuma
-        //      lukis (blok depth) kalau stencil != 1 — kalau ==1 (ada objek VTO di situ),
-        //      fragment occluder digugurkan terus (tiada depth/warna ditulis = lubang).
+        //      lukis (blok depth) kalau stencil != 1 — kalau ==1, fragment occluder
+        //      digugurkan terus (tiada depth/warna ditulis = lubang).
         //   3. Objek SEBENAR di belakang occluder (dlm lubang tu) terus lepas ujian depth
-        //      normal sebab occluder tak sempat "block" kawasan tu — ini yg nampak, bukan
-        //      semestinya objek VTO ni sendiri.
+        //      normal sebab occluder tak sempat "block" kawasan tu — itulah yg nampak.
         // Nota: ini satu bit stencil DIKONGSI semua objek VTO & semua occluder dlm scene —
         // tak boleh pasangkan VTO tertentu dgn SATU occluder tertentu je kalau ada byk occluder
         // berlainan, tapi cukup untuk kes guna "scanner" (satu beg/dinding, satu set barang).
+        const occluderBypassMaskMaterial = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: false,
+            depthTest: false,
+            transparent: false,
+            stencilWrite: true,
+            stencilRef: 1,
+            stencilFunc: THREE.AlwaysStencilFunc,
+            stencilFail: THREE.KeepStencilOp,
+            stencilZFail: THREE.KeepStencilOp,
+            stencilZPass: THREE.ReplaceStencilOp
+        });
+
         function applyOccluderBypassOverrides() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.visibleThroughOccluder) return;
+                mesh.visible = true; // mesti direndr untuk tanda stencil — "Hide Object Initially" tak terpakai di sini
                 mesh.traverse(node => {
                     if (!node.isMesh || node.userData._preBypassMaterial) return;
                     const mats = Array.isArray(node.material) ? node.material : [node.material];
                     // Bahagian yang "transparent" asalnya (cth: kon kesan hiasan opacity
                     // rendah yg dibakar dlm sesetengah fail GLB) sengaja TAK sumbang ke
-                    // siluet stencil — kalau tidak, bentuk lubang ikut geometri bahagian
+                    // siluet potongan — kalau tidak, bentuk lubang ikut geometri bahagian
                     // hiasan tak kelihatan tu (selalunya jauh lebih besar/pelik drpd bentuk
                     // SEBENAR yg pengguna nampak), bukan bentuk badan sebenar objek.
                     if (mats.every(m => m.transparent === true)) return;
                     node.userData._preBypassMaterial = node.material;
                     node.userData._preBypassRenderOrder = node.renderOrder;
                     node.userData._preBypassFrustumCulled = node.frustumCulled;
-                    const clones = mats.map(mat => {
-                        const clone = mat.clone();
-                        clone.stencilWrite = true;
-                        clone.stencilRef = 1;
-                        clone.stencilFunc = THREE.AlwaysStencilFunc;
-                        clone.stencilFail = THREE.KeepStencilOp;
-                        clone.stencilZFail = THREE.KeepStencilOp;
-                        clone.stencilZPass = THREE.ReplaceStencilOp;
-                        return clone;
-                    });
-                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                    node.material = occluderBypassMaskMaterial;
                     node.renderOrder = -10; // mesti lukis SEBELUM occluder supaya stencil sedia untuk diuji
                     node.frustumCulled = false; // elak bounding sphere bind-pose stale (SkinnedMesh) buat ia tiba2 tak dilukis
                 });
@@ -2421,8 +2423,6 @@
             loadedModelsList.forEach(mesh => {
                 mesh.traverse(node => {
                     if (!node.isMesh || node.userData._preBypassMaterial === undefined) return;
-                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
-                    clonedMats.forEach(m => m.dispose());
                     node.material = node.userData._preBypassMaterial;
                     node.renderOrder = node.userData._preBypassRenderOrder || 0;
                     node.frustumCulled = node.userData._preBypassFrustumCulled;

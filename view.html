@@ -588,38 +588,41 @@
             });
         }
 
-        // "Visible Through Occluder" (kesan scanner/X-ray) — TEBUK LUBANG pada Invisible
-        // Occluder tepat di siluet objek ni (dari sudut kamera semasa), dedahkan apa yang
-        // SEBENARNYA ada di belakang occluder di situ (ikut depth sebenar objek lain — BUKAN
-        // objek ni sendiri "dipaksa" sentiasa di atas). Guna STENCIL BUFFER — lihat index.html
-        // untuk penjelasan penuh mekanisme (3 langkah: objek VTO tanda stencil, occluder uji
-        // against stencil tu, objek sebenar di belakang lepas ujian depth normal dlm lubang).
+        // "Visible Through Occluder" — objek ni jadi "alat potong" (macam extrude-cut CAD):
+        // bentuk 2D siluetnya (dari sudut kamera semasa), diekstrud merentasi SEMUA depth,
+        // menebuk LUBANG pada Invisible Occluder — objek ni SENDIRI KEKAL TAK KELIHATAN
+        // (colorWrite=false, sama macam occluder), cuma bentuknya yang penting. Lihat
+        // index.html untuk penjelasan penuh mekanisme (teknik stencil buffer).
+        const occluderBypassMaskMaterial = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: false,
+            depthTest: false,
+            transparent: false,
+            stencilWrite: true,
+            stencilRef: 1,
+            stencilFunc: THREE.AlwaysStencilFunc,
+            stencilFail: THREE.KeepStencilOp,
+            stencilZFail: THREE.KeepStencilOp,
+            stencilZPass: THREE.ReplaceStencilOp
+        });
+
         function applyOccluderBypassOverrides() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.visibleThroughOccluder) return;
+                mesh.visible = true; // mesti direndr untuk tanda stencil — "Hide Object Initially" tak terpakai di sini
                 mesh.traverse(node => {
                     if (!node.isMesh || node.userData._preBypassMaterial) return;
                     const mats = Array.isArray(node.material) ? node.material : [node.material];
                     // Bahagian yang "transparent" asalnya (cth: kon kesan hiasan opacity
                     // rendah yg dibakar dlm sesetengah fail GLB) sengaja TAK sumbang ke
-                    // siluet stencil — kalau tidak, bentuk lubang ikut geometri bahagian
+                    // siluet potongan — kalau tidak, bentuk lubang ikut geometri bahagian
                     // hiasan tak kelihatan tu (selalunya jauh lebih besar/pelik drpd bentuk
                     // SEBENAR yg pengguna nampak), bukan bentuk badan sebenar objek.
                     if (mats.every(m => m.transparent === true)) return;
                     node.userData._preBypassMaterial = node.material;
                     node.userData._preBypassRenderOrder = node.renderOrder;
                     node.userData._preBypassFrustumCulled = node.frustumCulled;
-                    const clones = mats.map(mat => {
-                        const clone = mat.clone();
-                        clone.stencilWrite = true;
-                        clone.stencilRef = 1;
-                        clone.stencilFunc = THREE.AlwaysStencilFunc;
-                        clone.stencilFail = THREE.KeepStencilOp;
-                        clone.stencilZFail = THREE.KeepStencilOp;
-                        clone.stencilZPass = THREE.ReplaceStencilOp;
-                        return clone;
-                    });
-                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                    node.material = occluderBypassMaskMaterial;
                     node.renderOrder = -10; // mesti lukis SEBELUM occluder supaya stencil sedia untuk diuji
                     node.frustumCulled = false; // elak bounding sphere bind-pose stale (SkinnedMesh) buat ia tiba2 tak dilukis
                 });
@@ -630,8 +633,6 @@
             loadedModelsList.forEach(mesh => {
                 mesh.traverse(node => {
                     if (!node.isMesh || node.userData._preBypassMaterial === undefined) return;
-                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
-                    clonedMats.forEach(m => m.dispose());
                     node.material = node.userData._preBypassMaterial;
                     node.renderOrder = node.userData._preBypassRenderOrder || 0;
                     node.frustumCulled = node.userData._preBypassFrustumCulled;
