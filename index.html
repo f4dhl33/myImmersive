@@ -1119,7 +1119,7 @@
         // Grid dibesarkan + "mengekori" kamera (snap ke saiz sel, lihat animate()) supaya
         // nampak tiada hujung tak kira sejauh mana pengguna pan/zoom — perlu untuk sokong
         // environment/scene yang besar, tanpa redraw geometri setiap frame.
-        const GRID_CELL_SIZE = 10;
+        const GRID_CELL_SIZE = 1;
         const gridHelper = new THREE.GridHelper(2000, 2000 / GRID_CELL_SIZE, 0x007acc, 0xffffff);
         scene.add(gridHelper);
 
