@@ -560,17 +560,28 @@
             stencilZPass: THREE.KeepStencilOp
         });
 
+        // Occluder bertanda "Exclude From Cutout Shapes" guna material KEBAL ni sebaliknya —
+        // sama rupa (invisible, blok depth) tapi TANPA ujian stencil (stencilWrite=false),
+        // jadi ia sentiasa blok macam biasa walaupun objek VTO menandakan stencil di situ.
+        const invisibleOccluderMaterialImmune = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: true,
+            depthTest: true,
+            transparent: false
+        });
+
         function applyInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true;
+                const mat = mesh.userData.occluderExcludeFromCutout ? invisibleOccluderMaterialImmune : invisibleOccluderMaterial;
                 mesh.traverse(node => {
                     if (!node.isMesh) return;
                     node.frustumCulled = false;
                     if (!node.userData._preOccluderMaterial) {
                         node.userData._preOccluderMaterial = node.material;
                     }
-                    node.material = invisibleOccluderMaterial;
+                    node.material = mat;
                 });
             });
         }
@@ -782,6 +793,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
                         visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
                         // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
@@ -848,6 +860,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
                         visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         initialPosition: new THREE.Vector3().fromArray(objData.position),
                         initialRotation: new THREE.Euler().fromArray(objData.rotation),
@@ -1030,6 +1043,7 @@
                 initialVisibility: objData.initialVisibility,
                 colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                 invisibleOccluder: objData.invisibleOccluder || false,
+                occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
                 visibleThroughOccluder: objData.visibleThroughOccluder || false,
                 initialPosition: new THREE.Vector3().fromArray(objData.position),
                 initialRotation: new THREE.Euler().fromArray(objData.rotation),

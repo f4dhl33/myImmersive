@@ -978,7 +978,12 @@
                         <span>👻 Invisible Occluder</span>
                     </label>
 
-                    <label class="checkbox-label" title="Turns this object into an invisible 'cutting shape': it never renders itself, but its 2D silhouette (from the camera's current angle) punches a hole through any Invisible Occluder, extruded through all depth like a CAD cutout — revealing whatever is actually behind the occluder there (e.g. another object, or the scene background). Use it to carve a window-shaped opening into an invisible wall/bag, etc. Note the hole is shared by all occluders in the scene (can't target just one specific occluder if there are several), and only this object's solid/opaque parts count toward the cut shape (fully transparent sub-parts are ignored).">
+                    <label class="checkbox-label checkbox-label-child" id="label-occluder-exclude-cutout" title="By default, ANY 'Visible Through Occluder' object in the scene can cut a hole through this occluder (a shared effect — see that flag's tooltip). Turn this ON to make THIS occluder immune/excluded — it keeps blocking the view normally, even where a cutout object's silhouette overlaps it. Use this when you have multiple occluders stacked and only want cuts to go through some of them (e.g. a near wall should be cut through, but a far backdrop behind it should stay solid).">
+                        <input type="checkbox" id="chk-occluder-exclude-cutout">
+                        <span>🛡️ Exclude From Cutout Shapes</span>
+                    </label>
+
+                    <label class="checkbox-label" title="Turns this object into an invisible 'cutting shape': it never renders itself, but its 2D silhouette (from the camera's current angle) punches a hole through any Invisible Occluder, extruded through all depth like a CAD cutout — revealing whatever is actually behind the occluder there (e.g. another object, or the scene background). Use it to carve a window-shaped opening into an invisible wall/bag, etc. Note the hole is shared by all occluders in the scene by default (an occluder can opt out via 'Exclude From Cutout Shapes' above), and only this object's solid/opaque parts count toward the cut shape (fully transparent sub-parts are ignored).">
                         <input type="checkbox" id="chk-visible-through-occluder">
                         <span>🔍 Visible Through Occluder (Cutout Shape)</span>
                     </label>
@@ -1838,9 +1843,34 @@
         // ia berfungsi automatik untuk APA-APA objek yang berada di belakangnya ikut sudut
         // kamera semasa, persis macam dinding sebenar.
         const chkInvisibleOccluder = document.getElementById('chk-invisible-occluder');
+        const chkOccluderExcludeCutout = document.getElementById('chk-occluder-exclude-cutout');
+        const labelOccluderExcludeCutout = document.getElementById('label-occluder-exclude-cutout');
+
+        // "Exclude From Cutout Shapes" cuma bermakna untuk objek yg jadi Invisible Occluder
+        // (tiada apa nak dikecualikan kalau objek tu bukan occluder pun) — sekat (disable,
+        // bukan force-uncheck) child ni bila parent OFF, sama pattern dgn Grabbable/Return-
+        // on-Release.
+        function syncOccluderExcludeCutoutAvailability() {
+            const enabled = chkInvisibleOccluder.checked;
+            chkOccluderExcludeCutout.disabled = !enabled;
+            labelOccluderExcludeCutout.classList.toggle('disabled', !enabled);
+        }
+
         chkInvisibleOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.invisibleOccluder = this.checked;
+                scheduleAutoSave();
+            }
+            syncOccluderExcludeCutoutAvailability();
+        });
+
+        // Occluder ni, secara lalai, BOLEH ditebuk oleh mana-mana objek "Visible Through
+        // Occluder" dlm scene (satu bit stencil dikongsi semua occluder). Tanda ni supaya
+        // occluder TERTENTU kekal kebal (immune) drpd sebarang potongan — cth: dinding dekat
+        // boleh ditebuk, tapi latar jauh di belakangnya kekal solid.
+        chkOccluderExcludeCutout.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.occluderExcludeFromCutout = this.checked;
                 scheduleAutoSave();
             }
         });
@@ -1964,6 +1994,7 @@
         });
 
         syncReturnOnReleaseAvailability();
+        syncOccluderExcludeCutoutAvailability();
 
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
@@ -2339,17 +2370,28 @@
             stencilZPass: THREE.KeepStencilOp
         });
 
+        // Occluder bertanda "Exclude From Cutout Shapes" guna material KEBAL ni sebaliknya —
+        // sama rupa (invisible, blok depth) tapi TANPA ujian stencil (stencilWrite=false),
+        // jadi ia sentiasa blok macam biasa walaupun objek VTO menandakan stencil di situ.
+        const invisibleOccluderMaterialImmune = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            depthWrite: true,
+            depthTest: true,
+            transparent: false
+        });
+
         function applyInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true; // mesti direndr untuk tulis depth — "Hide Object Initially" tak terpakai di sini
+                const mat = mesh.userData.occluderExcludeFromCutout ? invisibleOccluderMaterialImmune : invisibleOccluderMaterial;
                 mesh.traverse(node => {
                     if (!node.isMesh) return;
                     node.frustumCulled = false;
                     if (!node.userData._preOccluderMaterial) {
                         node.userData._preOccluderMaterial = node.material; // simpan untuk pulih semula
                     }
-                    node.material = invisibleOccluderMaterial;
+                    node.material = mat;
                 });
             });
         }
@@ -2475,7 +2517,7 @@
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder && !mesh.userData.visibleThroughOccluder) return;
                 const role = mesh.userData.invisibleOccluder ? 'OCCLUDER' : 'VTO (menebuk lubang)';
-                console.log('=== ' + role + ':', mesh.userData.fileName || mesh.name, '===');
+                console.log('=== ' + role + ':', mesh.userData.fileName || mesh.name, '===', mesh.userData.invisibleOccluder ? ('excludeFromCutout=' + !!mesh.userData.occluderExcludeFromCutout) : '');
                 const box = new THREE.Box3().setFromObject(mesh);
                 console.log('world bounding box=', box.min, box.max);
                 let i = 0;
@@ -2720,6 +2762,7 @@
                     initialVisibility: ud.initialVisibility,
                     colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
                     invisibleOccluder: ud.invisibleOccluder || false,
+                    occluderExcludeFromCutout: ud.occluderExcludeFromCutout || false,
                     visibleThroughOccluder: ud.visibleThroughOccluder || false,
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
@@ -2835,6 +2878,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
                         visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         interactions: objData.interactions || [],
                         isGrabbable: objData.isGrabbable || false,
@@ -2931,6 +2975,7 @@
             mesh.userData.initialVisibility = objData.initialVisibility;
             mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
             mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
+            mesh.userData.occluderExcludeFromCutout = objData.occluderExcludeFromCutout || false;
             mesh.userData.visibleThroughOccluder = objData.visibleThroughOccluder || false;
             mesh.userData.interactions = objData.interactions || [];
             mesh.userData.isGrabbable = objData.isGrabbable || false;
@@ -4139,6 +4184,7 @@
                 initialVisibility: type !== 'zone',
                 colliderActiveWhenHidden: false,
                 invisibleOccluder: false,
+                occluderExcludeFromCutout: false,
                 visibleThroughOccluder: false,
                 interactions: [],
                 isGrabbable: false,
@@ -4212,6 +4258,7 @@
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
                         invisibleOccluder: false,
+                        occluderExcludeFromCutout: false,
                         visibleThroughOccluder: false,
                         interactions: [],
                         isGrabbable: false,
@@ -4266,6 +4313,7 @@
                     mesh.userData.initialVisibility = objData.initialVisibility;
                     mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
                     mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
+                    mesh.userData.occluderExcludeFromCutout = objData.occluderExcludeFromCutout || false;
                     mesh.userData.visibleThroughOccluder = objData.visibleThroughOccluder || false;
                     mesh.userData.interactions = objData.interactions || [];
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
@@ -5294,6 +5342,8 @@
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = !!model.userData.invisibleOccluder;
+            chkOccluderExcludeCutout.checked = !!model.userData.occluderExcludeFromCutout;
+            syncOccluderExcludeCutoutAvailability();
             chkVisibleThroughOccluder.checked = !!model.userData.visibleThroughOccluder;
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             syncColliderTrimInputsFromModel(model);
@@ -5334,6 +5384,8 @@
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = false;
+            chkOccluderExcludeCutout.checked = false;
+            syncOccluderExcludeCutoutAvailability();
             chkVisibleThroughOccluder.checked = false;
             inputBounciness.value = 0.4;
             syncColliderTrimInputsFromModel(null);
@@ -5406,6 +5458,7 @@
                 initialVisibility: ud.initialVisibility,
                 colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
                 invisibleOccluder: ud.invisibleOccluder || false,
+                occluderExcludeFromCutout: ud.occluderExcludeFromCutout || false,
                 visibleThroughOccluder: ud.visibleThroughOccluder || false,
                 interactions: JSON.parse(JSON.stringify(ud.interactions || [])),
                 isGrabbable: ud.isGrabbable || false,
@@ -5661,6 +5714,7 @@
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
                         invisibleOccluder: false,
+                        occluderExcludeFromCutout: false,
                         visibleThroughOccluder: false,
                         interactions: [],
                         isGrabbable: false,
