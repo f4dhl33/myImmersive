@@ -212,10 +212,7 @@
         cameraRig.add(mainCamera);
         scene.add(cameraRig);
 
-        // stencil:true (eksplisit, walaupun dah default) — diperlukan oleh kesan "Visible
-        // Through Occluder" (lihat applyOccluderBypassOverrides) yang tebuk lubang pada
-        // Invisible Occluder guna stencil buffer.
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -528,174 +525,6 @@
             });
 
             physicsActive = true;
-            applyInvisibleOccluderMaterials();
-            applyCutoutTestToCuttableObjects();
-            applyOccluderBypassOverrides();
-        }
-
-        function forEachMeshMaterial(root, fn) {
-            root.traverse(node => {
-                if (node.isMesh && node.material) {
-                    const mats = Array.isArray(node.material) ? node.material : [node.material];
-                    mats.forEach(fn);
-                }
-            });
-        }
-
-        // Sifat stencil di bawah ni membenarkan objek "Visible Through Occluder" MENEBUK
-        // LUBANG pada occluder ni (lihat applyOccluderBypassOverrides) — occluder cuma lukis
-        // (blok depth) di mana stencil buffer TIDAK ditanda oleh objek tu. Tak beri kesan
-        // langsung kalau tiada objek VTO pun (buffer kekal 0 di mana-mana, ujian != 1 sentiasa
-        // lulus, sama macam sebelum ni).
-        const invisibleOccluderMaterial = new THREE.MeshBasicMaterial({
-            colorWrite: false,
-            depthWrite: true,
-            depthTest: true,
-            transparent: false,
-            stencilWrite: true,
-            stencilRef: 1,
-            stencilFunc: THREE.NotEqualStencilFunc,
-            stencilFuncMask: 0xff,
-            stencilFail: THREE.KeepStencilOp,
-            stencilZFail: THREE.KeepStencilOp,
-            stencilZPass: THREE.KeepStencilOp
-        });
-
-        // Occluder bertanda "Exclude From Cutout Shapes" guna material KEBAL ni sebaliknya —
-        // sama rupa (invisible, blok depth) tapi TANPA ujian stencil (stencilWrite=false),
-        // jadi ia sentiasa blok macam biasa walaupun objek VTO menandakan stencil di situ.
-        const invisibleOccluderMaterialImmune = new THREE.MeshBasicMaterial({
-            colorWrite: false,
-            depthWrite: true,
-            depthTest: true,
-            transparent: false
-        });
-
-        function applyInvisibleOccluderMaterials() {
-            loadedModelsList.forEach(mesh => {
-                if (!mesh.userData.invisibleOccluder) return;
-                mesh.visible = true;
-                const mat = mesh.userData.occluderExcludeFromCutout ? invisibleOccluderMaterialImmune : invisibleOccluderMaterial;
-                mesh.traverse(node => {
-                    if (!node.isMesh) return;
-                    node.frustumCulled = false;
-                    if (!node.userData._preOccluderMaterial) {
-                        node.userData._preOccluderMaterial = node.material;
-                    }
-                    node.material = mat;
-                });
-            });
-        }
-
-        function clearInvisibleOccluderMaterials() {
-            loadedModelsList.forEach(mesh => {
-                if (!mesh.userData.invisibleOccluder) return;
-                mesh.traverse(node => {
-                    if (!node.isMesh) return;
-                    if (node.userData._preOccluderMaterial) {
-                        node.material = node.userData._preOccluderMaterial;
-                        delete node.userData._preOccluderMaterial;
-                    }
-                });
-            });
-        }
-
-        // Objek BIASA (bukan Invisible Occluder, bukan objek VTO sendiri) kena diberi ujian
-        // stencil JUGA (klon material asal) supaya "Visible Through Occluder" boleh menebuk
-        // lubang padanya SECARA LALAI, sama macam Invisible Occluder — lihat index.html.
-        function applyCutoutTestToCuttableObjects() {
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.visibleThroughOccluder) return;
-                if (mesh.userData.invisibleOccluder) return;
-                if (mesh.userData.occluderExcludeFromCutout) return;
-                if (mesh.userData.primType === 'zone') return;
-                mesh.traverse(node => {
-                    if (!node.isMesh || node.userData._preCutoutTestMaterial) return;
-                    const mats = Array.isArray(node.material) ? node.material : [node.material];
-                    if (mats.every(m => m.transparent === true)) return;
-                    node.userData._preCutoutTestMaterial = node.material;
-                    const clones = mats.map(mat => {
-                        const clone = mat.clone();
-                        clone.stencilWrite = true;
-                        clone.stencilRef = 1;
-                        clone.stencilFunc = THREE.NotEqualStencilFunc;
-                        clone.stencilFuncMask = 0xff;
-                        clone.stencilFail = THREE.KeepStencilOp;
-                        clone.stencilZFail = THREE.KeepStencilOp;
-                        clone.stencilZPass = THREE.KeepStencilOp;
-                        return clone;
-                    });
-                    node.material = Array.isArray(node.material) ? clones : clones[0];
-                });
-            });
-        }
-
-        function clearCutoutTestFromCuttableObjects() {
-            loadedModelsList.forEach(mesh => {
-                mesh.traverse(node => {
-                    if (!node.isMesh || node.userData._preCutoutTestMaterial === undefined) return;
-                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
-                    clonedMats.forEach(m => m.dispose());
-                    node.material = node.userData._preCutoutTestMaterial;
-                    delete node.userData._preCutoutTestMaterial;
-                });
-            });
-        }
-
-        // "Visible Through Occluder" — objek ni jadi "alat potong" (macam extrude-cut CAD):
-        // bentuk 2D siluetnya (dari sudut kamera semasa), diekstrud merentasi SEMUA depth,
-        // menebuk LUBANG pada SEMUA objek lain dlm scene SECARA LALAI (Invisible Occluder
-        // ATAU objek biasa yg kelihatan) — objek ni SENDIRI KEKAL TAK KELIHATAN
-        // (colorWrite=false), cuma bentuknya yang penting. Lihat
-        // index.html untuk penjelasan penuh mekanisme (teknik stencil buffer).
-        const occluderBypassMaskMaterial = new THREE.MeshBasicMaterial({
-            colorWrite: false,
-            depthWrite: false,
-            depthTest: false,
-            transparent: false,
-            stencilWrite: true,
-            stencilRef: 1,
-            stencilFunc: THREE.AlwaysStencilFunc,
-            stencilFail: THREE.KeepStencilOp,
-            stencilZFail: THREE.KeepStencilOp,
-            stencilZPass: THREE.ReplaceStencilOp
-        });
-
-        function applyOccluderBypassOverrides() {
-            loadedModelsList.forEach(mesh => {
-                if (!mesh.userData.visibleThroughOccluder) return;
-                mesh.visible = true; // mesti direndr untuk tanda stencil — "Hide Object Initially" tak terpakai di sini
-                mesh.traverse(node => {
-                    if (!node.isMesh || node.userData._preBypassMaterial) return;
-                    const mats = Array.isArray(node.material) ? node.material : [node.material];
-                    // Bahagian yang "transparent" asalnya (cth: kon kesan hiasan opacity
-                    // rendah yg dibakar dlm sesetengah fail GLB) sengaja TAK sumbang ke
-                    // siluet potongan — kalau tidak, bentuk lubang ikut geometri bahagian
-                    // hiasan tak kelihatan tu (selalunya jauh lebih besar/pelik drpd bentuk
-                    // SEBENAR yg pengguna nampak), bukan bentuk badan sebenar objek.
-                    if (mats.every(m => m.transparent === true)) return;
-                    node.userData._preBypassMaterial = node.material;
-                    node.userData._preBypassRenderOrder = node.renderOrder;
-                    node.userData._preBypassFrustumCulled = node.frustumCulled;
-                    node.material = occluderBypassMaskMaterial;
-                    node.renderOrder = -10; // mesti lukis SEBELUM occluder supaya stencil sedia untuk diuji
-                    node.frustumCulled = false; // elak bounding sphere bind-pose stale (SkinnedMesh) buat ia tiba2 tak dilukis
-                });
-            });
-        }
-
-        function clearOccluderBypassOverrides() {
-            loadedModelsList.forEach(mesh => {
-                mesh.traverse(node => {
-                    if (!node.isMesh || node.userData._preBypassMaterial === undefined) return;
-                    node.material = node.userData._preBypassMaterial;
-                    node.renderOrder = node.userData._preBypassRenderOrder || 0;
-                    node.frustumCulled = node.userData._preBypassFrustumCulled;
-                    delete node.userData._preBypassMaterial;
-                    delete node.userData._preBypassRenderOrder;
-                    delete node.userData._preBypassFrustumCulled;
-                });
-            });
         }
 
         function syncPhysicsBodiesWithVisibility() {
@@ -718,9 +547,6 @@
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
-            clearInvisibleOccluderMaterials();
-            clearCutoutTestFromCuttableObjects();
-            clearOccluderBypassOverrides();
         }
 
         // RETICLE (penunjuk tap-to-place semasa AR)
@@ -837,9 +663,6 @@
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                        invisibleOccluder: objData.invisibleOccluder || false,
-                        occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
-                        visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
                         // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
                         // BUKAN objData.initialPosition (itu posisi masa objek PERTAMA kali
@@ -904,9 +727,6 @@
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                        invisibleOccluder: objData.invisibleOccluder || false,
-                        occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
-                        visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         initialPosition: new THREE.Vector3().fromArray(objData.position),
                         initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
@@ -1087,9 +907,6 @@
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
                 colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                invisibleOccluder: objData.invisibleOccluder || false,
-                occluderExcludeFromCutout: objData.occluderExcludeFromCutout || false,
-                visibleThroughOccluder: objData.visibleThroughOccluder || false,
                 initialPosition: new THREE.Vector3().fromArray(objData.position),
                 initialRotation: new THREE.Euler().fromArray(objData.rotation),
                 isGrabbable: objData.isGrabbable || false,
