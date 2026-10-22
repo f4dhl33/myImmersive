@@ -899,10 +899,8 @@
                         <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
                     </div>
 
-                    <label style="margin-top: 10px;" title="Keyboard shortcuts Ctrl+C / Ctrl+V also work (while not typing in a text field).">Copy / Paste:</label>
-                    <div class="btn-action-group">
-                        <button id="btn-copy-object" class="btn-secondary" title="Copy the selected object (Ctrl+C)">📋 Copy</button>
-                        <button id="btn-paste-object" class="btn-secondary" title="Paste a new copy of the last copied object (Ctrl+V)">📄 Paste</button>
+                    <div class="btn-action-group" style="margin-top: 10px;">
+                        <button id="btn-duplicate-object" class="btn-secondary" title="Duplicate the selected object (Ctrl+D)">📄 Duplicate</button>
                     </div>
 
                     <div class="collapsible subgroup collapsed" data-key="reset" style="margin-top:10px;">
@@ -2805,7 +2803,7 @@
 
         // Bina semula primitif (box/sphere/cylinder/plane/zone/waypoint/text) daripada
         // objData — dikongsi antara applySceneDataToViewport() (muat scene) DAN
-        // pasteCopiedObject() (copy/paste), elak duplikasi logik.
+        // duplicateSelectedObject() (duplicate), elak duplikasi logik.
         function restorePrimitiveFromData(objData) {
             const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
             if (!mesh) return null;
@@ -5267,14 +5265,12 @@
         }
 
         // ---------------------------------------------------------------
-        // COPY / PASTE OBJEK — serialize objek dipilih ke format objData yang SAMA
-        // dengan simpan/muat projek, lepas tu "paste" guna fungsi bina-semula sedia ada
+        // DUPLICATE OBJEK — serialize objek dipilih ke format objData yang SAMA dengan
+        // simpan/muat projek, lepas tu bina semula terus guna fungsi sedia ada
         // (restoreModelFromUrl/restoreImageFromUrl/restorePrimitiveFromData) dengan ID
         // baharu & kedudukan diselar sedikit, supaya salinan konsisten dengan cara projek
         // sebenar dimuat (tak perlu tulis logik berasingan).
         // ---------------------------------------------------------------
-        let copiedObjectData = null;
-
         function serializeOneObjectForCopy(m) {
             const ud = m.userData;
             return {
@@ -5301,24 +5297,14 @@
             };
         }
 
-        function copySelectedObject() {
+        async function duplicateSelectedObject() {
             if (isPreviewMode) return;
             if (!selectedModel || selectedModel === previewCameraMarker) {
-                alert('Please select an object first (the Main Camera cannot be copied).');
-                return;
-            }
-            copiedObjectData = serializeOneObjectForCopy(selectedModel);
-            setSaveStatusText('📋 Copied "' + (copiedObjectData.fileName || 'object') + '"');
-        }
-
-        async function pasteCopiedObject() {
-            if (isPreviewMode) return;
-            if (!copiedObjectData) {
-                alert('Nothing copied yet — select an object and press Ctrl+C (or the Copy button) first.');
+                alert('Please select an object first (the Main Camera cannot be duplicated).');
                 return;
             }
 
-            const objData = JSON.parse(JSON.stringify(copiedObjectData));
+            const objData = serializeOneObjectForCopy(selectedModel);
             objData.id = Date.now() + Math.random();
             // Anjak sedikit (bukan bertindih terus di atas asal) supaya nampak terus ada 2 objek.
             objData.position = [objData.position[0] + 0.4, objData.position[1], objData.position[2] + 0.4];
@@ -5347,26 +5333,23 @@
                 selectObject(newMesh);
                 recenterOrbitPivot();
                 scheduleAutoSave();
-                setSaveStatusText('📄 Pasted "' + (newMesh.userData.fileName || 'object') + '"');
+                setSaveStatusText('📄 Duplicated "' + (newMesh.userData.fileName || 'object') + '"');
             }
         }
 
-        document.getElementById('btn-copy-object').addEventListener('click', copySelectedObject);
-        document.getElementById('btn-paste-object').addEventListener('click', () => { pasteCopiedObject(); });
+        document.getElementById('btn-duplicate-object').addEventListener('click', () => { duplicateSelectedObject(); });
 
-        // Pintasan papan kekunci Ctrl+C / Ctrl+V — hanya semasa Editing (bukan Pratonton)
-        // dan BUKAN semasa menaip dalam input/textarea (elak rampas clipboard teks biasa).
+        // Pintasan papan kekunci Ctrl+D — hanya semasa Editing (bukan Pratonton) dan BUKAN
+        // semasa menaip dalam input/textarea (elak rampas fungsi lain pada medan teks).
         document.addEventListener('keydown', (event) => {
             if (isPreviewMode) return;
             const tag = (document.activeElement && document.activeElement.tagName) || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (document.activeElement && document.activeElement.isContentEditable)) return;
             if (!(event.ctrlKey || event.metaKey)) return;
 
-            if (event.key === 'c' || event.key === 'C') {
-                copySelectedObject();
-            } else if (event.key === 'v' || event.key === 'V') {
+            if (event.key === 'd' || event.key === 'D') {
                 event.preventDefault();
-                pasteCopiedObject();
+                duplicateSelectedObject();
             }
         });
 
