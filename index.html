@@ -2306,6 +2306,15 @@
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true; // mesti direndr untuk tulis depth — "Hide Object Initially" tak terpakai di sini
                 let matCount = 0;
+                mesh.traverse(node => {
+                    // frustumCulled guna bounding sphere STATIK (bind-pose untuk SkinnedMesh) —
+                    // kalau pose semasa (cth: kaki robot terbuka) dah jauh berbeza, Three.js
+                    // boleh silap anggap mesh tu "di luar pandangan" & TERUS tak render langsung
+                    // (bukan sekadar colorWrite false) — jadi depth pun tak sempat ditulis,
+                    // punca paling berkemungkinan untuk "tiada occlusion langsung". Matikan
+                    // terus untuk objek occluder supaya SENTIASA dirender/tulis depth.
+                    if (node.isMesh) node.frustumCulled = false;
+                });
                 forEachMeshMaterial(mesh, m => {
                     m.colorWrite = false;
                     m.depthWrite = true;

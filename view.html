@@ -541,6 +541,9 @@
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true;
+                mesh.traverse(node => {
+                    if (node.isMesh) node.frustumCulled = false;
+                });
                 forEachMeshMaterial(mesh, m => {
                     m.colorWrite = false;
                     m.depthWrite = true;
