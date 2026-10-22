@@ -499,10 +499,11 @@
         }
 
         // ================================================================
-        // "INVISIBLE OCCLUDER" CUTOUT — stencil-buffer based. Lihat komen penuh dalam
-        // index.html berhampiran buildPhysicsWorldFromScene(). view.html jadi versi
-        // "sentiasa Pratonton" (tiada mod Editing), jadi tiada keperluan paparan
-        // kosmetik wireframe — cutter terus invisible sepenuhnya.
+        // "INVISIBLE OCCLUDER" CUTOUT — hibrid stencil (bentuk potongan) + gating
+        // kedudukan kasar ikut kamera setiap frame (sama ada potongan aktif). Lihat
+        // komen penuh dalam index.html berhampiran buildPhysicsWorldFromScene().
+        // view.html jadi versi "sentiasa Pratonton" (tiada mod Editing), jadi tiada
+        // keperluan paparan kosmetik wireframe — cutter terus invisible sepenuhnya.
         // ================================================================
         const cutterStencilMarkMaterial = new THREE.MeshBasicMaterial({
             colorWrite: false, depthWrite: false, depthTest: false,
@@ -532,8 +533,13 @@
             });
         }
 
-        function applyCuttableStencilTest(mesh) {
+        // Sediakan (sekali sahaja, lazy) versi KLON material objek boleh-potong yang
+        // diuji terhadap stencil cutter — material sebenar (klon stencil vs asal)
+        // ditukar SETIAP FRAME oleh updateCutoutCameraGating() ikut kedudukan kamera.
+        function ensureCutoutStencilMaterials(mesh) {
+            if (mesh.userData._cutoutStencilMaterials) return;
             ensureCutoutMaterialBackup(mesh);
+            const map = new Map();
             mesh.traverse(node => {
                 if (!node.isMesh) return;
                 const orig = mesh.userData._cutoutOrigMaterials.get(node);
@@ -550,7 +556,18 @@
                     clone.stencilZPass = THREE.KeepStencilOp;
                     return clone;
                 });
-                node.material = wasArray ? patched : patched[0];
+                map.set(node, wasArray ? patched : patched[0]);
+            });
+            mesh.userData._cutoutStencilMaterials = map;
+        }
+
+        function setCuttableMaterial(mesh, shouldCut) {
+            ensureCutoutStencilMaterials(mesh);
+            mesh.traverse(node => {
+                if (!node.isMesh) return;
+                const mats = shouldCut ? mesh.userData._cutoutStencilMaterials : mesh.userData._cutoutOrigMaterials;
+                const m = mats.get(node);
+                if (m !== undefined) node.material = m;
                 node.renderOrder = 0;
             });
         }
@@ -578,9 +595,36 @@
                     applyCutterStencilMaterial(mesh);
                 } else if (mesh.userData.excludeFromCutout) {
                     restoreOriginalMaterial(mesh);
-                } else {
-                    applyCuttableStencilTest(mesh);
                 }
+            });
+            updateCutoutCameraGating();
+        }
+
+        // Dipanggil SETIAP FRAME semasa Pratonton (lihat animate()) selagi ada sekurang-
+        // kurangnya satu objek cutter — kedudukan kamera boleh berubah tiap frame, jadi
+        // gating ni kena dikira semula tiap frame. Guna kedudukan KASAR (titik tengah
+        // objek) sepanjang arah pandang kamera, bukan per-pixel — elak isu precision/
+        // z-fighting yang punca hasil "lari"/tak tentu bila dicuba dgn depth-buffer
+        // penuh sebelum ni (lihat index.html).
+        const _cutoutGatingTmpA = new THREE.Vector3();
+        const _cutoutGatingTmpB = new THREE.Vector3();
+        const _cutoutGatingTmpDir = new THREE.Vector3();
+        function updateCutoutCameraGating() {
+            const cutters = loadedModelsList.filter(m => m.userData.isCutter);
+            if (cutters.length === 0) return;
+            mainCamera.getWorldPosition(_cutoutGatingTmpA);
+            mainCamera.getWorldDirection(_cutoutGatingTmpDir);
+            const camPos = _cutoutGatingTmpA;
+            const camDir = _cutoutGatingTmpDir;
+            const viewDepth = (obj) => {
+                obj.getWorldPosition(_cutoutGatingTmpB);
+                return camDir.dot(_cutoutGatingTmpB.sub(camPos));
+            };
+            const nearestCutterDepth = Math.min(...cutters.map(viewDepth));
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return;
+                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
+                setCuttableMaterial(mesh, nearestCutterDepth < viewDepth(mesh));
             });
         }
 
@@ -2138,6 +2182,7 @@
 
             // FIZIK (graviti/pelanggaran/bounce) — tunggu content diletak dulu dalam AR.
             if (physicsActive && (!isARSession || isPlaced)) {
+                updateCutoutCameraGating();
                 syncPhysicsBodiesWithVisibility();
                 physicsWorld.step(1 / 60, delta, 10);
                 physicsBodies.forEach(pb => {

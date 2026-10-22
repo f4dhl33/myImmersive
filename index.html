@@ -2214,16 +2214,27 @@
         }
 
         // ================================================================
-        // "INVISIBLE OCCLUDER" CUTOUT — stencil-buffer based. Objek ditanda isCutter
-        // jadi "alat potong" yang sentiasa invisible dalam Pratonton (colorWrite:false)
-        // dan menandakan stencil=1 di mana-mana silhouette die (mengikut kamera, bukan
-        // kedalaman sebenar — stencilFunc Always + depthTest:false, supaya ia "memotong"
-        // objek lain tak kira objek tu di depan/belakang cutter, macam extrude-cut 2D).
-        // SECARA DEFAULT, setiap objek lain dalam scene jadi berlubang di mana-mana
-        // bertindih dengan silhouette cutter tu — KECUALI objek ditanda excludeFromCutout
-        // (immune terhadap SEMUA cutter dalam scene). Hanya aktif semasa Pratonton/VR/AR;
-        // dalam mod Editing, objek cutter dipaparkan sebagai wireframe magenta supaya
-        // senang di-select/gerakkan (lihat refreshCutterEditVisuals()).
+        // "INVISIBLE OCCLUDER" CUTOUT — hibrid stencil + semakan kedalaman kasar
+        // ikut kamera. DUA bahagian:
+        //  1) BENTUK potongan — stencil-buffer (silhouette cutter mengikut kamera,
+        //     TIADA kaitan dgn kedalaman sebenar permukaan — ini elak z-fighting
+        //     bila permukaan cutter rapat/bertindih dgn permukaan objek yg dipotong,
+        //     sesuatu yg PERNAH cuba diselesaikan dgn depth-buffer penuh [commit
+        //     5a929f8] tapi hasilnya tak stabil/"lari" sebab precision issue —
+        //     direvert balik ke stencil, commit c7fcd5d).
+        //  2) SAMA ADA potongan tu AKTIF untuk sesuatu objek — dikira SETIAP FRAME
+        //     (kamera boleh bergerak dlm Pratonton) ikut kedudukan KASAR (bukan
+        //     per-pixel) objek itu vs cutter sepanjang arah pandang kamera: kalau
+        //     cutter LEBIH JAUH dari kamera berbanding objek tu (objek di depan),
+        //     potongan terus TAK aktif utk objek tu (nampak penuh) — lihat
+        //     updateCutoutCameraGating().
+        // Objek ditanda isCutter jadi "alat potong" yang sentiasa invisible dalam
+        // Pratonton (colorWrite:false). SECARA DEFAULT, setiap objek lain dalam
+        // scene boleh berlubang di mana-mana bertindih dengan silhouette cutter tu
+        // (bila gating #2 aktif) — KECUALI objek ditanda excludeFromCutout (immune
+        // terhadap SEMUA cutter dalam scene). Hanya aktif semasa Pratonton/VR/AR;
+        // dalam mod Editing, objek cutter dipaparkan sebagai wireframe magenta
+        // supaya senang di-select/gerakkan (lihat refreshCutterEditVisuals()).
         // ================================================================
         const cutterStencilMarkMaterial = new THREE.MeshBasicMaterial({
             colorWrite: false, depthWrite: false, depthTest: false,
@@ -2273,8 +2284,14 @@
             });
         }
 
-        function applyCuttableStencilTest(mesh) {
+        // Sediakan (sekali sahaja, lazy) versi KLON material objek boleh-potong yang
+        // diuji terhadap stencil cutter — TAPI tak terus di-"pakai" di sini. Material
+        // sebenar (klon stencil vs asal) ditukar SETIAP FRAME oleh
+        // updateCutoutCameraGating() ikut gating kedalaman kasar #2 di atas.
+        function ensureCutoutStencilMaterials(mesh) {
+            if (mesh.userData._cutoutStencilMaterials) return;
             ensureCutoutMaterialBackup(mesh);
+            const map = new Map();
             mesh.traverse(node => {
                 if (!node.isMesh) return;
                 const orig = mesh.userData._cutoutOrigMaterials.get(node);
@@ -2291,7 +2308,18 @@
                     clone.stencilZPass = THREE.KeepStencilOp;
                     return clone;
                 });
-                node.material = wasArray ? patched : patched[0];
+                map.set(node, wasArray ? patched : patched[0]);
+            });
+            mesh.userData._cutoutStencilMaterials = map;
+        }
+
+        function setCuttableMaterial(mesh, shouldCut) {
+            ensureCutoutStencilMaterials(mesh);
+            mesh.traverse(node => {
+                if (!node.isMesh) return;
+                const mats = shouldCut ? mesh.userData._cutoutStencilMaterials : mesh.userData._cutoutOrigMaterials;
+                const m = mats.get(node);
+                if (m !== undefined) node.material = m;
                 node.renderOrder = 0;
             });
         }
@@ -2310,7 +2338,10 @@
         // Dipanggil setiap kali buildPhysicsWorldFromScene() jalan (masuk Pratonton/VR/AR,
         // atau scene ditukar semasa Pratonton aktif) — kesan cutout SEBENAR cuma wujud
         // di sini. Kalau tiada objek cutter langsung dalam scene, semua objek dipulihkan
-        // ke material asal (tiada overhead stencil langsung).
+        // ke material asal (tiada overhead stencil langsung). Objek boleh-potong tak
+        // terus ditetapkan material cut di sini — updateCutoutCameraGating() (dipanggil
+        // sekali di bawah, dan setiap frame dlm animate()) yang tentukan sama ada
+        // potongan aktif utk setiap objek, ikut kedudukan kamera.
         function applyCutoutEffect() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) {
@@ -2323,9 +2354,36 @@
                     applyCutterStencilMaterial(mesh);
                 } else if (mesh.userData.excludeFromCutout) {
                     restoreOriginalMaterial(mesh);
-                } else {
-                    applyCuttableStencilTest(mesh);
                 }
+            });
+            updateCutoutCameraGating();
+        }
+
+        // Dipanggil SETIAP FRAME semasa Pratonton (lihat animate()) selagi ada sekurang-
+        // kurangnya satu objek cutter dlm scene. Kedudukan kamera berubah tiap frame
+        // (orbit/gerak dlm Pratonton), jadi gating ni kena dikira semula tiap frame —
+        // bukan sekali sahaja semasa applyCutoutEffect(). Guna kedudukan KASAR (titik
+        // tengah objek), bukan per-pixel, supaya elak isu precision/z-fighting yang
+        // punca hasil "lari"/tak tentu bila dicuba dgn depth-buffer penuh (5a929f8).
+        const _cutoutGatingTmpA = new THREE.Vector3();
+        const _cutoutGatingTmpB = new THREE.Vector3();
+        const _cutoutGatingTmpDir = new THREE.Vector3();
+        function updateCutoutCameraGating() {
+            const cutters = loadedModelsList.filter(m => m.userData.isCutter);
+            if (cutters.length === 0) return;
+            mainCamera.getWorldPosition(_cutoutGatingTmpA);
+            mainCamera.getWorldDirection(_cutoutGatingTmpDir);
+            const camPos = _cutoutGatingTmpA;
+            const camDir = _cutoutGatingTmpDir;
+            const viewDepth = (obj) => {
+                obj.getWorldPosition(_cutoutGatingTmpB);
+                return camDir.dot(_cutoutGatingTmpB.sub(camPos));
+            };
+            const nearestCutterDepth = Math.min(...cutters.map(viewDepth));
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return;
+                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
+                setCuttableMaterial(mesh, nearestCutterDepth < viewDepth(mesh));
             });
         }
 
@@ -6008,6 +6066,7 @@
             // dalam AR tunggu content diletak dulu (elak simulasi "tak nampak" berjalan
             // sebelum pengguna tap-to-place).
             if (physicsActive && isPreviewMode && (!isARSession || isPlaced)) {
+                updateCutoutCameraGating();
                 syncPhysicsBodiesWithVisibility();
                 physicsWorld.step(1 / 60, delta, 10);
                 physicsBodies.forEach(pb => {
