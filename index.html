@@ -343,13 +343,6 @@
         .scene-drag-item.dragging { opacity: 0.4; cursor: grabbing; }
         .scene-drag-item.drag-over { border-top: 2px solid #007acc; background: #1a3a4a; }
         .hierarchy-item.camera-item { background: #3a2e00; border: 1px solid #ffcc00; color: #ffcc00; }
-        .hierarchy-folder-item { background: #2d2d30; border: 1px solid #3c3c3c; font-weight: bold; }
-        .hierarchy-folder-item .folder-toggle-text { cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .hierarchy-item-indented { padding-left: 20px; }
-        .obj-group-select {
-            background: #333; color: #ccc; border: 1px solid #555; border-radius: 3px;
-            font-size: 10px; max-width: 70px; margin-right: 4px;
-        }
         .hierarchy-empty-msg { color: #666; font-style: italic; padding: 5px; }
         .media-title-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; flex: 1 1 auto; min-width: 0; }
         .hierarchy-item-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -743,7 +736,6 @@
             <h3>📦 3D Objects & Camera</h3>
             <div class="section-box">
                 <ul id="hierarchy-tree-objects" class="hierarchy-list"></ul>
-                <button id="btn-new-folder" class="btn-manual-deselect">📁 New Folder</button>
                 <button id="btn-manual-deselect" class="btn-manual-deselect">⊘ Deselect Object (Deselect All)</button>
             </div>
         </div>
@@ -1969,12 +1961,6 @@
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
         const uploadedAudios = {};
-        // FOLDER (UI-ONLY) — organisasi senarai dalam panel hierarchy bawah sahaja, {id, name,
-        // collapsed}. TIADA kaitan dengan parent-child Three.js sebenar — transform/fizik/
-        // genggam objek tak terjejas langsung, cuma cara paparan senarai disusun lebih kemas
-        // bila objek dah banyak. Setiap objek simpan rujukan folder dia (kalau ada) kat
-        // userData.groupId; direset/dimuat semula sekali gus dengan sceneDataCache.
-        let sceneGroupsList = [];
         let selectedModel = null;
         let hoveredModel = null;
         let activeAudioElement = null;
@@ -2704,8 +2690,7 @@
                     rotation: [0, 0, 0],
                     interactions: []
                 },
-                objects: [],
-                groups: []
+                objects: []
             };
         }
 
@@ -2739,8 +2724,7 @@
                     bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4,
                     colliderTrim: ud.colliderTrim || null,
                     customColor: ud.customColor || null,
-                    customTextureUrl: ud.customTextureUrl || null,
-                    groupId: ud.groupId || null
+                    customTextureUrl: ud.customTextureUrl || null
                 };
             });
 
@@ -2752,8 +2736,7 @@
                     rotation: [previewCameraMarker.rotation.x, previewCameraMarker.rotation.y, previewCameraMarker.rotation.z],
                     interactions: previewCameraMarker.userData.interactions || []
                 },
-                objects: objects,
-                groups: sceneGroupsList.map(g => ({ id: g.id, name: g.name, collapsed: !!g.collapsed }))
+                objects: objects
             };
         }
 
@@ -2855,7 +2838,6 @@
                         returnToOriginalOnRelease: objData.returnToOriginalOnRelease || false,
                         bounciness: (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4,
                         colliderTrim: objData.colliderTrim || null,
-                        groupId: objData.groupId || null,
                         isRotating: false,
                         mixer: mixerInfo.mixer,
                         animAction: mixerInfo.animAction,
@@ -2893,7 +2875,6 @@
             hoveredModel = null;
             undoStack = [];
             redoStack = [];
-            sceneGroupsList = [];
         }
 
         // Papar satu set data scene (bgColor/camera/objects) ke dalam viewport semasa.
@@ -2911,8 +2892,6 @@
             }
             bgColorPicker.value = bg;
             chkArAutoPlace.checked = !!(sceneData && sceneData.arAutoPlace);
-
-            sceneGroupsList = ((sceneData && sceneData.groups) || []).map(g => ({ id: g.id, name: g.name, collapsed: !!g.collapsed }));
 
             const cam = (sceneData && sceneData.camera) || getDefaultSceneData().camera;
             previewCameraMarker.position.fromArray(cam.position);
@@ -2956,7 +2935,6 @@
             mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
             mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
             mesh.userData.colliderTrim = objData.colliderTrim || null;
-            mesh.userData.groupId = objData.groupId || null;
             if (isBasicShapeMesh(mesh)) {
                 if (objData.customColor) {
                     mesh.material.color.set(objData.customColor);
@@ -3013,7 +2991,7 @@
 
                 projectScenesMeta = data.scenes.map(s => ({ id: s.id, name: s.name || 'Scene' }));
                 data.scenes.forEach(s => {
-                    sceneDataCache[s.id] = { bgColor: s.bgColor, camera: s.camera, objects: s.objects || [], groups: s.groups || [] };
+                    sceneDataCache[s.id] = { bgColor: s.bgColor, camera: s.camera, objects: s.objects || [] };
                 });
 
                 activeSceneId = (data.activeSceneId && projectScenesMeta.some(s => s.id === data.activeSceneId))
@@ -4167,7 +4145,6 @@
                 colliderTrim: null,
                 customColor: null,
                 customTextureUrl: null,
-                groupId: null,
                 isRotating: false,
                 mixer: null,
                 animAction: null,
@@ -4239,7 +4216,6 @@
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
                         colliderTrim: null,
-                        groupId: null,
                         isRotating: false,
                         mixer: null,
                         animAction: null,
@@ -4294,7 +4270,6 @@
                     mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
                     mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
                     mesh.userData.colliderTrim = objData.colliderTrim || null;
-                    mesh.userData.groupId = objData.groupId || null;
                 }
                 return mesh;
             });
@@ -5436,8 +5411,7 @@
                 bounciness: (typeof ud.bounciness === 'number') ? ud.bounciness : 0.4,
                 colliderTrim: ud.colliderTrim ? JSON.parse(JSON.stringify(ud.colliderTrim)) : null,
                 customColor: ud.customColor || null,
-                customTextureUrl: ud.customTextureUrl || null,
-                groupId: ud.groupId || null
+                customTextureUrl: ud.customTextureUrl || null
             };
         }
 
@@ -5692,7 +5666,6 @@
                         returnToOriginalOnRelease: false,
                         bounciness: 0.4,
                         colliderTrim: null,
-                        groupId: null,
                         isRotating: false,
                         mixer: mixer,
                         animAction: animAction,
@@ -5781,113 +5754,6 @@
             fileInput.value = "";
         });
 
-        // FOLDER (UI-ONLY) — lihat nota di deklarasi sceneGroupsList di atas.
-        function createGroupFolder() {
-            const name = prompt('Folder name:', 'New Folder');
-            if (!name || !name.trim()) return;
-            sceneGroupsList.push({ id: 'grp_' + (Date.now() + Math.random()), name: name.trim(), collapsed: false });
-            renderObjectsList();
-            scheduleAutoSave();
-        }
-
-        function renameGroupFolder(groupId) {
-            const grp = sceneGroupsList.find(g => g.id === groupId);
-            if (!grp) return;
-            const name = prompt('Rename folder:', grp.name);
-            if (!name || !name.trim()) return;
-            grp.name = name.trim();
-            renderObjectsList();
-            scheduleAutoSave();
-        }
-
-        function deleteGroupFolder(groupId) {
-            const grp = sceneGroupsList.find(g => g.id === groupId);
-            if (!grp) return;
-            if (!confirm(`Delete folder "${grp.name}"?\n\nObjects inside will NOT be deleted — they'll just move back to the ungrouped list.`)) return;
-            loadedModelsList.forEach(m => { if (m.userData.groupId === groupId) m.userData.groupId = null; });
-            sceneGroupsList = sceneGroupsList.filter(g => g.id !== groupId);
-            renderObjectsList();
-            scheduleAutoSave();
-        }
-
-        function toggleGroupFolderCollapsed(groupId) {
-            const grp = sceneGroupsList.find(g => g.id === groupId);
-            if (!grp) return;
-            grp.collapsed = !grp.collapsed;
-            renderObjectsList();
-        }
-
-        function setObjectGroup(model, groupId) {
-            model.userData.groupId = groupId || null;
-            renderObjectsList();
-            scheduleAutoSave();
-        }
-
-        document.getElementById('btn-new-folder').addEventListener('click', () => createGroupFolder());
-
-        // Satu baris objek dalam panel hierarchy — dikongsi antara objek dalam folder
-        // (indented=true) dan objek tanpa folder (indented=false), supaya logik klik/
-        // rename/delete/tukar-folder tak perlu ditulis dua kali.
-        function buildObjectRow(model, indented) {
-            const li = document.createElement('li');
-            li.className = `hierarchy-item ${selectedModel === model ? 'selected' : ''}${indented ? ' hierarchy-item-indented' : ''}`;
-            li.dataset.id = model.userData.id;
-
-            const groupOptionsHtml = sceneGroupsList.map(g =>
-                `<option value="${g.id}" ${model.userData.groupId === g.id ? 'selected' : ''}>${g.name}</option>`
-            ).join('');
-
-            // Nota: togol "visible/hidden initial" (👁️) sengaja dibuang dari sini — dah
-            // ada dalam panel kanan (Physics Settings → Visibility), tak perlu duplikat.
-            li.innerHTML = `
-                <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
-                <div class="hierarchy-item-actions">
-                    ${sceneGroupsList.length > 0 ? `<select class="obj-group-select" title="Move to folder">
-                        <option value="">— No Folder —</option>
-                        ${groupOptionsHtml}
-                    </select>` : ''}
-                    <button class="btn-rename-obj" title="Rename Object">✏️</button>
-                    <button class="btn-delete-obj" title="Delete This Model">✕</button>
-                </div>
-            `;
-
-            li.addEventListener('click', (e) => {
-                e.stopPropagation();
-                selectObject(model);
-            });
-
-            const selGroup = li.querySelector('.obj-group-select');
-            if (selGroup) {
-                selGroup.addEventListener('click', (e) => e.stopPropagation());
-                selGroup.addEventListener('change', () => {
-                    setObjectGroup(model, selGroup.value || null);
-                });
-            }
-
-            const btnRename = li.querySelector('.btn-rename-obj');
-            btnRename.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const newName = prompt('New name for this object:', model.userData.fileName);
-                if (!newName || newName.trim() === '') return;
-                model.userData.fileName = newName.trim();
-                if (selectedModel === model) {
-                    document.getElementById('selected-object-name').textContent = model.userData.fileName;
-                }
-                renderObjectsList();
-                scheduleAutoSave();
-            });
-
-            const btnDel = li.querySelector('.btn-delete-obj');
-            btnDel.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const objLabel = model.userData.fileName || 'this object';
-                if (!confirm(`Delete "${objLabel}"?\n\nThis action cannot be undone.`)) return;
-                deleteObject(model);
-            });
-
-            return li;
-        }
-
         function renderObjectsList() {
             const tree = document.getElementById('hierarchy-tree-objects');
             tree.innerHTML = "";
@@ -5919,40 +5785,49 @@
 
             if (loadedModelsList.length === 0) return;
 
-            sceneGroupsList.forEach(grp => {
-                const members = loadedModelsList.filter(m => m.userData.groupId === grp.id);
+            loadedModelsList.forEach((model) => {
+                const li = document.createElement('li');
+                li.className = `hierarchy-item ${selectedModel === model ? 'selected' : ''}`;
+                li.dataset.id = model.userData.id;
 
-                const liFolder = document.createElement('li');
-                liFolder.className = 'hierarchy-item hierarchy-folder-item';
-                liFolder.innerHTML = `
-                    <span class="folder-toggle-text">${grp.collapsed ? '▶' : '▼'} 📁 ${grp.name} (${members.length})</span>
+                // Nota: togol "visible/hidden initial" (👁️) sengaja dibuang dari sini — dah
+                // ada dalam panel kanan (Physics Settings → Visibility), tak perlu duplikat.
+                li.innerHTML = `
+                    <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
                     <div class="hierarchy-item-actions">
-                        <button class="btn-rename-obj btn-rename-folder" title="Rename Folder">✏️</button>
-                        <button class="btn-delete-obj btn-delete-folder" title="Delete Folder (objects kept, just ungrouped)">✕</button>
+                        <button class="btn-rename-obj" title="Rename Object">✏️</button>
+                        <button class="btn-delete-obj" title="Delete This Model">✕</button>
                     </div>
                 `;
-                liFolder.querySelector('.folder-toggle-text').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    toggleGroupFolderCollapsed(grp.id);
-                });
-                liFolder.querySelector('.btn-rename-folder').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    renameGroupFolder(grp.id);
-                });
-                liFolder.querySelector('.btn-delete-folder').addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    deleteGroupFolder(grp.id);
-                });
-                tree.appendChild(liFolder);
 
-                if (!grp.collapsed) {
-                    members.forEach(model => tree.appendChild(buildObjectRow(model, true)));
-                }
+                li.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectObject(model);
+                });
+
+                const btnRename = li.querySelector('.btn-rename-obj');
+                btnRename.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const newName = prompt('New name for this object:', model.userData.fileName);
+                    if (!newName || newName.trim() === '') return;
+                    model.userData.fileName = newName.trim();
+                    if (selectedModel === model) {
+                        document.getElementById('selected-object-name').textContent = model.userData.fileName;
+                    }
+                    renderObjectsList();
+                    scheduleAutoSave();
+                });
+
+                const btnDel = li.querySelector('.btn-delete-obj');
+                btnDel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const objLabel = model.userData.fileName || 'this object';
+                    if (!confirm(`Delete "${objLabel}"?\n\nThis action cannot be undone.`)) return;
+                    deleteObject(model);
+                });
+
+                tree.appendChild(li);
             });
-
-            const validGroupIds = new Set(sceneGroupsList.map(g => g.id));
-            const ungrouped = loadedModelsList.filter(m => !m.userData.groupId || !validGroupIds.has(m.userData.groupId));
-            ungrouped.forEach(model => tree.appendChild(buildObjectRow(model, false)));
         }
 
         function renderMediaList() {
