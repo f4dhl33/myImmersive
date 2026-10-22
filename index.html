@@ -978,14 +978,14 @@
                         <span>👻 Invisible Occluder</span>
                     </label>
 
-                    <label class="checkbox-label checkbox-label-child" id="label-occluder-exclude-cutout" title="By default, ANY 'Visible Through Occluder' object in the scene can cut a hole through this occluder (a shared effect — see that flag's tooltip). Turn this ON to make THIS occluder immune/excluded — it keeps blocking the view normally, even where a cutout object's silhouette overlaps it. Use this when you have multiple occluders stacked and only want cuts to go through some of them (e.g. a near wall should be cut through, but a far backdrop behind it should stay solid).">
-                        <input type="checkbox" id="chk-occluder-exclude-cutout">
-                        <span>🛡️ Exclude From Cutout Shapes</span>
-                    </label>
-
-                    <label class="checkbox-label" title="Turns this object into an invisible 'cutting shape': it never renders itself, but its 2D silhouette (from the camera's current angle) punches a hole through any Invisible Occluder, extruded through all depth like a CAD cutout — revealing whatever is actually behind the occluder there (e.g. another object, or the scene background). Use it to carve a window-shaped opening into an invisible wall/bag, etc. Note the hole is shared by all occluders in the scene by default (an occluder can opt out via 'Exclude From Cutout Shapes' above), and only this object's solid/opaque parts count toward the cut shape (fully transparent sub-parts are ignored).">
+                    <label class="checkbox-label" title="Turns this object into an invisible 'cutting shape': it never renders itself, but its 2D silhouette (from the camera's current angle) punches a hole through EVERY other object in the scene by default — Invisible Occluders and normal visible objects alike — extruded through all depth like a CAD cutout, revealing whatever is actually behind it there. Objects can opt out individually with 'Exclude From Cutout Shapes' below. Only this object's solid/opaque parts count toward the cut shape (fully transparent sub-parts are ignored).">
                         <input type="checkbox" id="chk-visible-through-occluder">
                         <span>🔍 Visible Through Occluder (Cutout Shape)</span>
+                    </label>
+
+                    <label class="checkbox-label" title="Makes this object IMMUNE to any 'Visible Through Occluder' cutout shape in the scene — it keeps rendering/blocking normally even where a cutout object's silhouette overlaps it. Works on any object (Invisible Occluder or not). Use this on things that should never get a hole cut into them, while everything else stays cuttable by default.">
+                        <input type="checkbox" id="chk-occluder-exclude-cutout">
+                        <span>🛡️ Exclude From Cutout Shapes</span>
                     </label>
 
                     <label for="input-bounciness" style="margin-top:10px;" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
@@ -1843,43 +1843,30 @@
         // ia berfungsi automatik untuk APA-APA objek yang berada di belakangnya ikut sudut
         // kamera semasa, persis macam dinding sebenar.
         const chkInvisibleOccluder = document.getElementById('chk-invisible-occluder');
-        const chkOccluderExcludeCutout = document.getElementById('chk-occluder-exclude-cutout');
-        const labelOccluderExcludeCutout = document.getElementById('label-occluder-exclude-cutout');
-
-        // "Exclude From Cutout Shapes" cuma bermakna untuk objek yg jadi Invisible Occluder
-        // (tiada apa nak dikecualikan kalau objek tu bukan occluder pun) — sekat (disable,
-        // bukan force-uncheck) child ni bila parent OFF, sama pattern dgn Grabbable/Return-
-        // on-Release.
-        function syncOccluderExcludeCutoutAvailability() {
-            const enabled = chkInvisibleOccluder.checked;
-            chkOccluderExcludeCutout.disabled = !enabled;
-            labelOccluderExcludeCutout.classList.toggle('disabled', !enabled);
-        }
-
         chkInvisibleOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.invisibleOccluder = this.checked;
                 scheduleAutoSave();
             }
-            syncOccluderExcludeCutoutAvailability();
         });
 
-        // Occluder ni, secara lalai, BOLEH ditebuk oleh mana-mana objek "Visible Through
-        // Occluder" dlm scene (satu bit stencil dikongsi semua occluder). Tanda ni supaya
-        // occluder TERTENTU kekal kebal (immune) drpd sebarang potongan — cth: dinding dekat
-        // boleh ditebuk, tapi latar jauh di belakangnya kekal solid.
+        // "Visible Through Occluder" — objek bertanda ni jadi "alat potong" tak kelihatan —
+        // bentuk siluetnya menebuk LUBANG pada SEMUA objek lain dlm scene SECARA LALAI
+        // (Invisible Occluder ATAU objek biasa yg kelihatan — lihat applyOccluderBypassOverrides
+        // & applyCutoutTestToCuttableObjects, teknik stencil buffer, macam extrude-cut CAD),
+        // mendedahkan apa yang sebenarnya ada di belakangnya di situ. Objek ni sendiri TAK
+        // PERNAH dirender. Objek lain boleh kecualikan diri guna "Exclude From Cutout Shapes".
+        const chkOccluderExcludeCutout = document.getElementById('chk-occluder-exclude-cutout');
+
+        // "Exclude From Cutout Shapes" — berfungsi pada MANA-MANA objek (occluder atau
+        // objek biasa yg kelihatan), menjadikannya KEBAL drpd sebarang potongan "Visible
+        // Through Occluder", walaupun secara lalai semua objek boleh dipotong.
         chkOccluderExcludeCutout.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.occluderExcludeFromCutout = this.checked;
                 scheduleAutoSave();
             }
         });
-
-        // "Visible Through Occluder" — sisi lain pasangan dgn Invisible Occluder: objek
-        // bertanda ni jadi "alat potong" tak kelihatan — bentuk siluetnya menebuk LUBANG
-        // pada mana-mana Invisible Occluder (lihat applyOccluderBypassOverrides, teknik
-        // stencil buffer, macam extrude-cut CAD), mendedahkan apa yang sebenarnya ada di
-        // belakang occluder di situ. Objek ni sendiri TAK PERNAH dirender.
         const chkVisibleThroughOccluder = document.getElementById('chk-visible-through-occluder');
         chkVisibleThroughOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
@@ -1994,7 +1981,6 @@
         });
 
         syncReturnOnReleaseAvailability();
-        syncOccluderExcludeCutoutAvailability();
 
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
@@ -2297,6 +2283,7 @@
 
             physicsActive = true;
             applyInvisibleOccluderMaterials();
+            applyCutoutTestToCuttableObjects();
             applyOccluderBypassOverrides();
         }
 
@@ -2327,6 +2314,7 @@
             });
             physicsBodies = [];
             clearInvisibleOccluderMaterials();
+            clearCutoutTestFromCuttableObjects();
             clearOccluderBypassOverrides();
         }
 
@@ -2409,21 +2397,66 @@
             });
         }
 
+        // Objek BIASA (bukan Invisible Occluder, bukan objek VTO sendiri) kena diberi ujian
+        // stencil JUGA (klon material asal — bukan ganti terus, supaya rupa/warna/tekstur asal
+        // dikekalkan) supaya "Visible Through Occluder" boleh menebuk lubang padanya SECARA
+        // LALAI, sama macam Invisible Occluder — ini yang buat kesan potong terpakai kat
+        // SEMUA objek dlm scene by default (bukan cuma yg ditanda occluder khas), melainkan
+        // objek tu ditanda "Exclude From Cutout Shapes".
+        function applyCutoutTestToCuttableObjects() {
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.visibleThroughOccluder) return; // ni "pemotong", bukan sasaran dipotong
+                if (mesh.userData.invisibleOccluder) return; // dah ada ujian stencil sendiri (invisibleOccluderMaterial/Immune)
+                if (mesh.userData.occluderExcludeFromCutout) return; // dikecualikan drpd potongan
+                if (mesh.userData.primType === 'zone') return; // zon bukan objek fizikal/visual
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preCutoutTestMaterial) return;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    if (mats.every(m => m.transparent === true)) return; // sama logik elak bahagian hiasan tak kelihatan
+                    node.userData._preCutoutTestMaterial = node.material;
+                    const clones = mats.map(mat => {
+                        const clone = mat.clone();
+                        clone.stencilWrite = true;
+                        clone.stencilRef = 1;
+                        clone.stencilFunc = THREE.NotEqualStencilFunc;
+                        clone.stencilFuncMask = 0xff;
+                        clone.stencilFail = THREE.KeepStencilOp;
+                        clone.stencilZFail = THREE.KeepStencilOp;
+                        clone.stencilZPass = THREE.KeepStencilOp;
+                        return clone;
+                    });
+                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                });
+            });
+        }
+
+        function clearCutoutTestFromCuttableObjects() {
+            loadedModelsList.forEach(mesh => {
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preCutoutTestMaterial === undefined) return;
+                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
+                    clonedMats.forEach(m => m.dispose());
+                    node.material = node.userData._preCutoutTestMaterial;
+                    delete node.userData._preCutoutTestMaterial;
+                });
+            });
+        }
+
         // "Visible Through Occluder" — objek ni jadi "alat potong" (macam extrude-cut CAD):
         // bentuk 2D siluetnya (dari sudut kamera semasa), diekstrud merentasi SEMUA depth,
-        // menebuk LUBANG pada Invisible Occluder — objek ni SENDIRI KEKAL TAK KELIHATAN
-        // (colorWrite=false, sama macam occluder), cuma bentuknya yang penting. Guna STENCIL
-        // BUFFER:
+        // menebuk LUBANG pada SEMUA objek lain dlm scene SECARA LALAI (Invisible Occluder
+        // ATAU objek biasa yg kelihatan, lihat applyCutoutTestToCuttableObjects di atas) —
+        // objek ni SENDIRI KEKAL TAK KELIHATAN (colorWrite=false), cuma bentuknya penting.
+        // Guna STENCIL BUFFER:
         //   1. Objek ni (renderOrder sangat rendah, dilukis AWAL; depthTest=false supaya
         //      "memotong" tak kira apa jua kedudukan sebenar objek lain) tanda stencil=1 di
         //      mana2 pixel siluetnya — tiada warna/depth ditulis (ia sendiri tak nampak).
-        //   2. Occluder (lihat invisibleOccluderMaterial) diuji against stencil tu: cuma
-        //      lukis (blok depth) kalau stencil != 1 — kalau ==1, fragment occluder
-        //      digugurkan terus (tiada depth/warna ditulis = lubang).
-        //   3. Objek SEBENAR di belakang occluder (dlm lubang tu) terus lepas ujian depth
-        //      normal sebab occluder tak sempat "block" kawasan tu — itulah yg nampak.
-        // Nota: ini satu bit stencil DIKONGSI semua objek VTO & semua occluder dlm scene —
-        // tak boleh pasangkan VTO tertentu dgn SATU occluder tertentu je kalau ada byk occluder
+        //   2. Setiap objek "boleh dipotong" diuji against stencil tu: cuma lukis kalau
+        //      stencil != 1 — kalau ==1, fragment digugurkan terus (= lubang).
+        //   3. Objek SEBENAR di belakang (dlm lubang tu) terus lepas ujian depth normal
+        //      sebab objek di depannya tak sempat "block" kawasan tu — itulah yg nampak.
+        // Nota: ini satu bit stencil DIKONGSI semua objek VTO & semua sasaran dlm scene —
+        // tak boleh pasangkan VTO tertentu dgn SATU sasaran tertentu je kalau ada byk VTO
         // berlainan, tapi cukup untuk kes guna "scanner" (satu beg/dinding, satu set barang).
         const occluderBypassMaskMaterial = new THREE.MeshBasicMaterial({
             colorWrite: false,
@@ -2515,9 +2548,16 @@
             }
 
             loadedModelsList.forEach(mesh => {
-                if (!mesh.userData.invisibleOccluder && !mesh.userData.visibleThroughOccluder) return;
-                const role = mesh.userData.invisibleOccluder ? 'OCCLUDER' : 'VTO (menebuk lubang)';
-                console.log('=== ' + role + ':', mesh.userData.fileName || mesh.name, '===', mesh.userData.invisibleOccluder ? ('excludeFromCutout=' + !!mesh.userData.occluderExcludeFromCutout) : '');
+                const isVTO = !!mesh.userData.visibleThroughOccluder;
+                const isOccluder = !!mesh.userData.invisibleOccluder;
+                const hasCutoutClone = mesh.children.length >= 0 && (function() {
+                    let found = false;
+                    mesh.traverse(n => { if (n.isMesh && n.userData._preCutoutTestMaterial !== undefined) found = true; });
+                    return found;
+                })();
+                if (!isVTO && !isOccluder && !hasCutoutClone && !mesh.userData.occluderExcludeFromCutout) return;
+                const role = isVTO ? 'VTO (menebuk lubang)' : isOccluder ? 'OCCLUDER' : hasCutoutClone ? 'objek biasa (boleh dipotong, lalai)' : 'objek dikecualikan (excludeFromCutout, tapi tak kena potong sbb tak ada stencil clone)';
+                console.log('=== ' + role + ':', mesh.userData.fileName || mesh.name, '===', 'excludeFromCutout=' + !!mesh.userData.occluderExcludeFromCutout);
                 const box = new THREE.Box3().setFromObject(mesh);
                 console.log('world bounding box=', box.min, box.max);
                 let i = 0;
@@ -5343,7 +5383,6 @@
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = !!model.userData.invisibleOccluder;
             chkOccluderExcludeCutout.checked = !!model.userData.occluderExcludeFromCutout;
-            syncOccluderExcludeCutoutAvailability();
             chkVisibleThroughOccluder.checked = !!model.userData.visibleThroughOccluder;
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             syncColliderTrimInputsFromModel(model);
@@ -5385,7 +5424,6 @@
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = false;
             chkOccluderExcludeCutout.checked = false;
-            syncOccluderExcludeCutoutAvailability();
             chkVisibleThroughOccluder.checked = false;
             inputBounciness.value = 0.4;
             syncColliderTrimInputsFromModel(null);

@@ -529,6 +529,7 @@
 
             physicsActive = true;
             applyInvisibleOccluderMaterials();
+            applyCutoutTestToCuttableObjects();
             applyOccluderBypassOverrides();
         }
 
@@ -599,10 +600,53 @@
             });
         }
 
+        // Objek BIASA (bukan Invisible Occluder, bukan objek VTO sendiri) kena diberi ujian
+        // stencil JUGA (klon material asal) supaya "Visible Through Occluder" boleh menebuk
+        // lubang padanya SECARA LALAI, sama macam Invisible Occluder — lihat index.html.
+        function applyCutoutTestToCuttableObjects() {
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.visibleThroughOccluder) return;
+                if (mesh.userData.invisibleOccluder) return;
+                if (mesh.userData.occluderExcludeFromCutout) return;
+                if (mesh.userData.primType === 'zone') return;
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preCutoutTestMaterial) return;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    if (mats.every(m => m.transparent === true)) return;
+                    node.userData._preCutoutTestMaterial = node.material;
+                    const clones = mats.map(mat => {
+                        const clone = mat.clone();
+                        clone.stencilWrite = true;
+                        clone.stencilRef = 1;
+                        clone.stencilFunc = THREE.NotEqualStencilFunc;
+                        clone.stencilFuncMask = 0xff;
+                        clone.stencilFail = THREE.KeepStencilOp;
+                        clone.stencilZFail = THREE.KeepStencilOp;
+                        clone.stencilZPass = THREE.KeepStencilOp;
+                        return clone;
+                    });
+                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                });
+            });
+        }
+
+        function clearCutoutTestFromCuttableObjects() {
+            loadedModelsList.forEach(mesh => {
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preCutoutTestMaterial === undefined) return;
+                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
+                    clonedMats.forEach(m => m.dispose());
+                    node.material = node.userData._preCutoutTestMaterial;
+                    delete node.userData._preCutoutTestMaterial;
+                });
+            });
+        }
+
         // "Visible Through Occluder" — objek ni jadi "alat potong" (macam extrude-cut CAD):
         // bentuk 2D siluetnya (dari sudut kamera semasa), diekstrud merentasi SEMUA depth,
-        // menebuk LUBANG pada Invisible Occluder — objek ni SENDIRI KEKAL TAK KELIHATAN
-        // (colorWrite=false, sama macam occluder), cuma bentuknya yang penting. Lihat
+        // menebuk LUBANG pada SEMUA objek lain dlm scene SECARA LALAI (Invisible Occluder
+        // ATAU objek biasa yg kelihatan) — objek ni SENDIRI KEKAL TAK KELIHATAN
+        // (colorWrite=false), cuma bentuknya yang penting. Lihat
         // index.html untuk penjelasan penuh mekanisme (teknik stencil buffer).
         const occluderBypassMaskMaterial = new THREE.MeshBasicMaterial({
             colorWrite: false,
@@ -675,6 +719,7 @@
             });
             physicsBodies = [];
             clearInvisibleOccluderMaterials();
+            clearCutoutTestFromCuttableObjects();
             clearOccluderBypassOverrides();
         }
 
