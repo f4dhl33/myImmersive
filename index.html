@@ -2333,6 +2333,33 @@
             });
         }
 
+        // Fungsi debug — panggil daripada Console (F12) SEMASA Pratonton aktif untuk
+        // tengok nilai SEBENAR material occluder pada saat tu (window.debugOccluder()),
+        // supaya kita tahu kalau sesuatu "reset" balik nilai yang applyInvisibleOccluderMaterials()
+        // dah set, atau kalau nilai tu memang masih betul (bermakna puncanya lebih dalam
+        // daripada sekadar property material).
+        window.debugOccluder = function() {
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.invisibleOccluder) return;
+                console.log('=== OCCLUDER:', mesh.userData.fileName || mesh.name, '===');
+                console.log('mesh.visible=', mesh.visible, 'frustumCulled(root)=', mesh.frustumCulled);
+                const worldPos = new THREE.Vector3();
+                mesh.getWorldPosition(worldPos);
+                console.log('world position=', worldPos);
+                let i = 0;
+                mesh.traverse(node => {
+                    if (!node.isMesh) return;
+                    console.log('  node[' + i + ']:', node.name || '(unnamed)', 'visible=', node.visible, 'frustumCulled=', node.frustumCulled, 'renderOrder=', node.renderOrder);
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.forEach((m, j) => {
+                        console.log('    material[' + j + ']:', m.type, 'colorWrite=', m.colorWrite, 'depthWrite=', m.depthWrite, 'depthTest=', m.depthTest, 'transparent=', m.transparent, 'opacity=', m.opacity, 'visible=', m.visible, 'needsUpdate=', m.needsUpdate);
+                    });
+                    i++;
+                });
+            });
+            console.log('renderer.sortObjects=', renderer.sortObjects, 'localClippingEnabled=', renderer.localClippingEnabled);
+        };
+
         // "Show Colliders" di luar Pratonton (mod Editing biasa) — tiada dunia fizik cannon.js
         // berjalan di sini (tiada graviti/simulasi), jadi ini sekadar PAPARAN STATIK: bina
         // wireframe collider terus daripada kedudukan/putaran/saiz SEMASA setiap objek
