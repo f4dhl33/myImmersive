@@ -1143,7 +1143,9 @@
         cameraRig.add(mainCamera);
         scene.add(cameraRig);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // stencil:true diperlukan untuk kesan "Invisible Occluder" (cutout) — lihat
+        // applyCutoutEffect() berhampiran buildPhysicsWorldFromScene().
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1792,7 +1794,7 @@
         });
 
         // KOTAK SEMAK "INVISIBLE OCCLUDER" (cutter) & "EXCLUDE FROM CUTOUT SHAPES" — kesan
-        // sebenar (depth cutout) cuma berjalan semasa Pratonton (lihat applyCutoutEffect(),
+        // sebenar (stencil cutout) cuma berjalan semasa Pratonton (lihat applyCutoutEffect(),
         // dipanggil dari buildPhysicsWorldFromScene()). Dalam mod Editing, togol ni cuma
         // tukar paparan kosmetik objek "cutter" ke wireframe magenta (refreshCutterEditVisuals()).
         const chkIsCutter = document.getElementById('chk-is-cutter');
@@ -2212,29 +2214,29 @@
         }
 
         // ================================================================
-        // "INVISIBLE OCCLUDER" CUTOUT — depth-buffer based. Objek ditanda isCutter
+        // "INVISIBLE OCCLUDER" CUTOUT — stencil-buffer based. Objek ditanda isCutter
         // jadi "alat potong" yang sentiasa invisible dalam Pratonton (colorWrite:false)
-        // tapi TETAP menulis & menguji depth buffer macam objek pepejal biasa — ini
-        // secara semula jadi menghasilkan kesan "lubang" yang betul MENGIKUT KEDALAMAN
-        // SEBENAR dari sudut kamera:
-        //   kamera > OBJEK > cutter  => objek lebih hampir kamera, lulus depth test, TAK terpotong
-        //   kamera > cutter > OBJEK  => cutter lebih hampir kamera, objek gagal depth test, TERPOTONG
-        // SECARA DEFAULT, setiap objek lain dalam scene boleh terpotong begini —
-        // KECUALI objek ditanda excludeFromCutout (immune terhadap SEMUA cutter dalam
-        // scene, dicapai dengan depthTest:false supaya ia sentiasa dilukis tak kira apa
-        // sudah ada dalam depth buffer). Hanya aktif semasa Pratonton/VR/AR; dalam mod
-        // Editing, objek cutter dipaparkan sebagai wireframe magenta supaya senang
-        // di-select/gerakkan (lihat refreshCutterEditVisuals()).
+        // dan menandakan stencil=1 di mana-mana silhouette die (mengikut kamera, bukan
+        // kedalaman sebenar — stencilFunc Always + depthTest:false, supaya ia "memotong"
+        // objek lain tak kira objek tu di depan/belakang cutter, macam extrude-cut 2D).
+        // SECARA DEFAULT, setiap objek lain dalam scene jadi berlubang di mana-mana
+        // bertindih dengan silhouette cutter tu — KECUALI objek ditanda excludeFromCutout
+        // (immune terhadap SEMUA cutter dalam scene). Hanya aktif semasa Pratonton/VR/AR;
+        // dalam mod Editing, objek cutter dipaparkan sebagai wireframe magenta supaya
+        // senang di-select/gerakkan (lihat refreshCutterEditVisuals()).
         // ================================================================
-        const cutterPreviewMaterial = new THREE.MeshBasicMaterial({
-            colorWrite: false, depthWrite: true, depthTest: true, side: THREE.DoubleSide
+        const cutterStencilMarkMaterial = new THREE.MeshBasicMaterial({
+            colorWrite: false, depthWrite: false, depthTest: false,
+            stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc,
+            stencilZPass: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilFail: THREE.ReplaceStencilOp,
+            side: THREE.DoubleSide
         });
         const cutterEditModeMaterial = new THREE.MeshBasicMaterial({
             color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.6, depthTest: true
         });
 
         // Simpan material ASAL setiap sub-mesh SEKALI sahaja (lazy) supaya tukar-ganti
-        // antara keadaan (asal / wireframe edit / cutter invisible / exclude bypass) tak
+        // antara keadaan (asal / wireframe edit / stencil cutter / stencil cuttable) tak
         // pernah "lupa" rupa sebenar objek tu, tak kira berapa banyak kali ditukar.
         function ensureCutoutMaterialBackup(mesh) {
             if (mesh.userData._cutoutOrigMaterials) return;
@@ -2243,7 +2245,7 @@
             mesh.userData._cutoutOrigMaterials = map;
         }
 
-        function applyCutterPreviewMaterial(mesh) {
+        function applyCutterStencilMaterial(mesh) {
             ensureCutoutMaterialBackup(mesh);
             mesh.traverse(node => {
                 if (!node.isMesh) return;
@@ -2251,11 +2253,12 @@
                 const mats = Array.isArray(orig) ? orig : [orig];
                 // Sub-mesh dekoratif yang SEMUA materialnya transparent (cth bunga api/kesan
                 // separa-tak-nampak) sering ada geometri jauh lebih besar/lain bentuk dari
-                // silhouette sebenar objek tu — jangan biar ia sumbang kepada depth occluder,
-                // atau "lubang" yang terhasil tak sepadan dengan bentuk objek yang nampak.
+                // silhouette sebenar objek tu — jangan biar ia sumbang kepada stencil, atau
+                // "lubang" yang terhasil tak sepadan dengan bentuk objek yang nampak.
                 const allTransparent = mats.every(m => m && m.transparent === true);
                 node.visible = !allTransparent;
-                if (!allTransparent) node.material = cutterPreviewMaterial;
+                if (!allTransparent) node.material = cutterStencilMarkMaterial;
+                node.renderOrder = -1000; // cutter kena render DULU supaya stencil sedia sebelum objek lain diuji
                 node.frustumCulled = false;
             });
         }
@@ -2266,10 +2269,11 @@
                 if (!node.isMesh) return;
                 node.visible = true;
                 node.material = cutterEditModeMaterial;
+                node.renderOrder = 0;
             });
         }
 
-        function applyExcludeFromCutoutBypass(mesh) {
+        function applyCuttableStencilTest(mesh) {
             ensureCutoutMaterialBackup(mesh);
             mesh.traverse(node => {
                 if (!node.isMesh) return;
@@ -2278,10 +2282,17 @@
                 const mats = wasArray ? orig : [orig];
                 const patched = mats.map(m => {
                     const clone = m.clone();
-                    clone.depthTest = false; // abaikan depth buffer sepenuhnya -> immune dari SEMUA cutter
+                    clone.stencilWrite = true;
+                    clone.stencilFunc = THREE.NotEqualStencilFunc;
+                    clone.stencilRef = 1;
+                    clone.stencilFuncMask = 0xff;
+                    clone.stencilFail = THREE.KeepStencilOp;
+                    clone.stencilZFail = THREE.KeepStencilOp;
+                    clone.stencilZPass = THREE.KeepStencilOp;
                     return clone;
                 });
                 node.material = wasArray ? patched : patched[0];
+                node.renderOrder = 0;
             });
         }
 
@@ -2292,13 +2303,14 @@
                 const orig = mesh.userData._cutoutOrigMaterials.get(node);
                 if (orig !== undefined) node.material = orig;
                 node.visible = true;
+                node.renderOrder = 0;
             });
         }
 
         // Dipanggil setiap kali buildPhysicsWorldFromScene() jalan (masuk Pratonton/VR/AR,
         // atau scene ditukar semasa Pratonton aktif) — kesan cutout SEBENAR cuma wujud
         // di sini. Kalau tiada objek cutter langsung dalam scene, semua objek dipulihkan
-        // ke material asal (tiada overhead depth-trick langsung).
+        // ke material asal (tiada overhead stencil langsung).
         function applyCutoutEffect() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) {
@@ -2308,16 +2320,16 @@
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (mesh.userData.isCutter) {
-                    applyCutterPreviewMaterial(mesh);
+                    applyCutterStencilMaterial(mesh);
                 } else if (mesh.userData.excludeFromCutout) {
-                    applyExcludeFromCutoutBypass(mesh);
-                } else {
                     restoreOriginalMaterial(mesh);
+                } else {
+                    applyCuttableStencilTest(mesh);
                 }
             });
         }
 
-        // Dipanggil bila keluar Pratonton (teardownPhysicsWorld) — buang kesan depth-trick
+        // Dipanggil bila keluar Pratonton (teardownPhysicsWorld) — buang kesan stencil
         // sepenuhnya, dan pulihkan objek cutter ke paparan kosmetik mod Editing (wireframe).
         function clearCutoutEffect() {
             loadedModelsList.forEach(mesh => {
