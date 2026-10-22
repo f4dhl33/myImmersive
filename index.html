@@ -978,7 +978,7 @@
                         <span>👻 Invisible Occluder</span>
                     </label>
 
-                    <label class="checkbox-label" title="Makes this object ALWAYS visible, ignoring any Invisible Occluder (or anything else) that would normally block it from the camera's view. Use this on content that should stay visible through an occluder — e.g. a 'scanner' effect: a bag is set as Invisible Occluder (hides its exterior but still blocks the view of what's behind/inside it), and the items inside the bag get this flag so they show through the bag instead of being hidden by it. Note this ignores ALL depth occlusion for this object, not just one specific occluder.">
+                    <label class="checkbox-label" title="Punches a hole through any Invisible Occluder exactly where this object is actually visible from the camera's current angle — revealing whatever is truly there (normal depth-correct rendering), not necessarily this object itself. Use for a 'scanner' effect: a bag is set as Invisible Occluder (hides its exterior but still blocks the view of its contents), and the items inside get this flag so the occluder no longer hides them specifically — items still correctly hide behind any OTHER real/solid object as normal. Note the hole is shared by all occluders in the scene (can't target just one specific occluder if there are several).">
                         <input type="checkbox" id="chk-visible-through-occluder">
                         <span>🔍 Visible Through Occluder (X-Ray)</span>
                     </label>
@@ -1143,7 +1143,10 @@
         cameraRig.add(mainCamera);
         scene.add(cameraRig);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        // stencil:true (eksplisit, walaupun dah default) — diperlukan oleh kesan "Visible
+        // Through Occluder" (lihat applyOccluderBypassOverrides) yang tebuk lubang pada
+        // Invisible Occluder guna stencil buffer.
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, stencil: true });
         renderer.setSize(container.clientWidth, container.clientHeight);
         renderer.outputEncoding = THREE.sRGBEncoding;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1843,9 +1846,10 @@
         });
 
         // "Visible Through Occluder" — sisi lain pasangan dgn Invisible Occluder: objek
-        // bertanda ni abaikan ujian depth buffer sepenuhnya (lihat applyOccluderBypassOverrides),
-        // jadi ia nampak sentiasa walaupun berada di belakang Invisible Occluder (cth: barang
-        // dalam beg untuk kesan "scanner" — beg jadi occluder, barang dalam beg dapat flag ni).
+        // bertanda ni menebuk LUBANG pada mana-mana Invisible Occluder tepat di siluetnya
+        // (lihat applyOccluderBypassOverrides, teknik stencil buffer), mendedahkan apa yang
+        // sebenarnya ada di situ (cth: barang dalam beg untuk kesan "scanner" — beg jadi
+        // occluder, barang dalam beg dapat flag ni supaya tak disembunyikan oleh beg tu).
         const chkVisibleThroughOccluder = document.getElementById('chk-visible-through-occluder');
         chkVisibleThroughOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
@@ -2316,11 +2320,23 @@
         // transparent=true asal pada bahagian kecil "Fire_0" dalam mech_drone.glb, yang
         // didapati tak berubah betul-betul walaupun property ditukar terus secara JS).
         // MeshBasicMaterial mudah ni dijamin tiada apa-apa dari fail asal boleh ganggu.
+        // Sifat stencil di bawah ni membenarkan objek "Visible Through Occluder" MENEBUK
+        // LUBANG pada occluder ni (lihat applyOccluderBypassOverrides) — occluder cuma lukis
+        // (blok depth) di mana stencil buffer TIDAK ditanda oleh objek tu. Tak beri kesan
+        // langsung kalau tiada objek VTO pun (buffer kekal 0 di mana-mana, ujian != 1 sentiasa
+        // lulus, sama macam sebelum ni).
         const invisibleOccluderMaterial = new THREE.MeshBasicMaterial({
             colorWrite: false,
             depthWrite: true,
             depthTest: true,
-            transparent: false
+            transparent: false,
+            stencilWrite: true,
+            stencilRef: 1,
+            stencilFunc: THREE.NotEqualStencilFunc,
+            stencilFuncMask: 0xff,
+            stencilFail: THREE.KeepStencilOp,
+            stencilZFail: THREE.KeepStencilOp,
+            stencilZPass: THREE.KeepStencilOp
         });
 
         function applyInvisibleOccluderMaterials() {
@@ -2351,14 +2367,24 @@
             });
         }
 
-        // "Visible Through Occluder" (kesan scanner/X-ray) — objek bertanda ni perlu kekal
-        // kelihatan WALAUPUN berada di belakang sesuatu Invisible Occluder (cth: barang dalam
-        // beg, beg tu sendiri occluder). Ujian depth buffer biasa tak boleh "kecualikan" satu
-        // occluder tertentu je, jadi penyelesaian paling ringkas & boleh harap: objek ni
-        // depthTest=false DAN depthWrite=false (klon material, bukan ubah terus — elak kesan
-        // sampingan kalau material dikongsi dgn submesh lain) + renderOrder tinggi supaya
-        // dilukis PALING AKHIR, dan jadi SENTIASA kelihatan tanpa mengira apa-apa di hadapannya
-        // (bukan cuma occluder tertentu) — cukup untuk kes guna seperti "scanner" di atas.
+        // "Visible Through Occluder" (kesan scanner/X-ray) — TEBUK LUBANG pada Invisible
+        // Occluder tepat di siluet objek ni (dari sudut kamera semasa), dedahkan apa yang
+        // SEBENARNYA ada di belakang occluder di situ (ikut depth sebenar objek lain — BUKAN
+        // objek ni sendiri "dipaksa" sentiasa di atas). Guna STENCIL BUFFER:
+        //   1. Objek ni (renderOrder sangat rendah, dilukis AWAL) tanda stencil=1 di mana2
+        //      pixel yang ia LULUS ujian depth normalnya sendiri (i.e. memang kelihatan dr
+        //      situ) — rupa/depth/warna objek ni sendiri TIDAK diubah langsung.
+        //      stencilZFail=KEEP bermakna kalau ada objek lain yg lagi dekat dah lukis situ
+        //      dulu, stencil TAK ditanda (betul — tiada sebab nak tebuk lubang di situ pun).
+        //   2. Occluder (lihat invisibleOccluderMaterial) diuji against stencil tu: cuma
+        //      lukis (blok depth) kalau stencil != 1 — kalau ==1 (ada objek VTO di situ),
+        //      fragment occluder digugurkan terus (tiada depth/warna ditulis = lubang).
+        //   3. Objek SEBENAR di belakang occluder (dlm lubang tu) terus lepas ujian depth
+        //      normal sebab occluder tak sempat "block" kawasan tu — ini yg nampak, bukan
+        //      semestinya objek VTO ni sendiri.
+        // Nota: ini satu bit stencil DIKONGSI semua objek VTO & semua occluder dlm scene —
+        // tak boleh pasangkan VTO tertentu dgn SATU occluder tertentu je kalau ada byk occluder
+        // berlainan, tapi cukup untuk kes guna "scanner" (satu beg/dinding, satu set barang).
         function applyOccluderBypassOverrides() {
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.visibleThroughOccluder) return;
@@ -2366,15 +2392,21 @@
                     if (!node.isMesh || node.userData._preBypassMaterial) return;
                     node.userData._preBypassMaterial = node.material;
                     node.userData._preBypassRenderOrder = node.renderOrder;
+                    node.userData._preBypassFrustumCulled = node.frustumCulled;
                     const mats = Array.isArray(node.material) ? node.material : [node.material];
                     const clones = mats.map(mat => {
                         const clone = mat.clone();
-                        clone.depthTest = false;
-                        clone.depthWrite = false;
+                        clone.stencilWrite = true;
+                        clone.stencilRef = 1;
+                        clone.stencilFunc = THREE.AlwaysStencilFunc;
+                        clone.stencilFail = THREE.KeepStencilOp;
+                        clone.stencilZFail = THREE.KeepStencilOp;
+                        clone.stencilZPass = THREE.ReplaceStencilOp;
                         return clone;
                     });
                     node.material = Array.isArray(node.material) ? clones : clones[0];
-                    node.renderOrder = 9999;
+                    node.renderOrder = -10; // mesti lukis SEBELUM occluder supaya stencil sedia untuk diuji
+                    node.frustumCulled = false; // elak bounding sphere bind-pose stale (SkinnedMesh) buat ia tiba2 tak dilukis
                 });
             });
         }
@@ -2387,8 +2419,10 @@
                     clonedMats.forEach(m => m.dispose());
                     node.material = node.userData._preBypassMaterial;
                     node.renderOrder = node.userData._preBypassRenderOrder || 0;
+                    node.frustumCulled = node.userData._preBypassFrustumCulled;
                     delete node.userData._preBypassMaterial;
                     delete node.userData._preBypassRenderOrder;
+                    delete node.userData._preBypassFrustumCulled;
                 });
             });
         }
