@@ -2305,12 +2305,15 @@
             loadedModelsList.forEach(mesh => {
                 if (!mesh.userData.invisibleOccluder) return;
                 mesh.visible = true; // mesti direndr untuk tulis depth — "Hide Object Initially" tak terpakai di sini
+                let matCount = 0;
                 forEachMeshMaterial(mesh, m => {
                     m.colorWrite = false;
                     m.depthWrite = true;
                     m.depthTest = true;
                     m.transparent = false; // paksa masuk laluan opaque supaya urutan depth tepat
+                    matCount++;
                 });
+                console.log('[Occluder] "' + (mesh.userData.fileName || mesh.name) + '" visible=' + mesh.visible + ' materialsTouched=' + matCount);
             });
         }
 
