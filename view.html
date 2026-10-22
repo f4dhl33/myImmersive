@@ -599,10 +599,16 @@
                 if (!mesh.userData.visibleThroughOccluder) return;
                 mesh.traverse(node => {
                     if (!node.isMesh || node.userData._preBypassMaterial) return;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    // Bahagian yang "transparent" asalnya (cth: kon kesan hiasan opacity
+                    // rendah yg dibakar dlm sesetengah fail GLB) sengaja TAK sumbang ke
+                    // siluet stencil — kalau tidak, bentuk lubang ikut geometri bahagian
+                    // hiasan tak kelihatan tu (selalunya jauh lebih besar/pelik drpd bentuk
+                    // SEBENAR yg pengguna nampak), bukan bentuk badan sebenar objek.
+                    if (mats.every(m => m.transparent === true)) return;
                     node.userData._preBypassMaterial = node.material;
                     node.userData._preBypassRenderOrder = node.renderOrder;
                     node.userData._preBypassFrustumCulled = node.frustumCulled;
-                    const mats = Array.isArray(node.material) ? node.material : [node.material];
                     const clones = mats.map(mat => {
                         const clone = mat.clone();
                         clone.stencilWrite = true;
