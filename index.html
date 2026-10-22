@@ -1822,6 +1822,13 @@
                 scheduleAutoSave();
             }
             syncReturnOnReleaseAvailability();
+            // Senarai "Objek Dipantau (Boleh Diambil)" untuk trigger onPlaceInZone perlu
+            // segar semula serta-merta — ia cuma dibina sekali bila trigger DITUKAR ke
+            // onPlaceInZone, jadi togol Grabbable SELEPAS itu (pada objek lain) tak pernah
+            // nampak dalam senarai tanpa refresh ni.
+            if (document.getElementById('select-trigger').value === 'onPlaceInZone') {
+                updateWatchObjectDropdown();
+            }
         });
 
         const chkSolid = document.getElementById('chk-solid');
@@ -5175,6 +5182,11 @@
 
             selectAction.value = 'popInfo';
             selectAction.dispatchEvent(new Event('change'));
+            // Segar semula senarai "Objek Dipantau" kalau trigger kekal di onPlaceInZone
+            // merentasi tukar pilihan objek (cth: pilih Zon lain untuk konfigurasi).
+            if (document.getElementById('select-trigger').value === 'onPlaceInZone') {
+                updateWatchObjectDropdown();
+            }
             updateHierarchyUISelection();
             renderSavedActionsList();
         }
