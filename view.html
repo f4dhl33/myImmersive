@@ -526,6 +526,7 @@
 
             physicsActive = true;
             applyInvisibleOccluderMaterials();
+            applyOccluderBypassOverrides();
         }
 
         function forEachMeshMaterial(root, fn) {
@@ -572,6 +573,45 @@
             });
         }
 
+        // "Visible Through Occluder" (kesan scanner/X-ray) — objek bertanda ni perlu kekal
+        // kelihatan WALAUPUN berada di belakang sesuatu Invisible Occluder (cth: barang dalam
+        // beg, beg tu sendiri occluder). Klon material (bukan ubah terus, elak kesan sampingan
+        // kalau material dikongsi dgn submesh lain) dgn depthTest=false & depthWrite=false +
+        // renderOrder tinggi supaya dilukis PALING AKHIR dan jadi SENTIASA kelihatan.
+        function applyOccluderBypassOverrides() {
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.visibleThroughOccluder) return;
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preBypassMaterial) return;
+                    node.userData._preBypassMaterial = node.material;
+                    node.userData._preBypassRenderOrder = node.renderOrder;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    const clones = mats.map(mat => {
+                        const clone = mat.clone();
+                        clone.depthTest = false;
+                        clone.depthWrite = false;
+                        return clone;
+                    });
+                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                    node.renderOrder = 9999;
+                });
+            });
+        }
+
+        function clearOccluderBypassOverrides() {
+            loadedModelsList.forEach(mesh => {
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preBypassMaterial === undefined) return;
+                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
+                    clonedMats.forEach(m => m.dispose());
+                    node.material = node.userData._preBypassMaterial;
+                    node.renderOrder = node.userData._preBypassRenderOrder || 0;
+                    delete node.userData._preBypassMaterial;
+                    delete node.userData._preBypassRenderOrder;
+                });
+            });
+        }
+
         function syncPhysicsBodiesWithVisibility() {
             physicsBodies.forEach(pb => {
                 const shouldBeInWorld = shouldColliderBeActive(pb.mesh);
@@ -593,6 +633,7 @@
             });
             physicsBodies = [];
             clearInvisibleOccluderMaterials();
+            clearOccluderBypassOverrides();
         }
 
         // RETICLE (penunjuk tap-to-place semasa AR)
@@ -710,6 +751,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
                         // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
                         // BUKAN objData.initialPosition (itu posisi masa objek PERTAMA kali
@@ -775,6 +817,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         initialPosition: new THREE.Vector3().fromArray(objData.position),
                         initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
@@ -956,6 +999,7 @@
                 initialVisibility: objData.initialVisibility,
                 colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                 invisibleOccluder: objData.invisibleOccluder || false,
+                visibleThroughOccluder: objData.visibleThroughOccluder || false,
                 initialPosition: new THREE.Vector3().fromArray(objData.position),
                 initialRotation: new THREE.Euler().fromArray(objData.rotation),
                 isGrabbable: objData.isGrabbable || false,

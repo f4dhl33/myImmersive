@@ -978,6 +978,11 @@
                         <span>👻 Invisible Occluder</span>
                     </label>
 
+                    <label class="checkbox-label" title="Makes this object ALWAYS visible, ignoring any Invisible Occluder (or anything else) that would normally block it from the camera's view. Use this on content that should stay visible through an occluder — e.g. a 'scanner' effect: a bag is set as Invisible Occluder (hides its exterior but still blocks the view of what's behind/inside it), and the items inside the bag get this flag so they show through the bag instead of being hidden by it. Note this ignores ALL depth occlusion for this object, not just one specific occluder.">
+                        <input type="checkbox" id="chk-visible-through-occluder">
+                        <span>🔍 Visible Through Occluder (X-Ray)</span>
+                    </label>
+
                     <label for="input-bounciness" style="margin-top:10px;" title="How much this object bounces on physics collisions (applies whether it's Grabbable, Solid, or both). 0 = no bounce at all, 1 = near-perfect bounce.">⚡ Bounce / Restitution (0–1):</label>
                     <input type="number" id="input-bounciness" min="0" max="1" step="0.05" value="0.4">
 
@@ -1837,6 +1842,18 @@
             }
         });
 
+        // "Visible Through Occluder" — sisi lain pasangan dgn Invisible Occluder: objek
+        // bertanda ni abaikan ujian depth buffer sepenuhnya (lihat applyOccluderBypassOverrides),
+        // jadi ia nampak sentiasa walaupun berada di belakang Invisible Occluder (cth: barang
+        // dalam beg untuk kesan "scanner" — beg jadi occluder, barang dalam beg dapat flag ni).
+        const chkVisibleThroughOccluder = document.getElementById('chk-visible-through-occluder');
+        chkVisibleThroughOccluder.addEventListener('change', function() {
+            if (selectedModel && selectedModel !== previewCameraMarker) {
+                selectedModel.userData.visibleThroughOccluder = this.checked;
+                scheduleAutoSave();
+            }
+        });
+
         const inputBounciness = document.getElementById('input-bounciness');
         inputBounciness.addEventListener('change', function() {
             let val = parseFloat(this.value);
@@ -2245,6 +2262,7 @@
 
             physicsActive = true;
             applyInvisibleOccluderMaterials();
+            applyOccluderBypassOverrides();
         }
 
         // Disegerakkan setiap bingkai SEBELUM physicsWorld.step() — tambah/keluarkan badan
@@ -2274,6 +2292,7 @@
             });
             physicsBodies = [];
             clearInvisibleOccluderMaterials();
+            clearOccluderBypassOverrides();
         }
 
         // "INVISIBLE OCCLUDER" — occlusion 3D SEBENAR (bukan satah rata tak terhad macam
@@ -2328,6 +2347,48 @@
                         node.material = node.userData._preOccluderMaterial;
                         delete node.userData._preOccluderMaterial;
                     }
+                });
+            });
+        }
+
+        // "Visible Through Occluder" (kesan scanner/X-ray) — objek bertanda ni perlu kekal
+        // kelihatan WALAUPUN berada di belakang sesuatu Invisible Occluder (cth: barang dalam
+        // beg, beg tu sendiri occluder). Ujian depth buffer biasa tak boleh "kecualikan" satu
+        // occluder tertentu je, jadi penyelesaian paling ringkas & boleh harap: objek ni
+        // depthTest=false DAN depthWrite=false (klon material, bukan ubah terus — elak kesan
+        // sampingan kalau material dikongsi dgn submesh lain) + renderOrder tinggi supaya
+        // dilukis PALING AKHIR, dan jadi SENTIASA kelihatan tanpa mengira apa-apa di hadapannya
+        // (bukan cuma occluder tertentu) — cukup untuk kes guna seperti "scanner" di atas.
+        function applyOccluderBypassOverrides() {
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.visibleThroughOccluder) return;
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preBypassMaterial) return;
+                    node.userData._preBypassMaterial = node.material;
+                    node.userData._preBypassRenderOrder = node.renderOrder;
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    const clones = mats.map(mat => {
+                        const clone = mat.clone();
+                        clone.depthTest = false;
+                        clone.depthWrite = false;
+                        return clone;
+                    });
+                    node.material = Array.isArray(node.material) ? clones : clones[0];
+                    node.renderOrder = 9999;
+                });
+            });
+        }
+
+        function clearOccluderBypassOverrides() {
+            loadedModelsList.forEach(mesh => {
+                mesh.traverse(node => {
+                    if (!node.isMesh || node.userData._preBypassMaterial === undefined) return;
+                    const clonedMats = Array.isArray(node.material) ? node.material : [node.material];
+                    clonedMats.forEach(m => m.dispose());
+                    node.material = node.userData._preBypassMaterial;
+                    node.renderOrder = node.userData._preBypassRenderOrder || 0;
+                    delete node.userData._preBypassMaterial;
+                    delete node.userData._preBypassRenderOrder;
                 });
             });
         }
@@ -2588,6 +2649,7 @@
                     initialVisibility: ud.initialVisibility,
                     colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
                     invisibleOccluder: ud.invisibleOccluder || false,
+                    visibleThroughOccluder: ud.visibleThroughOccluder || false,
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
@@ -2702,6 +2764,7 @@
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
                         invisibleOccluder: objData.invisibleOccluder || false,
+                        visibleThroughOccluder: objData.visibleThroughOccluder || false,
                         interactions: objData.interactions || [],
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
@@ -2797,6 +2860,7 @@
             mesh.userData.initialVisibility = objData.initialVisibility;
             mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
             mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
+            mesh.userData.visibleThroughOccluder = objData.visibleThroughOccluder || false;
             mesh.userData.interactions = objData.interactions || [];
             mesh.userData.isGrabbable = objData.isGrabbable || false;
             mesh.userData.isSolid = objData.isSolid || false;
@@ -4004,6 +4068,7 @@
                 initialVisibility: type !== 'zone',
                 colliderActiveWhenHidden: false,
                 invisibleOccluder: false,
+                visibleThroughOccluder: false,
                 interactions: [],
                 isGrabbable: false,
                 isSolid: false,
@@ -4076,6 +4141,7 @@
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
                         invisibleOccluder: false,
+                        visibleThroughOccluder: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,
@@ -4129,6 +4195,7 @@
                     mesh.userData.initialVisibility = objData.initialVisibility;
                     mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
                     mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
+                    mesh.userData.visibleThroughOccluder = objData.visibleThroughOccluder || false;
                     mesh.userData.interactions = objData.interactions || [];
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
                     mesh.userData.isSolid = objData.isSolid || false;
@@ -5156,6 +5223,7 @@
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = !!model.userData.invisibleOccluder;
+            chkVisibleThroughOccluder.checked = !!model.userData.visibleThroughOccluder;
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             syncColliderTrimInputsFromModel(model);
             syncShapeAppearanceFromModel(model);
@@ -5195,6 +5263,7 @@
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
             chkInvisibleOccluder.checked = false;
+            chkVisibleThroughOccluder.checked = false;
             inputBounciness.value = 0.4;
             syncColliderTrimInputsFromModel(null);
             syncShapeAppearanceFromModel(null);
@@ -5266,6 +5335,7 @@
                 initialVisibility: ud.initialVisibility,
                 colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
                 invisibleOccluder: ud.invisibleOccluder || false,
+                visibleThroughOccluder: ud.visibleThroughOccluder || false,
                 interactions: JSON.parse(JSON.stringify(ud.interactions || [])),
                 isGrabbable: ud.isGrabbable || false,
                 isSolid: ud.isSolid || false,
@@ -5520,6 +5590,7 @@
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
                         invisibleOccluder: false,
+                        visibleThroughOccluder: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,
