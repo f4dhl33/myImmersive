@@ -2454,6 +2454,37 @@
             console.log('renderer.sortObjects=', renderer.sortObjects, 'localClippingEnabled=', renderer.localClippingEnabled);
         };
 
+        // Fungsi debug untuk "Visible Through Occluder" (teknik stencil) — panggil daripada
+        // Console (F12) SEMASA Pratonton aktif: window.debugVTO(). Semak SEMUANYA yang perlu
+        // untuk kesan ni berfungsi: context WebGL betul2 ada stencil buffer ke tidak, flag
+        // userData pada setiap objek, nilai stencil/renderOrder SEBENAR pada setiap material,
+        // dan bounding box dunia kedua-dua jenis objek (untuk semak sama ada ia bertindih).
+        window.debugVTO = function() {
+            const ctxAttrs = renderer.getContext().getContextAttributes();
+            console.log('=== WebGL context stencil available? ===', ctxAttrs.stencil, ctxAttrs);
+            if (!ctxAttrs.stencil) {
+                console.warn('STENCIL BUFFER TIADA dalam context WebGL ni — kesan Visible Through Occluder TAK AKAN berfungsi langsung (occluder akan sentiasa block macam biasa, tiada lubang). Ini puncanya kalau begitu.');
+            }
+
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.invisibleOccluder && !mesh.userData.visibleThroughOccluder) return;
+                const role = mesh.userData.invisibleOccluder ? 'OCCLUDER' : 'VTO (menebuk lubang)';
+                console.log('=== ' + role + ':', mesh.userData.fileName || mesh.name, '===');
+                const box = new THREE.Box3().setFromObject(mesh);
+                console.log('world bounding box=', box.min, box.max);
+                let i = 0;
+                mesh.traverse(node => {
+                    if (!node.isMesh) return;
+                    console.log('  node[' + i + ']:', node.name || '(unnamed)', 'renderOrder=', node.renderOrder, 'frustumCulled=', node.frustumCulled);
+                    const mats = Array.isArray(node.material) ? node.material : [node.material];
+                    mats.forEach((m, j) => {
+                        console.log('    material[' + j + ']:', m.type, 'stencilWrite=', m.stencilWrite, 'stencilFunc=', m.stencilFunc, 'stencilRef=', m.stencilRef, 'stencilZPass=', m.stencilZPass, 'colorWrite=', m.colorWrite, 'depthWrite=', m.depthWrite, 'depthTest=', m.depthTest);
+                    });
+                    i++;
+                });
+            });
+        };
+
         // "Show Colliders" di luar Pratonton (mod Editing biasa) — tiada dunia fizik cannon.js
         // berjalan di sini (tiada graviti/simulasi), jadi ini sekadar PAPARAN STATIK: bina
         // wireframe collider terus daripada kedudukan/putaran/saiz SEMASA setiap objek
