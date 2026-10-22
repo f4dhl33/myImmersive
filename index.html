@@ -984,18 +984,12 @@
                     </div>
 
                     <div class="collapsible subgroup collapsed" data-key="clipplane">
-                        <div class="collapsible-header subgroup-header">✂️ Visual Occlusion <span class="toggle-arrow">▾</span></div>
+                        <div class="collapsible-header subgroup-header">👻 Visual Occlusion <span class="toggle-arrow">▾</span></div>
                         <div class="collapsible-body subgroup-body">
-                            <label class="checkbox-label" title="Treat this object's flat face as a cutting plane — ONLY the objects you pick below get visually clipped (not rendered) past that plane during Preview/AR/VR; everything else in the scene is unaffected. Typically used on an invisible wall (Hide Object Initially + Keep Collider Active While Hidden) matching a real-world wall, so specific virtual content (e.g. a waypoint path) doesn't visibly poke through it. The clip direction follows this object's local forward (+Z) axis — use 'Flip Direction' below if content is clipped on the wrong side.">
-                                <input type="checkbox" id="chk-clip-plane">
-                                <span>✂️ Clip Objects Behind This (Occlusion Plane)</span>
+                            <label class="checkbox-label" title="Keeps this object in the scene (invisible — no color drawn) but still writes to the depth buffer, so it blocks the view of anything behind it from the camera's current angle, exactly like a real solid object would — true 3D occlusion that follows this object's actual shape, not a flat cutting plane. As you move/rotate the camera, different parts of whatever is behind it become visible or hidden, same as a real wall. Typically used on a wall matching a real-world wall in AR, so content positioned behind it (e.g. part of a waypoint path) is naturally hidden. IMPORTANT: leave 'Hide Object Initially' UNCHECKED for this object — this flag already makes it invisible on its own; 'Hide Object Initially' would remove it from rendering entirely, which stops the occlusion effect from working.">
+                                <input type="checkbox" id="chk-invisible-occluder">
+                                <span>👻 Invisible Occluder (blocks view of objects behind it)</span>
                             </label>
-                            <label class="checkbox-label checkbox-label-child" id="label-clip-plane-flip" title="Flip which side of this object's face is considered 'behind' for clipping purposes.">
-                                <input type="checkbox" id="chk-clip-plane-flip">
-                                <span>↕️ Flip Clip Direction</span>
-                            </label>
-                            <label for="select-clip-targets" class="checkbox-label-child" id="label-clip-targets" title="Only these objects get clipped by this wall — everything else in the scene renders normally regardless of which side of the plane it's on.">Objects to Clip (none selected = no effect):</label>
-                            <select id="select-clip-targets" multiple size="4" class="checkbox-label-child"></select>
                         </div>
                     </div>
 
@@ -1838,66 +1832,16 @@
             }
         });
 
-        // "Flip Clip Direction" & senarai sasaran cuma bermakna bila objek ni ditanda
-        // sebagai satah pemotong — sekat (bukan uncheck/kosongkan) child bila parent OFF,
-        // sama corak dengan Return on Release/Grabbable.
-        const chkClipPlane = document.getElementById('chk-clip-plane');
-        const chkClipPlaneFlip = document.getElementById('chk-clip-plane-flip');
-        const labelClipPlaneFlip = document.getElementById('label-clip-plane-flip');
-        const selectClipTargets = document.getElementById('select-clip-targets');
-        const labelClipTargets = document.getElementById('label-clip-targets');
-
-        function syncClipPlaneFlipAvailability() {
-            const enabled = chkClipPlane.checked;
-            chkClipPlaneFlip.disabled = !enabled;
-            labelClipPlaneFlip.classList.toggle('disabled', !enabled);
-            selectClipTargets.disabled = !enabled;
-            labelClipTargets.classList.toggle('disabled', !enabled);
-        }
-
-        // Senarai OBJEK LAIN (bukan dinding/satah pemotong itu sendiri) yang boleh dipilih
-        // untuk terkena potong — TIADA pilihan secara lalai (kosong = tiada kesan sama
-        // sekali), elak kejutan "semua objek terpotong" kalau pengguna tak sengaja aktifkan.
-        function updateClipTargetsDropdown(model) {
-            selectClipTargets.innerHTML = "";
-            const selectedIds = (model && Array.isArray(model.userData.clipTargetObjectIds)) ? model.userData.clipTargetObjectIds : [];
-
-            loadedModelsList.forEach(obj => {
-                if (model && obj.userData.id === model.userData.id) return; // dinding tak clip dirinya
-                const opt = document.createElement('option');
-                opt.value = obj.userData.id;
-                opt.textContent = `📦 ${obj.userData.fileName}`;
-                opt.selected = selectedIds.some(id => id == obj.userData.id);
-                selectClipTargets.appendChild(opt);
-            });
-
-            if (selectClipTargets.options.length === 0) {
-                const opt = document.createElement('option');
-                opt.value = "";
-                opt.textContent = "-- No other objects in this scene --";
-                opt.disabled = true;
-                selectClipTargets.appendChild(opt);
-            }
-        }
-
-        chkClipPlane.addEventListener('change', function() {
+        // "Invisible Occluder" — objek kekal DIRENDER (mesh.visible mesti true) tapi
+        // material dia colorWrite=false (lihat applyInvisibleOccluderMaterials), jadi ia
+        // tulis depth buffer tanpa lukis warna — occlusion 3D SEBENAR ikut bentuk/kedalaman
+        // objek tu, bukan satah rata tak terhad. Tiada "flip"/senarai sasaran diperlukan —
+        // ia berfungsi automatik untuk APA-APA objek yang berada di belakangnya ikut sudut
+        // kamera semasa, persis macam dinding sebenar.
+        const chkInvisibleOccluder = document.getElementById('chk-invisible-occluder');
+        chkInvisibleOccluder.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
-                selectedModel.userData.useAsClipPlane = this.checked;
-                scheduleAutoSave();
-            }
-            syncClipPlaneFlipAvailability();
-        });
-
-        chkClipPlaneFlip.addEventListener('change', function() {
-            if (selectedModel && selectedModel !== previewCameraMarker) {
-                selectedModel.userData.clipPlaneFlip = this.checked;
-                scheduleAutoSave();
-            }
-        });
-
-        selectClipTargets.addEventListener('change', function() {
-            if (selectedModel && selectedModel !== previewCameraMarker) {
-                selectedModel.userData.clipTargetObjectIds = Array.from(selectClipTargets.selectedOptions).map(opt => opt.value).filter(v => v !== "");
+                selectedModel.userData.invisibleOccluder = this.checked;
                 scheduleAutoSave();
             }
         });
@@ -2008,7 +1952,6 @@
         });
 
         syncReturnOnReleaseAvailability();
-        syncClipPlaneFlipAvailability();
 
         // STRUKTUR ARRAY OBJEK & AUDIO
         const loadedModelsList = [];
@@ -2310,7 +2253,7 @@
             });
 
             physicsActive = true;
-            rebuildVisualClipPlanes();
+            applyInvisibleOccluderMaterials();
         }
 
         // Disegerakkan setiap bingkai SEBELUM physicsWorld.step() — tambah/keluarkan badan
@@ -2339,16 +2282,16 @@
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
-            clearVisualClipPlanes();
+            clearInvisibleOccluderMaterials();
         }
 
-        // SATAH PEMOTONG VISUAL ("Clip Objects Behind This") — objek yang ditanda
-        // useAsClipPlane jadi sumber satah pemotong WebGL (THREE.Plane): mana-mana objek
-        // LAIN yang berada di sebelah "belakang" satah tu (ikut arah +Z tempatan objek
-        // sumber, boleh dibalik dengan clipPlaneFlip) tak dirender past satah tu. Guna untuk
-        // dinding tak kelihatan (Hide Object Initially + Keep Collider Active While Hidden)
-        // yang sepadan dengan dinding sebenar dalam AR, supaya kandungan maya tak "tembus"
-        // kelihatan melalui dinding tu.
+        // "INVISIBLE OCCLUDER" — occlusion 3D SEBENAR (bukan satah rata tak terhad macam
+        // percubaan clipping-plane sebelum ni, yang memotong SEMUA objek dalam scene tanpa
+        // mengira bentuk/kedudukan sebenar). Objek bertanda invisibleOccluder KEKAL dirender
+        // (mesh.visible MESTI true) tapi colorWrite=false — jadi ia tulis depth buffer
+        // (menyekat apa yang di belakangnya ikut sudut kamera semasa, persis bentuk 3D
+        // sebenar objek tu) tanpa lukis sebarang warna/piksel kelihatan. Ini ialah teknik
+        // standard "depth-only occluder" dalam grafik 3D.
         function forEachMeshMaterial(root, fn) {
             root.traverse(node => {
                 if (node.isMesh && node.material) {
@@ -2358,45 +2301,24 @@
             });
         }
 
-        // Setiap dinding/satah pemotong HANYA kena objek yang dipilih sendiri dalam
-        // "Objects to Clip" — BUKAN semua objek dalam scene (itu punca "semua objek
-        // terpotong" yang dilaporkan sebelum ni).
-        function rebuildVisualClipPlanes() {
-            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
-
-            const worldPos = new THREE.Vector3();
-            const worldQuat = new THREE.Quaternion();
-            const normal = new THREE.Vector3();
-
-            const wallEntries = [];
-            loadedModelsList.forEach(wallMesh => {
-                if (!wallMesh.userData.useAsClipPlane) return;
-                const targetIds = Array.isArray(wallMesh.userData.clipTargetObjectIds) ? wallMesh.userData.clipTargetObjectIds : [];
-                if (targetIds.length === 0) return; // tiada sasaran dipilih = tiada kesan langsung
-
-                wallMesh.getWorldPosition(worldPos);
-                wallMesh.getWorldQuaternion(worldQuat);
-                normal.set(0, 0, wallMesh.userData.clipPlaneFlip ? -1 : 1).applyQuaternion(worldQuat);
-                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldPos);
-                wallEntries.push({ plane, targetIds });
-            });
-
-            if (wallEntries.length === 0) return;
-
-            renderer.localClippingEnabled = true;
+        function applyInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
-                if (mesh.userData.useAsClipPlane) return; // dinding sumber tak kena potong dirinya
-                const planesForThisObject = wallEntries
-                    .filter(e => e.targetIds.some(id => id == mesh.userData.id))
-                    .map(e => e.plane);
-                if (planesForThisObject.length > 0) {
-                    forEachMeshMaterial(mesh, m => { m.clippingPlanes = planesForThisObject; });
-                }
+                if (!mesh.userData.invisibleOccluder) return;
+                mesh.visible = true; // mesti direndr untuk tulis depth — "Hide Object Initially" tak terpakai di sini
+                forEachMeshMaterial(mesh, m => {
+                    m.colorWrite = false;
+                    m.depthWrite = true;
+                    m.depthTest = true;
+                    m.transparent = false; // paksa masuk laluan opaque supaya urutan depth tepat
+                });
             });
         }
 
-        function clearVisualClipPlanes() {
-            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+        function clearInvisibleOccluderMaterials() {
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.invisibleOccluder) return;
+                forEachMeshMaterial(mesh, m => { m.colorWrite = true; });
+            });
         }
 
         // "Show Colliders" di luar Pratonton (mod Editing biasa) — tiada dunia fizik cannon.js
@@ -2627,9 +2549,7 @@
                     initialScale: ud.initialScale.toArray(),
                     initialVisibility: ud.initialVisibility,
                     colliderActiveWhenHidden: ud.colliderActiveWhenHidden || false,
-                    useAsClipPlane: ud.useAsClipPlane || false,
-                    clipPlaneFlip: ud.clipPlaneFlip || false,
-                    clipTargetObjectIds: ud.clipTargetObjectIds || [],
+                    invisibleOccluder: ud.invisibleOccluder || false,
                     interactions: ud.interactions || [],
                     isGrabbable: ud.isGrabbable || false,
                     isSolid: ud.isSolid || false,
@@ -2743,9 +2663,7 @@
                         initialScale: new THREE.Vector3().fromArray(objData.initialScale),
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                        useAsClipPlane: objData.useAsClipPlane || false,
-                        clipPlaneFlip: objData.clipPlaneFlip || false,
-                        clipTargetObjectIds: objData.clipTargetObjectIds || [],
+                        invisibleOccluder: objData.invisibleOccluder || false,
                         interactions: objData.interactions || [],
                         isGrabbable: objData.isGrabbable || false,
                         isSolid: objData.isSolid || false,
@@ -2829,9 +2747,7 @@
                         mesh.userData.initialScale.fromArray(objData.initialScale);
                         mesh.userData.initialVisibility = objData.initialVisibility;
                         mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
-                        mesh.userData.useAsClipPlane = objData.useAsClipPlane || false;
-                        mesh.userData.clipPlaneFlip = objData.clipPlaneFlip || false;
-                        mesh.userData.clipTargetObjectIds = objData.clipTargetObjectIds || [];
+                        mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
                         mesh.userData.interactions = objData.interactions || [];
                         mesh.userData.isGrabbable = objData.isGrabbable || false;
                         mesh.userData.isSolid = objData.isSolid || false;
@@ -4041,9 +3957,7 @@
                 initialScale: new THREE.Vector3().copy(mesh.scale),
                 initialVisibility: type !== 'zone',
                 colliderActiveWhenHidden: false,
-                useAsClipPlane: false,
-                clipPlaneFlip: false,
-                clipTargetObjectIds: [],
+                invisibleOccluder: false,
                 interactions: [],
                 isGrabbable: false,
                 isSolid: false,
@@ -4115,9 +4029,7 @@
                         initialScale: new THREE.Vector3().copy(mesh.scale),
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
-                        useAsClipPlane: false,
-                        clipPlaneFlip: false,
-                        clipTargetObjectIds: [],
+                        invisibleOccluder: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,
@@ -4170,9 +4082,7 @@
                     mesh.userData.initialScale.fromArray(objData.initialScale);
                     mesh.userData.initialVisibility = objData.initialVisibility;
                     mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
-                    mesh.userData.useAsClipPlane = objData.useAsClipPlane || false;
-                    mesh.userData.clipPlaneFlip = objData.clipPlaneFlip || false;
-                    mesh.userData.clipTargetObjectIds = objData.clipTargetObjectIds || [];
+                    mesh.userData.invisibleOccluder = objData.invisibleOccluder || false;
                     mesh.userData.interactions = objData.interactions || [];
                     mesh.userData.isGrabbable = objData.isGrabbable || false;
                     mesh.userData.isSolid = objData.isSolid || false;
@@ -5199,10 +5109,7 @@
             chkSolid.checked = !!model.userData.isSolid;
             chkReturnOnRelease.checked = !!model.userData.returnToOriginalOnRelease;
             syncReturnOnReleaseAvailability();
-            chkClipPlane.checked = !!model.userData.useAsClipPlane;
-            chkClipPlaneFlip.checked = !!model.userData.clipPlaneFlip;
-            updateClipTargetsDropdown(model);
-            syncClipPlaneFlipAvailability();
+            chkInvisibleOccluder.checked = !!model.userData.invisibleOccluder;
             inputBounciness.value = (typeof model.userData.bounciness === 'number') ? model.userData.bounciness : 0.4;
             syncColliderTrimInputsFromModel(model);
             syncShapeAppearanceFromModel(model);
@@ -5236,10 +5143,7 @@
             chkSolid.checked = false;
             chkReturnOnRelease.checked = false;
             syncReturnOnReleaseAvailability();
-            chkClipPlane.checked = false;
-            chkClipPlaneFlip.checked = false;
-            updateClipTargetsDropdown(null);
-            syncClipPlaneFlipAvailability();
+            chkInvisibleOccluder.checked = false;
             inputBounciness.value = 0.4;
             syncColliderTrimInputsFromModel(null);
             syncShapeAppearanceFromModel(null);
@@ -5475,9 +5379,7 @@
                         initialScale: new THREE.Vector3(1, 1, 1),
                         initialVisibility: true,
                         colliderActiveWhenHidden: false,
-                        useAsClipPlane: false,
-                        clipPlaneFlip: false,
-                        clipTargetObjectIds: [],
+                        invisibleOccluder: false,
                         interactions: [],
                         isGrabbable: false,
                         isSolid: false,

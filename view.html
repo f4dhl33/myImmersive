@@ -525,7 +525,7 @@
             });
 
             physicsActive = true;
-            rebuildVisualClipPlanes();
+            applyInvisibleOccluderMaterials();
         }
 
         function forEachMeshMaterial(root, fn) {
@@ -537,42 +537,24 @@
             });
         }
 
-        function rebuildVisualClipPlanes() {
-            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
-
-            const worldPos = new THREE.Vector3();
-            const worldQuat = new THREE.Quaternion();
-            const normal = new THREE.Vector3();
-
-            const wallEntries = [];
-            loadedModelsList.forEach(wallMesh => {
-                if (!wallMesh.userData.useAsClipPlane) return;
-                const targetIds = Array.isArray(wallMesh.userData.clipTargetObjectIds) ? wallMesh.userData.clipTargetObjectIds : [];
-                if (targetIds.length === 0) return;
-
-                wallMesh.getWorldPosition(worldPos);
-                wallMesh.getWorldQuaternion(worldQuat);
-                normal.set(0, 0, wallMesh.userData.clipPlaneFlip ? -1 : 1).applyQuaternion(worldQuat);
-                const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldPos);
-                wallEntries.push({ plane, targetIds });
-            });
-
-            if (wallEntries.length === 0) return;
-
-            renderer.localClippingEnabled = true;
+        function applyInvisibleOccluderMaterials() {
             loadedModelsList.forEach(mesh => {
-                if (mesh.userData.useAsClipPlane) return;
-                const planesForThisObject = wallEntries
-                    .filter(e => e.targetIds.some(id => id == mesh.userData.id))
-                    .map(e => e.plane);
-                if (planesForThisObject.length > 0) {
-                    forEachMeshMaterial(mesh, m => { m.clippingPlanes = planesForThisObject; });
-                }
+                if (!mesh.userData.invisibleOccluder) return;
+                mesh.visible = true;
+                forEachMeshMaterial(mesh, m => {
+                    m.colorWrite = false;
+                    m.depthWrite = true;
+                    m.depthTest = true;
+                    m.transparent = false;
+                });
             });
         }
 
-        function clearVisualClipPlanes() {
-            loadedModelsList.forEach(mesh => forEachMeshMaterial(mesh, m => { m.clippingPlanes = null; }));
+        function clearInvisibleOccluderMaterials() {
+            loadedModelsList.forEach(mesh => {
+                if (!mesh.userData.invisibleOccluder) return;
+                forEachMeshMaterial(mesh, m => { m.colorWrite = true; });
+            });
         }
 
         function syncPhysicsBodiesWithVisibility() {
@@ -595,7 +577,7 @@
                 delete pb.mesh.userData._physicsBody;
             });
             physicsBodies = [];
-            clearVisualClipPlanes();
+            clearInvisibleOccluderMaterials();
         }
 
         // RETICLE (penunjuk tap-to-place semasa AR)
@@ -712,9 +694,7 @@
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                        useAsClipPlane: objData.useAsClipPlane || false,
-                        clipPlaneFlip: objData.clipPlaneFlip || false,
-                        clipTargetObjectIds: objData.clipTargetObjectIds || [],
+                        invisibleOccluder: objData.invisibleOccluder || false,
                         // "Kedudukan asal" untuk Return-to-Original-on-Release MESTI guna
                         // objData.position (kedudukan TERKINI/terakhir disimpan dari Editor),
                         // BUKAN objData.initialPosition (itu posisi masa objek PERTAMA kali
@@ -779,9 +759,7 @@
                         interactions: objData.interactions || [],
                         initialVisibility: objData.initialVisibility,
                         colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                        useAsClipPlane: objData.useAsClipPlane || false,
-                        clipPlaneFlip: objData.clipPlaneFlip || false,
-                        clipTargetObjectIds: objData.clipTargetObjectIds || [],
+                        invisibleOccluder: objData.invisibleOccluder || false,
                         initialPosition: new THREE.Vector3().fromArray(objData.position),
                         initialRotation: new THREE.Euler().fromArray(objData.rotation),
                         isGrabbable: objData.isGrabbable || false,
@@ -962,9 +940,7 @@
                 interactions: objData.interactions || [],
                 initialVisibility: objData.initialVisibility,
                 colliderActiveWhenHidden: objData.colliderActiveWhenHidden || false,
-                useAsClipPlane: objData.useAsClipPlane || false,
-                clipPlaneFlip: objData.clipPlaneFlip || false,
-                clipTargetObjectIds: objData.clipTargetObjectIds || [],
+                invisibleOccluder: objData.invisibleOccluder || false,
                 initialPosition: new THREE.Vector3().fromArray(objData.position),
                 initialRotation: new THREE.Euler().fromArray(objData.rotation),
                 isGrabbable: objData.isGrabbable || false,
