@@ -1146,11 +1146,15 @@
         // PENANDA ORIGIN DUNIA SEBENAR (0,0,0) — garisan biru TETAP, TAK mengekori kamera
         // macam gridHelper (lihat animate()) — supaya pengguna sentiasa ada rujukan tempat
         // sebenar (0,0,0) berada, tak kira macam mana jauh/arah kamera bergerak.
+        // depthTest:false + renderOrder tinggi (pola sama macam debug helper lain dlm app
+        // ni, cth physicsDebugMaterial) — elak flicker/z-fighting dgn garisan grid yg
+        // sebenarnya duduk SANGAT hampir (offset Y kecil sahaja tak cukup bila kamera jauh).
         const originCrossGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(-1000, 0.001, 0), new THREE.Vector3(1000, 0.001, 0),
-            new THREE.Vector3(0, 0.001, -1000), new THREE.Vector3(0, 0.001, 1000)
+            new THREE.Vector3(-1000, 0.01, 0), new THREE.Vector3(1000, 0.01, 0),
+            new THREE.Vector3(0, 0.01, -1000), new THREE.Vector3(0, 0.01, 1000)
         ]);
-        const originCross = new THREE.LineSegments(originCrossGeometry, new THREE.LineBasicMaterial({ color: 0x007acc }));
+        const originCross = new THREE.LineSegments(originCrossGeometry, new THREE.LineBasicMaterial({ color: 0x007acc, linewidth: 2, depthTest: false }));
+        originCross.renderOrder = 996;
         scene.add(originCross);
 
         const mainCamera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
