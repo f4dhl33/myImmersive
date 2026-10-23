@@ -611,18 +611,26 @@
         // (getWorldPosition()) utk kira depth. Fix #1: guna titik PALING HAMPIR pada
         // bounding box CUTTER ke *pusat* target.
         //
-        // NOTA (fix #2 — fix #1 tak cukup): fix #1 cuma betulkan SATU hala (bila CUTTER yg
-        // panjang). Pengguna uji kes SEBALIKNYA — TARGET yg panjang, cutter lebih pendek —
-        // isu sama berulang sebab titik rujukan TARGET masih guna *pusat* box dia. Fix #2:
-        // kira titik paling hampir pada KEDUA-DUA box, SALING MENGHALA satu sama lain
-        // (lihat index.html untuk nota penuh) — dua titik ni sentiasa jatuh berhampiran zon
-        // pertindihan sebenar tak kira yang mana satu (cutter atau target) yg panjang.
+        // NOTA (fix #2, superseded by fix #3 below — kept for history): tried mutual
+        // clampPoint (each box's nearest point toward the OTHER box's center). Broke when
+        // cutter & target overlap deeply with similar size (e.g. a duplicated cube): both
+        // centers end up mutually inside each other's box, so clampPoint returns each
+        // center UNCHANGED, and "cutter's point" ends up being literally the target's
+        // center (and vice versa) — inverting the comparison. That's why a duplicated
+        // cube stopped getting cut at all despite deep overlap.
+        //
+        // Fix #3 (stable): bila cutter & target BERTINDIH SEBENAR dalam 3D (box intersect),
+        // titik rujukan SETIAP objek ialah PUSAT OBJEK ITU SENDIRI diclamp ke dalam kawasan
+        // pertindihan (Box3.intersect) — bukan pusat objek SATU LAGI (punca songsang fix
+        // #2). Sentiasa diperoleh dari pusat objek SENDIRI, jadi tak boleh collapse jadi
+        // titik objek lain. Bila TIADA pertindihan 3D, guna balik kaedah fix #2 (clamp
+        // pusat SATU LAGI objek) — selamat di situ sebab kalau pusat objek lain berada
+        // dalam box ni, box tu MEMANG bertindih (tak sampai cabang ni pun).
         const _cutoutGatingTmpA = new THREE.Vector3();
-        const _cutoutGatingTmpB = new THREE.Vector3();
         const _cutoutGatingTmpC = new THREE.Vector3();
-        const _cutoutGatingTmpD = new THREE.Vector3();
         const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
+        const _cutoutGatingTmpIntersect = new THREE.Box3();
         function updateCutoutCameraGating() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) return;
@@ -640,17 +648,24 @@
                 if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
 
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
-                const meshCenter = meshBox.getCenter(_cutoutGatingTmpB);
+                const meshCenter = meshBox.getCenter(new THREE.Vector3());
 
                 let shouldCut = false;
                 let bestPairDist = Infinity;
                 cutterBoxes.forEach((box, i) => {
-                    const cutterNearPoint = box.clampPoint(meshCenter, _cutoutGatingTmpC).clone();
-                    const targetNearPoint = meshBox.clampPoint(cutterCenters[i], _cutoutGatingTmpD);
-                    const pairDist = cutterNearPoint.distanceTo(targetNearPoint);
+                    let cutterPoint, targetPoint;
+                    const overlap = _cutoutGatingTmpIntersect.copy(box).intersect(meshBox);
+                    if (!overlap.isEmpty()) {
+                        cutterPoint = overlap.clampPoint(cutterCenters[i], new THREE.Vector3());
+                        targetPoint = overlap.clampPoint(meshCenter, new THREE.Vector3());
+                    } else {
+                        cutterPoint = box.clampPoint(meshCenter, new THREE.Vector3());
+                        targetPoint = meshBox.clampPoint(cutterCenters[i], new THREE.Vector3());
+                    }
+                    const pairDist = cutterPoint.distanceTo(targetPoint);
                     if (pairDist < bestPairDist) {
                         bestPairDist = pairDist;
-                        shouldCut = viewDepthOfPoint(cutterNearPoint) < viewDepthOfPoint(targetNearPoint);
+                        shouldCut = viewDepthOfPoint(cutterPoint) < viewDepthOfPoint(targetPoint);
                     }
                 });
 

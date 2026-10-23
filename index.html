@@ -2377,17 +2377,32 @@
         // NOTA (fix #2 — fix #1 tak cukup): fix #1 cuma betulkan SATU hala (bila CUTTER yg
         // panjang). Pengguna uji kes SEBALIKNYA — TARGET yg panjang, cutter lebih pendek,
         // bertindih kat satu hujung target sahaja — isu sama berulang sebab titik rujukan
-        // TARGET masih guna *pusat* box dia (jauh dari hujung yg bertindih tu). Fix #2: kira
-        // titik paling hampir pada KEDUA-DUA box, SALING MENGHALA satu sama lain (titik pada
-        // cutter paling hampir ke PUSAT target, DAN titik pada target paling hampir ke PUSAT
-        // cutter) — dua titik ni akan sentiasa jatuh berhampiran zon pertindihan/sentuhan
-        // sebenar tak kira yang mana satu (cutter atau target) yg berbentuk panjang.
+        // TARGET masih guna *pusat* box dia. Fix #2 cuba: kira titik paling hampir pada
+        // KEDUA-DUA box, SALING MENGHALA satu sama lain (clampPoint pusat satu box ke box
+        // satu lagi) — TAPI ni rosak dgn cara lain: bila dua box bertindih DALAM/saiz hampir
+        // sama (cth kiub duplicate — cutter & target same size, overlap penuh), pusat
+        // SATU box dah berada DALAM box SATU LAGI, jadi clampPoint pulangkan titik tu
+        // TANPA diubah — "titik cutter" jadi SAMA PERSIS dgn pusat target & sebaliknya,
+        // songsangkan perbandingan (compare target-depth vs cutter-depth, bukan sebaliknya)
+        // — punca target "langsung tak terpotong" walaupun bertindih penuh dgn cutter.
+        //
+        // Fix #3 (betul-betul stabil): bila cutter & target BERTINDIH SEBENAR dalam 3D
+        // (box intersect), kira kawasan PERTINDIHAN (Box3.intersect) tu, dan titik rujukan
+        // SETIAP objek ialah PUSAT OBJEK ITU SENDIRI diclamp ke dalam kawasan pertindihan
+        // tu — bukan pusat objek SATU LAGI (itu punca songsang fix #2). Sebab setiap titik
+        // diperoleh dari PUSAT OBJEK SENDIRI (bukan pusat objek lain), ia tak boleh
+        // "collapse" jadi titik yang sama/tertukar macam fix #2, tak kira apa nisbah
+        // saiz/bentuk — sekaligus kekal berhampiran zon pertindihan sebenar (betulkan
+        // kes objek panjang, fix #1 & #2). Bila TIADA pertindihan 3D langsung (box tak
+        // sentuh), guna balik kaedah fix #2 (clamp pusat SATU LAGI objek) — selamat dlm
+        // kes ni sebab pusat objek lain mustahil "accidentally" berada dalam box sendiri
+        // tanpa box sebenarnya bertindih (kalau ia berada dalam, bermakna box MEMANG
+        // bertindih, jadi kita tak sampai ke cabang "tiada pertindihan" pun).
         const _cutoutGatingTmpA = new THREE.Vector3();
-        const _cutoutGatingTmpB = new THREE.Vector3();
         const _cutoutGatingTmpC = new THREE.Vector3();
-        const _cutoutGatingTmpD = new THREE.Vector3();
         const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
+        const _cutoutGatingTmpIntersect = new THREE.Box3();
         function updateCutoutCameraGating() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) return;
@@ -2405,21 +2420,24 @@
                 if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
 
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
-                const meshCenter = meshBox.getCenter(_cutoutGatingTmpB);
+                const meshCenter = meshBox.getCenter(new THREE.Vector3());
 
-                // Utk setiap cutter, pilih pasangan titik-paling-hampir YANG PALING RAPAT
-                // antara satu sama lain (bukan purata/jumlah semua cutter) — itulah pasangan
-                // paling relevan utk tentukan sama ada cutter TU yg sebenarnya "bertindih"
-                // dgn target ni (selaras dgn andaian sedia ada: satu cutter dominan je).
                 let shouldCut = false;
                 let bestPairDist = Infinity;
                 cutterBoxes.forEach((box, i) => {
-                    const cutterNearPoint = box.clampPoint(meshCenter, _cutoutGatingTmpC).clone();
-                    const targetNearPoint = meshBox.clampPoint(cutterCenters[i], _cutoutGatingTmpD);
-                    const pairDist = cutterNearPoint.distanceTo(targetNearPoint);
+                    let cutterPoint, targetPoint;
+                    const overlap = _cutoutGatingTmpIntersect.copy(box).intersect(meshBox);
+                    if (!overlap.isEmpty()) {
+                        cutterPoint = overlap.clampPoint(cutterCenters[i], new THREE.Vector3());
+                        targetPoint = overlap.clampPoint(meshCenter, new THREE.Vector3());
+                    } else {
+                        cutterPoint = box.clampPoint(meshCenter, new THREE.Vector3());
+                        targetPoint = meshBox.clampPoint(cutterCenters[i], new THREE.Vector3());
+                    }
+                    const pairDist = cutterPoint.distanceTo(targetPoint);
                     if (pairDist < bestPairDist) {
                         bestPairDist = pairDist;
-                        shouldCut = viewDepthOfPoint(cutterNearPoint) < viewDepthOfPoint(targetNearPoint);
+                        shouldCut = viewDepthOfPoint(cutterPoint) < viewDepthOfPoint(targetPoint);
                     }
                 });
 
