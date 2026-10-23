@@ -1146,15 +1146,16 @@
         // PENANDA ORIGIN DUNIA SEBENAR (0,0,0) — garisan biru TETAP, TAK mengekori kamera
         // macam gridHelper (lihat animate()) — supaya pengguna sentiasa ada rujukan tempat
         // sebenar (0,0,0) berada, tak kira macam mana jauh/arah kamera bergerak.
-        // depthTest:false + renderOrder tinggi (pola sama macam debug helper lain dlm app
-        // ni, cth physicsDebugMaterial) — elak flicker/z-fighting dgn garisan grid yg
-        // sebenarnya duduk SANGAT hampir (offset Y kecil sahaja tak cukup bila kamera jauh).
+        // depthTest KEKAL AKTIF (bukan false) — garisan ni kena tertutup macam biasa oleh
+        // objek 3D/dinding sebenar (kalau depthTest:false, ia tembus semua benda, bukan
+        // cuma elak z-fighting dgn grid). Offset Y dinaikkan ketara (bukan setakat 0.01)
+        // khas utk elak z-fighting dgn garisan grid yg sememangnya duduk SANGAT hampir.
         const originCrossGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(-1000, 0.01, 0), new THREE.Vector3(1000, 0.01, 0),
-            new THREE.Vector3(0, 0.01, -1000), new THREE.Vector3(0, 0.01, 1000)
+            new THREE.Vector3(-1000, 0.05, 0), new THREE.Vector3(1000, 0.05, 0),
+            new THREE.Vector3(0, 0.05, -1000), new THREE.Vector3(0, 0.05, 1000)
         ]);
-        const originCross = new THREE.LineSegments(originCrossGeometry, new THREE.LineBasicMaterial({ color: 0x007acc, linewidth: 2, depthTest: false }));
-        originCross.renderOrder = 996;
+        const originCross = new THREE.LineSegments(originCrossGeometry, new THREE.LineBasicMaterial({ color: 0x007acc, linewidth: 2 }));
+        originCross.renderOrder = 1;
         scene.add(originCross);
 
         const mainCamera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
