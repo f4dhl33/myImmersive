@@ -3671,7 +3671,13 @@
                     // library asal (cth. dalam string/komen) — sebab yang sama macam nota di
                     // atas, ni fail HTML sebenar yang akan dibuka browser pelajar nanti.
                     const safeLibCode = libCode.replace(/<\/script/gi, '<\\/script');
-                    tpl = tpl.replace(m[0], `<script>\n${safeLibCode}\n<\/script>`);
+                    // PENTING: guna FUNGSI sebagai hujah ke-2 .replace(), BUKAN string terus —
+                    // kalau string, JS layan "$" dalam kandungan (cth. "$1", "$&", "$`") sebagai
+                    // corak substitusi khas, bukan teks literal. Kod library minified yang kita
+                    // benam ni (fflate/three.js/cannon.js) HAMPIR PASTI ada nama pembolehubah
+                    // macam "$t"/"$0" dsb — kalau tak guna fungsi, "$" tu akan disalahtafsir dan
+                    // rosakkan output (inilah punca fail eksport jadi serabut bila diuji).
+                    tpl = tpl.replace(m[0], () => `<script>\n${safeLibCode}\n<\/script>`);
                 }
 
                 const embeddedRow = {
@@ -3679,9 +3685,11 @@
                     data: { activeSceneId: projectJson.activeSceneId, scenes: projectJson.scenes, audios: projectJson.audios }
                 };
                 const safeEmbeddedJson = JSON.stringify(embeddedRow).replace(/<\/script/gi, '<\\/script');
+                // Sebab sama — teks projek (nama objek/nota interaksi dsb, ditaip bebas oleh
+                // pengguna) boleh secara tak sengaja ada "$" + nombor/aksara khas juga.
                 tpl = tpl.replace(
                     "const SUPABASE_URL = 'https://jmuraizgowqwmpmetupu.supabase.co';\n        const SUPABASE_ANON_KEY = 'sb_publishable_DZ8vjKrIJhXM34D7ddS6dw_nlIL18YD';\n        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);",
-                    `window.__EMBEDDED_PROJECT__ = ${safeEmbeddedJson};`
+                    () => `window.__EMBEDDED_PROJECT__ = ${safeEmbeddedJson};`
                 );
 
                 const blob = new Blob([tpl], { type: 'text/html' });
