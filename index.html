@@ -667,6 +667,7 @@
             <span class="top-bar-text profile-badge">📁 <b id="project-name-label">-</b></span>
             <button id="btn-toggle-public" class="btn-apply" title="Toggle Public/Private status">🔒 Private</button>
             <button id="btn-share-project" class="btn-apply" title="Get AR/VR Preview Link/QR">🔗 Share</button>
+            <button id="btn-export-html" class="btn-apply" title="Export this project as one standalone .html file — runs fully offline on any web server, no Supabase/account needed">⬇️ Export HTML</button>
             <button id="btn-my-projects" class="btn-apply" title="Back to Project List">My Projects</button>
             <span id="save-status-text" class="save-status-text"></span>
 
@@ -3581,6 +3582,127 @@
 
             document.getElementById('share-modal').style.display = 'flex';
         });
+
+        // ---- EKSPORT PROJEK SEBAGAI SATU FAIL *.HTML BERDIRI SENDIRI ----
+        // Tujuan: pemilik projek boleh "bake" keseluruhan projek (scene/objek/interaksi +
+        // SEMUA asset: model 3D, imej, audio + SEMUA library Three.js/cannon.js) jadi SATU
+        // fail .html, untuk letak di server sendiri — jalan 100% offline/tanpa panggil
+        // Supabase terus, jimatkan bandwidth/kapasiti server asal projek ni bila byk pengguna.
+        function guessMimeFromUrl(url) {
+            const ext = (url.split('?')[0].split('.').pop() || '').toLowerCase();
+            const map = {
+                png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
+                mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4',
+                glb: 'model/gltf-binary', gltf: 'model/gltf+json', fbx: 'application/octet-stream'
+            };
+            return map[ext] || null;
+        }
+
+        async function urlToDataUri(url) {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status + ' fetching ' + url);
+            const blob = await resp.blob();
+            const mime = guessMimeFromUrl(url) || blob.type || 'application/octet-stream';
+            const buf = await blob.arrayBuffer();
+            const bytes = new Uint8Array(buf);
+            let binary = '';
+            const chunkSize = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+            }
+            return `data:${mime};base64,${btoa(binary)}`;
+        }
+
+        async function exportProjectAsStandaloneHtml() {
+            if (!activeProjectId) { alert('Please open/save a project first.'); return; }
+
+            const btn = document.getElementById('btn-export-html');
+            btn.disabled = true;
+            try {
+                setSaveStatusText('⏳ Exporting... preparing project data');
+                const projectJson = JSON.parse(JSON.stringify(serializeSceneForSave()));
+
+                // Kumpul SEMUA url asset unik (model/imej/audio/texture custom) merentasi
+                // semua scene — satu Set supaya asset yang dikongsi (cth. duplicate objek,
+                // audio dipakai dalam >1 scene) cuma dimuat turun & encode SEKALI.
+                const urlSet = new Set();
+                projectJson.scenes.forEach(scene => {
+                    (scene.objects || []).forEach(obj => {
+                        if (obj.fileUrl) urlSet.add(obj.fileUrl);
+                        if (obj.customTextureUrl) urlSet.add(obj.customTextureUrl);
+                    });
+                });
+                (projectJson.audios || []).forEach(a => { if (a.url) urlSet.add(a.url); });
+
+                const urlList = [...urlSet];
+                const dataUriMap = new Map();
+                for (let i = 0; i < urlList.length; i++) {
+                    setSaveStatusText(`⏳ Exporting... asset ${i + 1}/${urlList.length}`);
+                    dataUriMap.set(urlList[i], await urlToDataUri(urlList[i]));
+                }
+
+                projectJson.scenes.forEach(scene => {
+                    (scene.objects || []).forEach(obj => {
+                        if (obj.fileUrl && dataUriMap.has(obj.fileUrl)) obj.fileUrl = dataUriMap.get(obj.fileUrl);
+                        if (obj.customTextureUrl && dataUriMap.has(obj.customTextureUrl)) obj.customTextureUrl = dataUriMap.get(obj.customTextureUrl);
+                    });
+                });
+                (projectJson.audios || []).forEach(a => {
+                    if (a.url && dataUriMap.has(a.url)) a.url = dataUriMap.get(a.url);
+                });
+
+                setSaveStatusText('⏳ Exporting... bundling libraries (offline mode, this can take a moment)');
+                let tpl = await fetch('view.html').then(r => {
+                    if (!r.ok) throw new Error('Could not fetch view.html template (HTTP ' + r.status + ')');
+                    return r.text();
+                });
+
+                // NOTA PENTING: tag penutup <script> literal TAK BOLEH ditulis terus dalam
+                // fail ni (termasuk dalam komen macam ni pun) — parser HTML tutup tag
+                // <script> ni serta-merta bila jumpa jujukan tu, tak kira pun ia sebenarnya
+                // sebahagian dari string/regex JS. Guna slash di-escape (backslash sebelum
+                // garis miring) supaya ia kekal sebagai teks biasa, bukan penutup tag.
+                tpl = tpl.replace('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>\n', '');
+
+                const libMatches = [...tpl.matchAll(/<script src="(https:\/\/[^"]+)"><\/script>/g)];
+                for (const m of libMatches) {
+                    const libCode = await fetch(m[1]).then(r => r.text());
+                    // Escape sebarang tag penutup script YANG MUNGKIN wujud di dalam kod
+                    // library asal (cth. dalam string/komen) — sebab yang sama macam nota di
+                    // atas, ni fail HTML sebenar yang akan dibuka browser pelajar nanti.
+                    const safeLibCode = libCode.replace(/<\/script/gi, '<\\/script');
+                    tpl = tpl.replace(m[0], `<script>\n${safeLibCode}\n<\/script>`);
+                }
+
+                const embeddedRow = {
+                    name: activeProjectName || 'Project',
+                    data: { activeSceneId: projectJson.activeSceneId, scenes: projectJson.scenes, audios: projectJson.audios }
+                };
+                const safeEmbeddedJson = JSON.stringify(embeddedRow).replace(/<\/script/gi, '<\\/script');
+                tpl = tpl.replace(
+                    "const SUPABASE_URL = 'https://jmuraizgowqwmpmetupu.supabase.co';\n        const SUPABASE_ANON_KEY = 'sb_publishable_DZ8vjKrIJhXM34D7ddS6dw_nlIL18YD';\n        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);",
+                    `window.__EMBEDDED_PROJECT__ = ${safeEmbeddedJson};`
+                );
+
+                const blob = new Blob([tpl], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = (activeProjectName || 'project').replace(/[^a-z0-9_\- ]/gi, '_').trim() + '.html';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                setSaveStatusText('✅ Exported standalone HTML!');
+            } catch (err) {
+                console.error('Eksport HTML gagal:', err);
+                alert('Failed to export project: ' + (err.message || err));
+                setSaveStatusText('⚠️ Export failed!');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('btn-export-html').addEventListener('click', () => { exportProjectAsStandaloneHtml(); });
 
         document.getElementById('btn-close-share-modal').addEventListener('click', () => {
             document.getElementById('share-modal').style.display = 'none';

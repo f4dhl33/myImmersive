@@ -2301,10 +2301,40 @@
             hideStatus();
         }
 
+        // FAIL EKSPORT BERDIRI SENDIRI (standalone .html) — editor (index.html) boleh
+        // "bake" data projek (dengan semua asset ditukar jadi data URI base64) terus ke
+        // dalam fail ni sebagai window.__EMBEDDED_PROJECT__, supaya fail ni boleh jalan
+        // 100% offline/dari server sendiri pengguna, tanpa panggil Supabase langsung.
+        async function loadEmbeddedProject(projectRow) {
+            const projectData = projectRow.data || {};
+            fullScenesData = projectData.scenes || [];
+
+            if (fullScenesData.length === 0) {
+                showStatus('📭 Empty Project', 'This project has no content yet.', true);
+                return;
+            }
+
+            (projectData.audios || []).forEach(a => {
+                uploadedAudios[a.fileName] = a.url;
+            });
+
+            const badge = document.getElementById('project-badge');
+            badge.innerText = '📁 ' + (projectRow.name || 'Project');
+            badge.style.display = 'block';
+
+            const firstScene = fullScenesData[0];
+            activeSceneId = firstScene.id;
+            await applySceneDataToViewport(firstScene);
+
+            hideStatus();
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const projectIdParam = urlParams.get('project');
 
-        if (!projectIdParam) {
+        if (window.__EMBEDDED_PROJECT__) {
+            loadEmbeddedProject(window.__EMBEDDED_PROJECT__);
+        } else if (!projectIdParam) {
             showStatus('⚠️ No Project Specified', 'This link is incomplete — please use the link/QR provided by the project creator.', true);
         } else {
             loadPublicProject(projectIdParam);
