@@ -606,17 +606,21 @@
         // bukan per-pixel — elak isu precision/z-fighting yang punca hasil "lari"/tak
         // tentu bila dicuba dgn depth-buffer penuh sebelum ni (lihat index.html).
         //
-        // NOTA (fix selepas laporan "pusing sikit, tiba2 potong byk/tak potong langsung
-        // walaupun nampak bertindih"): mulanya guna titik PIVOT objek (getWorldPosition())
-        // untuk kira depth. Tapi cutter dalam app ni selalunya kotak PANJANG, dan target
-        // cuma bertindih kat SEBAHAGIAN hujungnya sahaja — pivot cutter (lazimnya di tengah
-        // kotak panjang tu) boleh jauh terpisah dari zon pertindihan SEBENAR dengan target,
-        // jadi anggaran depth jadi sangat sensitif pada sudut kamera. Fix: guna TITIK
-        // TERHAMPIR pada bounding box cutter ke pusat target (bukan pivot cutter) — jauh
-        // lebih stabil (lihat index.html untuk nota penuh).
+        // NOTA (fix #1, selepas laporan "pusing sikit, tiba2 potong byk/tak potong
+        // langsung walaupun nampak bertindih"): mulanya guna titik PIVOT objek
+        // (getWorldPosition()) utk kira depth. Fix #1: guna titik PALING HAMPIR pada
+        // bounding box CUTTER ke *pusat* target.
+        //
+        // NOTA (fix #2 — fix #1 tak cukup): fix #1 cuma betulkan SATU hala (bila CUTTER yg
+        // panjang). Pengguna uji kes SEBALIKNYA — TARGET yg panjang, cutter lebih pendek —
+        // isu sama berulang sebab titik rujukan TARGET masih guna *pusat* box dia. Fix #2:
+        // kira titik paling hampir pada KEDUA-DUA box, SALING MENGHALA satu sama lain
+        // (lihat index.html untuk nota penuh) — dua titik ni sentiasa jatuh berhampiran zon
+        // pertindihan sebenar tak kira yang mana satu (cutter atau target) yg panjang.
         const _cutoutGatingTmpA = new THREE.Vector3();
         const _cutoutGatingTmpB = new THREE.Vector3();
         const _cutoutGatingTmpC = new THREE.Vector3();
+        const _cutoutGatingTmpD = new THREE.Vector3();
         const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
         function updateCutoutCameraGating() {
@@ -629,22 +633,28 @@
             const viewDepthOfPoint = (point) => camDir.dot(_cutoutGatingTmpC.copy(point).sub(camPos));
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
+            const cutterCenters = cutterBoxes.map(box => box.getCenter(new THREE.Vector3()));
 
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
 
-                const meshCenter = _cutoutGatingTmpBox.setFromObject(mesh).getCenter(_cutoutGatingTmpB);
-                const meshDepth = viewDepthOfPoint(meshCenter);
+                const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
+                const meshCenter = meshBox.getCenter(_cutoutGatingTmpB);
 
-                let nearestCutterDepth = Infinity;
-                cutterBoxes.forEach(box => {
-                    const closest = box.clampPoint(meshCenter, _cutoutGatingTmpC);
-                    const d = camDir.dot(closest.sub(camPos));
-                    if (d < nearestCutterDepth) nearestCutterDepth = d;
+                let shouldCut = false;
+                let bestPairDist = Infinity;
+                cutterBoxes.forEach((box, i) => {
+                    const cutterNearPoint = box.clampPoint(meshCenter, _cutoutGatingTmpC).clone();
+                    const targetNearPoint = meshBox.clampPoint(cutterCenters[i], _cutoutGatingTmpD);
+                    const pairDist = cutterNearPoint.distanceTo(targetNearPoint);
+                    if (pairDist < bestPairDist) {
+                        bestPairDist = pairDist;
+                        shouldCut = viewDepthOfPoint(cutterNearPoint) < viewDepthOfPoint(targetNearPoint);
+                    }
                 });
 
-                setCuttableMaterial(mesh, nearestCutterDepth < meshDepth);
+                setCuttableMaterial(mesh, shouldCut);
             });
         }
 

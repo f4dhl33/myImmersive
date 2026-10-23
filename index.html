@@ -2367,20 +2367,25 @@
         // box), bukan per-pixel, supaya elak isu precision/z-fighting yang punca hasil
         // "lari"/tak tentu bila dicuba dgn depth-buffer penuh (5a929f8).
         //
-        // NOTA (fix selepas laporan "pusing sikit, tiba2 potong byk/tak potong langsung
-        // walaupun nampak bertindih"): mulanya guna titik PIVOT objek (getWorldPosition())
-        // untuk kira depth. Tapi cutter dalam app ni selalunya kotak PANJANG, dan target
-        // cuma bertindih kat SEBAHAGIAN hujungnya sahaja — pivot cutter (lazimnya di tengah
-        // kotak panjang tu) boleh jauh terpisah dari zon pertindihan SEBENAR dengan target.
-        // Anggaran depth berasaskan pivot yang jauh ni sangat sensitif pada sudut kamera
-        // (unjuran dot-product berubah besar utk objek yang tak betul-betul di hadapan
-        // kamera), jadi keputusan potong/tak-potong jadi tak stabil walaupun kedudukan
-        // sebenar tak berubah banyak. Fix: guna TITIK TERHAMPIR pada bounding box cutter
-        // ke pusat target (bukan pivot cutter) — titik ni sentiasa berada di zon
-        // pertindihan/paling hampir yang sebenarnya relevan, jauh lebih stabil.
+        // NOTA (fix #1, selepas laporan "pusing sikit, tiba2 potong byk/tak potong
+        // langsung walaupun nampak bertindih"): mulanya guna titik PIVOT objek
+        // (getWorldPosition()) utk kira depth. Cutter dlm app ni selalunya kotak PANJANG
+        // yg cuma bertindih kat SEBAHAGIAN hujungnya sahaja dgn target — pivot yg jauh dari
+        // zon pertindihan sebenar buat anggaran depth sangat sensitif pada sudut kamera.
+        // Fix #1: guna titik PALING HAMPIR pada bounding box CUTTER ke *pusat* target.
+        //
+        // NOTA (fix #2 — fix #1 tak cukup): fix #1 cuma betulkan SATU hala (bila CUTTER yg
+        // panjang). Pengguna uji kes SEBALIKNYA — TARGET yg panjang, cutter lebih pendek,
+        // bertindih kat satu hujung target sahaja — isu sama berulang sebab titik rujukan
+        // TARGET masih guna *pusat* box dia (jauh dari hujung yg bertindih tu). Fix #2: kira
+        // titik paling hampir pada KEDUA-DUA box, SALING MENGHALA satu sama lain (titik pada
+        // cutter paling hampir ke PUSAT target, DAN titik pada target paling hampir ke PUSAT
+        // cutter) — dua titik ni akan sentiasa jatuh berhampiran zon pertindihan/sentuhan
+        // sebenar tak kira yang mana satu (cutter atau target) yg berbentuk panjang.
         const _cutoutGatingTmpA = new THREE.Vector3();
         const _cutoutGatingTmpB = new THREE.Vector3();
         const _cutoutGatingTmpC = new THREE.Vector3();
+        const _cutoutGatingTmpD = new THREE.Vector3();
         const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
         function updateCutoutCameraGating() {
@@ -2393,22 +2398,32 @@
             const viewDepthOfPoint = (point) => camDir.dot(_cutoutGatingTmpC.copy(point).sub(camPos));
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
+            const cutterCenters = cutterBoxes.map(box => box.getCenter(new THREE.Vector3()));
 
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
 
-                const meshCenter = _cutoutGatingTmpBox.setFromObject(mesh).getCenter(_cutoutGatingTmpB);
-                const meshDepth = viewDepthOfPoint(meshCenter);
+                const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
+                const meshCenter = meshBox.getCenter(_cutoutGatingTmpB);
 
-                let nearestCutterDepth = Infinity;
-                cutterBoxes.forEach(box => {
-                    const closest = box.clampPoint(meshCenter, _cutoutGatingTmpC);
-                    const d = camDir.dot(closest.sub(camPos));
-                    if (d < nearestCutterDepth) nearestCutterDepth = d;
+                // Utk setiap cutter, pilih pasangan titik-paling-hampir YANG PALING RAPAT
+                // antara satu sama lain (bukan purata/jumlah semua cutter) — itulah pasangan
+                // paling relevan utk tentukan sama ada cutter TU yg sebenarnya "bertindih"
+                // dgn target ni (selaras dgn andaian sedia ada: satu cutter dominan je).
+                let shouldCut = false;
+                let bestPairDist = Infinity;
+                cutterBoxes.forEach((box, i) => {
+                    const cutterNearPoint = box.clampPoint(meshCenter, _cutoutGatingTmpC).clone();
+                    const targetNearPoint = meshBox.clampPoint(cutterCenters[i], _cutoutGatingTmpD);
+                    const pairDist = cutterNearPoint.distanceTo(targetNearPoint);
+                    if (pairDist < bestPairDist) {
+                        bestPairDist = pairDist;
+                        shouldCut = viewDepthOfPoint(cutterNearPoint) < viewDepthOfPoint(targetNearPoint);
+                    }
                 });
 
-                setCuttableMaterial(mesh, nearestCutterDepth < meshDepth);
+                setCuttableMaterial(mesh, shouldCut);
             });
         }
 
