@@ -3765,7 +3765,12 @@
                 });
 
                 setSaveStatusText('⏳ Exporting... bundling libraries (offline mode, this can take a moment)');
-                let tpl = await fetch('view.html').then(r => {
+                // cache: 'no-store' — view.html (fail sendiri, path relatif tanpa versi) kena
+                // sentiasa ambil versi TERKINI dari server, bukan versi lama yg browser dah
+                // cache — kalau tidak, eksport boleh "bake" kod view.html yg LAPUK walaupun
+                // index.html sendiri dah di-hard-refresh (punca fail eksport nampak macam fix
+                // sebelum ni "tak jalan", sedangkan ia cuma tak pernah sampai ke fail eksport).
+                let tpl = await fetch('view.html', { cache: 'no-store' }).then(r => {
                     if (!r.ok) throw new Error('Could not fetch view.html template (HTTP ' + r.status + ')');
                     return r.text();
                 });
