@@ -1097,7 +1097,11 @@
 
             if (['box', 'sphere', 'cylinder', 'plane'].includes(type)) {
                 if (objData.customColor) {
-                    material.color.set(objData.customColor);
+                    // renderer.outputEncoding = sRGBEncoding — Color.set() dari hex string
+                    // (r128) simpan nilai MENTAH tanpa tukar ke linear, jadi perlu convert
+                    // manual supaya warna terpapar sama macam dipilih dalam editor (lihat
+                    // index.html untuk nota penuh).
+                    material.color.set(objData.customColor).convertSRGBToLinear();
                     mesh.userData.customColor = objData.customColor;
                 }
                 if (objData.customTextureUrl) {

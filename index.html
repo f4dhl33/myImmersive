@@ -1930,7 +1930,13 @@
 
         inputShapeColor.addEventListener('input', function() {
             if (isBasicShapeMesh(selectedModel)) {
-                selectedModel.material.color.set(this.value);
+                // renderer.outputEncoding = sRGBEncoding, tapi Color.set() dari hex string
+                // (r128) simpan nilai MENTAH tanpa tukar ke ruang warna linear — kalau tak
+                // ditukar, renderer anggap nilai tu dah linear lalu gamma-encode SEKALI
+                // LAGI masa output, jadi warna nampak jauh lebih CERAH/pudar dari warna
+                // yang dipilih (lagi ketara utk warna gelap/sederhana, cth laporan pengguna:
+                // pilih hijau gelap, kiub terpapar hijau terang).
+                selectedModel.material.color.set(this.value).convertSRGBToLinear();
                 selectedModel.userData.customColor = this.value;
                 scheduleAutoSave();
             }
@@ -3018,7 +3024,7 @@
             mesh.userData.colliderTrim = objData.colliderTrim || null;
             if (isBasicShapeMesh(mesh)) {
                 if (objData.customColor) {
-                    mesh.material.color.set(objData.customColor);
+                    mesh.material.color.set(objData.customColor).convertSRGBToLinear();
                     mesh.userData.customColor = objData.customColor;
                 }
                 if (objData.customTextureUrl) {
