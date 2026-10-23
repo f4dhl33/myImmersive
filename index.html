@@ -2386,34 +2386,37 @@
         // songsangkan perbandingan (compare target-depth vs cutter-depth, bukan sebaliknya)
         // — punca target "langsung tak terpotong" walaupun bertindih penuh dgn cutter.
         //
-        // Fix #3 (betul-betul stabil): bila cutter & target BERTINDIH SEBENAR dalam 3D
-        // (box intersect), kira kawasan PERTINDIHAN (Box3.intersect) tu, dan titik rujukan
-        // SETIAP objek ialah PUSAT OBJEK ITU SENDIRI diclamp ke dalam kawasan pertindihan
-        // tu — bukan pusat objek SATU LAGI (itu punca songsang fix #2). Sebab setiap titik
-        // diperoleh dari PUSAT OBJEK SENDIRI (bukan pusat objek lain), ia tak boleh
-        // "collapse" jadi titik yang sama/tertukar macam fix #2, tak kira apa nisbah
-        // saiz/bentuk — sekaligus kekal berhampiran zon pertindihan sebenar (betulkan
-        // kes objek panjang, fix #1 & #2). Bila TIADA pertindihan 3D langsung (box tak
-        // sentuh), guna balik kaedah fix #2 (clamp pusat SATU LAGI objek) — selamat dlm
-        // kes ni sebab pusat objek lain mustahil "accidentally" berada dalam box sendiri
-        // tanpa box sebenarnya bertindih (kalau ia berada dalam, bermakna box MEMANG
-        // bertindih, jadi kita tak sampai ke cabang "tiada pertindihan" pun).
+        // Fix #3 cuba lagi: titik rujukan dari PUSAT OBJEK SENDIRI diclamp ke kawasan
+        // pertindihan (Box3.intersect), elak songsang fix #2. TAPI ni pun ada kelemahan:
+        // bila kawasan pertindihan tu NIPIS/kecil (dua box cuma bersentuh sikit kat
+        // penjuru/tepi, cth objek digerakkan ke hujung), clamp kedua-dua pusat (yg
+        // mungkin jauh berbeza depth asalnya) ke kawasan nipis tu buat dua titik jadi
+        // HAMPIR SAMA kedudukan — tak lagi mewakili depth SEBENAR tiap objek, jadi
+        // keputusan potong jadi salah/tak konsisten bila objek digerakkan (laporan:
+        // "letak bahagian depan macam ni, die terpotong pulak, sepatutnya tak").
+        //
+        // Fix #4 — tukar pendekatan SEPENUHNYA: SEMUA fix #1-#3 di atas kira "depth" guna
+        // unjuran titik ke ARAH PANDANG kamera (camDir, dot-product) — ini yg sentiasa
+        // punca ketidakstabilan bawah putaran (unjuran dot-product sensitif pada sudut),
+        // tak kira macam mana titik rujukan dipilih. Fix #4 buang arah pandang terus:
+        // guna JARAK LURUS dari kamera ke titik TERHAMPIR pada bounding box SETIAP objek
+        // (Box3.clampPoint(camPos) — titik pada box tu sendiri yg paling dekat dgn
+        // kedudukan kamera). Nilai ni HANYA bergantung pada kedudukan kamera & box objek
+        // itu sendiri — LANGSUNG TAK bergantung pada arah pandang/putaran kamera, jadi
+        // pusing kamera di tempat (tanpa bergerak) tak akan ubah keputusan potong
+        // LANGSUNG (immune secara matematik, bukan cuma "stabil" secara empirik macam
+        // fix #1-#3). Juga tiada clamp SATU box ke box LAIN (setiap titik dikira
+        // berasingan drpd box sendiri + camPos sahaja), jadi tiada risiko "collapse"/
+        // songsang macam fix #2/#3 pun — immune drpd DUA kategori bug yg dah berulang.
         const _cutoutGatingTmpA = new THREE.Vector3();
-        const _cutoutGatingTmpC = new THREE.Vector3();
-        const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
-        const _cutoutGatingTmpIntersect = new THREE.Box3();
         function updateCutoutCameraGating() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) return;
             mainCamera.getWorldPosition(_cutoutGatingTmpA);
-            mainCamera.getWorldDirection(_cutoutGatingTmpDir);
             const camPos = _cutoutGatingTmpA;
-            const camDir = _cutoutGatingTmpDir;
-            const viewDepthOfPoint = (point) => camDir.dot(_cutoutGatingTmpC.copy(point).sub(camPos));
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
-            const cutterCenters = cutterBoxes.map(box => box.getCenter(new THREE.Vector3()));
 
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
@@ -2421,27 +2424,21 @@
 
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
                 const meshCenter = meshBox.getCenter(new THREE.Vector3());
+                const meshDist = camPos.distanceTo(meshBox.clampPoint(camPos, new THREE.Vector3()));
 
-                let shouldCut = false;
-                let bestPairDist = Infinity;
-                cutterBoxes.forEach((box, i) => {
-                    let cutterPoint, targetPoint;
-                    const overlap = _cutoutGatingTmpIntersect.copy(box).intersect(meshBox);
-                    if (!overlap.isEmpty()) {
-                        cutterPoint = overlap.clampPoint(cutterCenters[i], new THREE.Vector3());
-                        targetPoint = overlap.clampPoint(meshCenter, new THREE.Vector3());
-                    } else {
-                        cutterPoint = box.clampPoint(meshCenter, new THREE.Vector3());
-                        targetPoint = meshBox.clampPoint(cutterCenters[i], new THREE.Vector3());
-                    }
-                    const pairDist = cutterPoint.distanceTo(targetPoint);
-                    if (pairDist < bestPairDist) {
-                        bestPairDist = pairDist;
-                        shouldCut = viewDepthOfPoint(cutterPoint) < viewDepthOfPoint(targetPoint);
-                    }
+                // Pilih cutter PALING RELEVAN (jurang terkecil ke target) sebagai cutter
+                // yg berkaitan dgn objek ni (andaian sedia ada: satu cutter dominan je
+                // pada satu masa) — ni cuma utk PILIH cutter, jarak ke kamera dikira
+                // berasingan selepas ni, bukan guna titik pilihan ni utk depth.
+                let chosenCutterBox = cutterBoxes[0];
+                let bestGap = Infinity;
+                cutterBoxes.forEach(box => {
+                    const gap = box.clampPoint(meshCenter, new THREE.Vector3()).distanceTo(meshCenter);
+                    if (gap < bestGap) { bestGap = gap; chosenCutterBox = box; }
                 });
 
-                setCuttableMaterial(mesh, shouldCut);
+                const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
+                setCuttableMaterial(mesh, cutterDist < meshDist);
             });
         }
 

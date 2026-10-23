@@ -619,29 +619,30 @@
         // center (and vice versa) — inverting the comparison. That's why a duplicated
         // cube stopped getting cut at all despite deep overlap.
         //
-        // Fix #3 (stable): bila cutter & target BERTINDIH SEBENAR dalam 3D (box intersect),
-        // titik rujukan SETIAP objek ialah PUSAT OBJEK ITU SENDIRI diclamp ke dalam kawasan
-        // pertindihan (Box3.intersect) — bukan pusat objek SATU LAGI (punca songsang fix
-        // #2). Sentiasa diperoleh dari pusat objek SENDIRI, jadi tak boleh collapse jadi
-        // titik objek lain. Bila TIADA pertindihan 3D, guna balik kaedah fix #2 (clamp
-        // pusat SATU LAGI objek) — selamat di situ sebab kalau pusat objek lain berada
-        // dalam box ni, box tu MEMANG bertindih (tak sampai cabang ni pun).
+        // Fix #3 (superseded by fix #4 below — kept for history): own-center clamped into
+        // the 3D intersection region. Broke when the overlap region is THIN (boxes only
+        // touch at a corner/edge, e.g. after moving an object to one end) — clamping both
+        // centers into a thin sliver collapses them to nearly the same point regardless of
+        // their real original depths, giving wrong/inconsistent cut decisions as objects
+        // moved ("moved it to the front, now it wrongly gets cut").
+        //
+        // Fix #4 — different approach entirely: fix #1-#3 all projected points onto the
+        // camera's VIEW DIRECTION (dot product), which is inherently sensitive to camera
+        // rotation no matter which reference point is chosen. Fix #4 drops view direction
+        // completely: use straight-line DISTANCE from the camera to the closest point on
+        // each object's own bounding box (Box3.clampPoint(camPos)) — depends only on
+        // camera POSITION and each box's own geometry, never on view direction, so pure
+        // camera rotation (no movement) cannot change the cut decision at all. Also never
+        // clamps one box into another, so it can't collapse/invert like fix #2/#3 either.
         const _cutoutGatingTmpA = new THREE.Vector3();
-        const _cutoutGatingTmpC = new THREE.Vector3();
-        const _cutoutGatingTmpDir = new THREE.Vector3();
         const _cutoutGatingTmpBox = new THREE.Box3();
-        const _cutoutGatingTmpIntersect = new THREE.Box3();
         function updateCutoutCameraGating() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) return;
             mainCamera.getWorldPosition(_cutoutGatingTmpA);
-            mainCamera.getWorldDirection(_cutoutGatingTmpDir);
             const camPos = _cutoutGatingTmpA;
-            const camDir = _cutoutGatingTmpDir;
-            const viewDepthOfPoint = (point) => camDir.dot(_cutoutGatingTmpC.copy(point).sub(camPos));
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
-            const cutterCenters = cutterBoxes.map(box => box.getCenter(new THREE.Vector3()));
 
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
@@ -649,27 +650,17 @@
 
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
                 const meshCenter = meshBox.getCenter(new THREE.Vector3());
+                const meshDist = camPos.distanceTo(meshBox.clampPoint(camPos, new THREE.Vector3()));
 
-                let shouldCut = false;
-                let bestPairDist = Infinity;
-                cutterBoxes.forEach((box, i) => {
-                    let cutterPoint, targetPoint;
-                    const overlap = _cutoutGatingTmpIntersect.copy(box).intersect(meshBox);
-                    if (!overlap.isEmpty()) {
-                        cutterPoint = overlap.clampPoint(cutterCenters[i], new THREE.Vector3());
-                        targetPoint = overlap.clampPoint(meshCenter, new THREE.Vector3());
-                    } else {
-                        cutterPoint = box.clampPoint(meshCenter, new THREE.Vector3());
-                        targetPoint = meshBox.clampPoint(cutterCenters[i], new THREE.Vector3());
-                    }
-                    const pairDist = cutterPoint.distanceTo(targetPoint);
-                    if (pairDist < bestPairDist) {
-                        bestPairDist = pairDist;
-                        shouldCut = viewDepthOfPoint(cutterPoint) < viewDepthOfPoint(targetPoint);
-                    }
+                let chosenCutterBox = cutterBoxes[0];
+                let bestGap = Infinity;
+                cutterBoxes.forEach(box => {
+                    const gap = box.clampPoint(meshCenter, new THREE.Vector3()).distanceTo(meshCenter);
+                    if (gap < bestGap) { bestGap = gap; chosenCutterBox = box; }
                 });
 
-                setCuttableMaterial(mesh, shouldCut);
+                const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
+                setCuttableMaterial(mesh, cutterDist < meshDist);
             });
         }
 
