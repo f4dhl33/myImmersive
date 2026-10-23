@@ -913,8 +913,10 @@
                         <input type="number" class="axis-z" id="input-scale-z" step="0.01" placeholder="Z">
                     </div>
 
-                    <div class="btn-action-group" style="margin-top: 10px;">
-                        <button id="btn-duplicate-object" class="btn-secondary" title="Duplicate the selected object (Ctrl+D)">📄 Duplicate</button>
+                    <label style="margin-top: 10px;">Axis Space:</label>
+                    <div class="btn-grid">
+                        <button id="btn-space-local" class="btn-mode active">Local</button>
+                        <button id="btn-space-world" class="btn-mode">World</button>
                     </div>
 
                     <label style="margin-top: 10px;">Object Control Mode:</label>
@@ -924,10 +926,8 @@
                         <button id="btn-mode-scale" class="btn-mode btn-full">Scale</button>
                     </div>
 
-                    <label style="margin-top: 10px;">Axis Space:</label>
-                    <div class="btn-grid">
-                        <button id="btn-space-local" class="btn-mode active">Local</button>
-                        <button id="btn-space-world" class="btn-mode">World</button>
+                    <div class="btn-action-group" style="margin-top: 10px;">
+                        <button id="btn-duplicate-object" class="btn-secondary" title="Duplicate the selected object (Ctrl+D)">📄 Duplicate</button>
                     </div>
 
                     <div class="collapsible subgroup collapsed" data-key="reset" style="margin-top:10px;">
