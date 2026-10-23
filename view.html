@@ -602,13 +602,23 @@
 
         // Dipanggil SETIAP FRAME semasa Pratonton (lihat animate()) selagi ada sekurang-
         // kurangnya satu objek cutter — kedudukan kamera boleh berubah tiap frame, jadi
-        // gating ni kena dikira semula tiap frame. Guna kedudukan KASAR (titik tengah
-        // objek) sepanjang arah pandang kamera, bukan per-pixel — elak isu precision/
-        // z-fighting yang punca hasil "lari"/tak tentu bila dicuba dgn depth-buffer
-        // penuh sebelum ni (lihat index.html).
+        // gating ni kena dikira semula tiap frame. Guna kedudukan KASAR (bounding box),
+        // bukan per-pixel — elak isu precision/z-fighting yang punca hasil "lari"/tak
+        // tentu bila dicuba dgn depth-buffer penuh sebelum ni (lihat index.html).
+        //
+        // NOTA (fix selepas laporan "pusing sikit, tiba2 potong byk/tak potong langsung
+        // walaupun nampak bertindih"): mulanya guna titik PIVOT objek (getWorldPosition())
+        // untuk kira depth. Tapi cutter dalam app ni selalunya kotak PANJANG, dan target
+        // cuma bertindih kat SEBAHAGIAN hujungnya sahaja — pivot cutter (lazimnya di tengah
+        // kotak panjang tu) boleh jauh terpisah dari zon pertindihan SEBENAR dengan target,
+        // jadi anggaran depth jadi sangat sensitif pada sudut kamera. Fix: guna TITIK
+        // TERHAMPIR pada bounding box cutter ke pusat target (bukan pivot cutter) — jauh
+        // lebih stabil (lihat index.html untuk nota penuh).
         const _cutoutGatingTmpA = new THREE.Vector3();
         const _cutoutGatingTmpB = new THREE.Vector3();
+        const _cutoutGatingTmpC = new THREE.Vector3();
         const _cutoutGatingTmpDir = new THREE.Vector3();
+        const _cutoutGatingTmpBox = new THREE.Box3();
         function updateCutoutCameraGating() {
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) return;
@@ -616,15 +626,25 @@
             mainCamera.getWorldDirection(_cutoutGatingTmpDir);
             const camPos = _cutoutGatingTmpA;
             const camDir = _cutoutGatingTmpDir;
-            const viewDepth = (obj) => {
-                obj.getWorldPosition(_cutoutGatingTmpB);
-                return camDir.dot(_cutoutGatingTmpB.sub(camPos));
-            };
-            const nearestCutterDepth = Math.min(...cutters.map(viewDepth));
+            const viewDepthOfPoint = (point) => camDir.dot(_cutoutGatingTmpC.copy(point).sub(camPos));
+
+            const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
+
             loadedModelsList.forEach(mesh => {
                 if (mesh.userData.primType === 'zone') return;
                 if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
-                setCuttableMaterial(mesh, nearestCutterDepth < viewDepth(mesh));
+
+                const meshCenter = _cutoutGatingTmpBox.setFromObject(mesh).getCenter(_cutoutGatingTmpB);
+                const meshDepth = viewDepthOfPoint(meshCenter);
+
+                let nearestCutterDepth = Infinity;
+                cutterBoxes.forEach(box => {
+                    const closest = box.clampPoint(meshCenter, _cutoutGatingTmpC);
+                    const d = camDir.dot(closest.sub(camPos));
+                    if (d < nearestCutterDepth) nearestCutterDepth = d;
+                });
+
+                setCuttableMaterial(mesh, nearestCutterDepth < meshDepth);
             });
         }
 
