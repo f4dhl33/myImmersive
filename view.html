@@ -1022,7 +1022,17 @@
             }
         }
 
+        // Pulangkan PROMISE (bukan mesh terus) — sama macam createModelFromData/
+        // createImageFromData — supaya applySceneDataToViewport() boleh await ia. Tanpa ni,
+        // texture custom (TextureLoader.load, async) boleh belum siap muat bila
+        // applyCutoutEffect() clone material objek (ensureCutoutStencilMaterials) — clone
+        // tu snapshot BEKU, texture yang sampai LEPAS clone dibuat takkan terpapar pada
+        // clone tu, jadi bahagian objek yang kena cutout tinggal base color je. Fail
+        // export/view.html terus jalan tanpa "jeda" (lain dgn editor yg ada jeda semula
+        // jadi: load projek → pengguna tengok-tengok → klik Preview), jadi race condition
+        // ni selalu kena di sini walaupun jarang nampak di editor.
         function createPrimitiveFromData(objData) {
+            return new Promise((resolve) => {
             let geometry, material;
             const type = objData.primType;
 
@@ -1095,22 +1105,13 @@
                 stepStateToggle: false
             };
 
-            if (['box', 'sphere', 'cylinder', 'plane'].includes(type)) {
-                if (objData.customColor) {
-                    // renderer.outputEncoding = sRGBEncoding — Color.set() dari hex string
-                    // (r128) simpan nilai MENTAH tanpa tukar ke linear, jadi perlu convert
-                    // manual supaya warna terpapar sama macam dipilih dalam editor (lihat
-                    // index.html untuk nota penuh).
-                    material.color.set(objData.customColor).convertSRGBToLinear();
-                    mesh.userData.customColor = objData.customColor;
-                }
-                if (objData.customTextureUrl) {
-                    mesh.userData.customTextureUrl = objData.customTextureUrl;
-                    new THREE.TextureLoader().load(objData.customTextureUrl, (tex) => {
-                        material.map = tex;
-                        material.needsUpdate = true;
-                    });
-                }
+            if (['box', 'sphere', 'cylinder', 'plane'].includes(type) && objData.customColor) {
+                // renderer.outputEncoding = sRGBEncoding — Color.set() dari hex string
+                // (r128) simpan nilai MENTAH tanpa tukar ke linear, jadi perlu convert
+                // manual supaya warna terpapar sama macam dipilih dalam editor (lihat
+                // index.html untuk nota penuh).
+                material.color.set(objData.customColor).convertSRGBToLinear();
+                mesh.userData.customColor = objData.customColor;
             }
 
             mesh.position.fromArray(objData.position);
@@ -1119,7 +1120,21 @@
 
             contentRoot.add(mesh);
             loadedModelsList.push(mesh);
-            return mesh;
+
+            if (['box', 'sphere', 'cylinder', 'plane'].includes(type) && objData.customTextureUrl) {
+                mesh.userData.customTextureUrl = objData.customTextureUrl;
+                new THREE.TextureLoader().load(objData.customTextureUrl, (tex) => {
+                    material.map = tex;
+                    material.needsUpdate = true;
+                    resolve(mesh);
+                }, undefined, (err) => {
+                    console.error('Ralat memuat texture bentuk:', err);
+                    resolve(mesh);
+                });
+            } else {
+                resolve(mesh);
+            }
+            });
         }
 
         // ---------------------------------------------------------------
@@ -1247,7 +1262,7 @@
                 } else if (objData.kind === 'image') {
                     await createImageFromData(objData);
                 } else {
-                    createPrimitiveFromData(objData);
+                    await createPrimitiveFromData(objData);
                 }
             }
 

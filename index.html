@@ -2992,7 +2992,7 @@
                 } else if (objData.kind === 'image') {
                     await restoreImageFromUrl(objData);
                 } else {
-                    restorePrimitiveFromData(objData);
+                    await restorePrimitiveFromData(objData);
                 }
             }
             recenterOrbitPivot();
@@ -3002,41 +3002,68 @@
         // Bina semula primitif (box/sphere/cylinder/plane/zone/waypoint/text) daripada
         // objData — dikongsi antara applySceneDataToViewport() (muat scene) DAN
         // duplicateSelectedObject() (duplicate), elak duplikasi logik.
+        //
+        // Pulangkan PROMISE (bukan mesh terus) — sama macam restoreModelFromUrl/
+        // restoreImageFromUrl — supaya applySceneDataToViewport() boleh await ia. SEBAB:
+        // texture custom (shapeTextureLoader.load) dimuat secara ASYNC; kalau fungsi ni
+        // pulang serta-merta sebelum texture siap muat, applyCutoutEffect() (dipanggil
+        // lepas semua objek scene siap dimuat) boleh terus clone material (lihat
+        // ensureCutoutStencilMaterials) SEBELUM texture sempat terpasang — clone material
+        // tu snapshot BEKU, texture yang terpasang LEPAS clone dibuat takkan terpapar pada
+        // clone tu langsung, jadi bahagian objek yang kena cutout kekal base color je
+        // (texture tak pernah sampai ke situ). Isu ni laporan pengguna: "selepas export,
+        // cutter kena objek ada texture, keseluruhan texture terpotong tinggal base color".
+        // Jarang nampak di editor sebab ada "jeda" semula jadi (load projek → pengguna
+        // tengok-tengok → klik Preview) yang beri masa texture siap muat sebelum
+        // applyCutoutEffect() jalan — tapi fail export/view.html terus jalan tanpa jeda tu,
+        // jadi race condition ni selalu kena.
         function restorePrimitiveFromData(objData) {
-            const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
-            if (!mesh) return null;
+            return new Promise((resolve) => {
+                const mesh = addPrimitive(objData.primType, { presetText: objData.textContent, id: objData.id, skipSelect: true });
+                if (!mesh) { resolve(null); return; }
 
-            mesh.position.fromArray(objData.position);
-            mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
-            mesh.scale.fromArray(objData.scale);
-            mesh.userData.initialPosition.fromArray(objData.initialPosition);
-            mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
-            mesh.userData.initialScale.fromArray(objData.initialScale);
-            mesh.userData.initialVisibility = objData.initialVisibility;
-            mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
-            mesh.userData.isCutter = objData.isCutter || false;
-            mesh.userData.excludeFromCutout = objData.excludeFromCutout || false;
-            mesh.userData.interactions = objData.interactions || [];
-            mesh.userData.isGrabbable = objData.isGrabbable || false;
-            mesh.userData.isSolid = objData.isSolid || false;
-            mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
-            mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
-            mesh.userData.colliderTrim = objData.colliderTrim || null;
-            if (isBasicShapeMesh(mesh)) {
-                if (objData.customColor) {
-                    mesh.material.color.set(objData.customColor).convertSRGBToLinear();
-                    mesh.userData.customColor = objData.customColor;
+                mesh.position.fromArray(objData.position);
+                mesh.rotation.set(objData.rotation[0], objData.rotation[1], objData.rotation[2]);
+                mesh.scale.fromArray(objData.scale);
+                mesh.userData.initialPosition.fromArray(objData.initialPosition);
+                mesh.userData.initialRotation.set(objData.initialRotation[0], objData.initialRotation[1], objData.initialRotation[2]);
+                mesh.userData.initialScale.fromArray(objData.initialScale);
+                mesh.userData.initialVisibility = objData.initialVisibility;
+                mesh.userData.colliderActiveWhenHidden = objData.colliderActiveWhenHidden || false;
+                mesh.userData.isCutter = objData.isCutter || false;
+                mesh.userData.excludeFromCutout = objData.excludeFromCutout || false;
+                mesh.userData.interactions = objData.interactions || [];
+                mesh.userData.isGrabbable = objData.isGrabbable || false;
+                mesh.userData.isSolid = objData.isSolid || false;
+                mesh.userData.returnToOriginalOnRelease = objData.returnToOriginalOnRelease || false;
+                mesh.userData.bounciness = (typeof objData.bounciness === 'number') ? objData.bounciness : 0.4;
+                mesh.userData.colliderTrim = objData.colliderTrim || null;
+
+                const finish = () => {
+                    if (objData.primType === 'waypoint') rebuildWaypointPath();
+                    resolve(mesh);
+                };
+
+                if (isBasicShapeMesh(mesh)) {
+                    if (objData.customColor) {
+                        mesh.material.color.set(objData.customColor).convertSRGBToLinear();
+                        mesh.userData.customColor = objData.customColor;
+                    }
+                    if (objData.customTextureUrl) {
+                        mesh.userData.customTextureUrl = objData.customTextureUrl;
+                        shapeTextureLoader.load(objData.customTextureUrl, (tex) => {
+                            mesh.material.map = tex;
+                            mesh.material.needsUpdate = true;
+                            finish();
+                        }, undefined, (err) => {
+                            console.error('Ralat memuat texture bentuk:', err);
+                            finish();
+                        });
+                        return;
+                    }
                 }
-                if (objData.customTextureUrl) {
-                    mesh.userData.customTextureUrl = objData.customTextureUrl;
-                    shapeTextureLoader.load(objData.customTextureUrl, (tex) => {
-                        mesh.material.map = tex;
-                        mesh.material.needsUpdate = true;
-                    });
-                }
-            }
-            if (objData.primType === 'waypoint') rebuildWaypointPath();
-            return mesh;
+                finish();
+            });
         }
 
         async function loadProjectIntoEditor(projectId) {
@@ -5659,7 +5686,7 @@
             } else if (objData.kind === 'image') {
                 newMesh = await restoreImageFromUrl(objData);
             } else {
-                newMesh = restorePrimitiveFromData(objData);
+                newMesh = await restorePrimitiveFromData(objData);
             }
 
             if (newMesh) {
