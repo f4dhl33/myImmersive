@@ -1135,10 +1135,23 @@
 
         // Grid dibesarkan + "mengekori" kamera (snap ke saiz sel, lihat animate()) supaya
         // nampak tiada hujung tak kira sejauh mana pengguna pan/zoom — perlu untuk sokong
-        // environment/scene yang besar, tanpa redraw geometri setiap frame.
+        // environment/scene yang besar, tanpa redraw geometri setiap frame. Garisan "tengah"
+        // GridHelper sendiri (dulu biru) turut mengekori kamera sama macam grid keseluruhan
+        // — tukar jadi putih (sama dgn garisan grid biasa) supaya tak mengelirukan dengan
+        // penanda origin sebenar di bawah ni.
         const GRID_CELL_SIZE = 1;
-        const gridHelper = new THREE.GridHelper(2000, 2000 / GRID_CELL_SIZE, 0x007acc, 0xffffff);
+        const gridHelper = new THREE.GridHelper(2000, 2000 / GRID_CELL_SIZE, 0xffffff, 0xffffff);
         scene.add(gridHelper);
+
+        // PENANDA ORIGIN DUNIA SEBENAR (0,0,0) — garisan biru TETAP, TAK mengekori kamera
+        // macam gridHelper (lihat animate()) — supaya pengguna sentiasa ada rujukan tempat
+        // sebenar (0,0,0) berada, tak kira macam mana jauh/arah kamera bergerak.
+        const originCrossGeometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(-1000, 0.001, 0), new THREE.Vector3(1000, 0.001, 0),
+            new THREE.Vector3(0, 0.001, -1000), new THREE.Vector3(0, 0.001, 1000)
+        ]);
+        const originCross = new THREE.LineSegments(originCrossGeometry, new THREE.LineBasicMaterial({ color: 0x007acc }));
+        scene.add(originCross);
 
         const mainCamera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
         mainCamera.position.set(3, 4, 5);
@@ -1633,6 +1646,7 @@
 
                 deselectObject();
                 gridHelper.visible = false;
+                originCross.visible = false;
                 cameraHelper.visible = false;
 
                 // Tangkap kedudukan/putaran/saiz SEMUA objek SEBELUM apa-apa simulasi
@@ -1669,6 +1683,7 @@
                 modeTextLabel.innerText = "Interactive Editing";
 
                 gridHelper.visible = true;
+                originCross.visible = true;
                 cameraHelper.visible = !hideCameraHelperPref;
 
                 // Reset keadaan genggam kalau pengguna keluar Pratonton semasa tengah menggenggam.
