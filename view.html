@@ -1947,16 +1947,6 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
-            // Matikan respons pelanggaran sementara selagi digenggam — lihat nota penuh
-            // di index.html (objek berehat/bersentuh permukaan Pepejal "lawan" P-controller
-            // dalam SEMUA arah, bukan cuma angkat, sebab solver cannon.js). Dipulihkan serta-
-            // merta bila dilepas (onControllerSelectEnd).
-            let prevCollisionResponse = true;
-            if (bodyToWake) {
-                prevCollisionResponse = bodyToWake.collisionResponse;
-                bodyToWake.collisionResponse = false;
-            }
-
             const objWorldPosStart = new THREE.Vector3();
             const objWorldQuatStart = new THREE.Quaternion();
             hitModel.getWorldPosition(objWorldPosStart);
@@ -1973,8 +1963,7 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart,
-                prevCollisionResponse
+                controllerWorldQuatInvStart
             };
         }
 
@@ -2069,11 +2058,6 @@
             const obj = grabbedObject;
             const mode = grabStartState ? grabStartState.mode : 'move';
 
-            const releasedBody = obj.userData._physicsBody;
-            if (releasedBody && grabStartState) {
-                releasedBody.collisionResponse = grabStartState.prevCollisionResponse;
-            }
-
             let docked = false;
             if (mode === 'move') {
                 docked = checkPlacementZones(obj);
@@ -2116,13 +2100,6 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
-            // Sama macam onControllerSelectStart() — lihat nota kat sana.
-            let prevCollisionResponse = true;
-            if (bodyToWake) {
-                prevCollisionResponse = bodyToWake.collisionResponse;
-                bodyToWake.collisionResponse = false;
-            }
-
             mainCamera.getWorldDirection(mouseGrabPlaneNormal);
             mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
             mouseGrabProxy.position.copy(grabPoint);
@@ -2144,8 +2121,7 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart,
-                prevCollisionResponse
+                controllerWorldQuatInvStart
             };
 
             isMouseGrabbing = true;
