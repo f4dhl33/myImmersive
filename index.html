@@ -5090,6 +5090,21 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // Matikan RESPONS pelanggaran (bukan collision DETECTION, cuma reaksi fizik) buat
+            // sementara selagi objek ni SEDANG digenggam. Tanpa ni, objek yang bermula berehat/
+            // bersentuh dgn permukaan Pepejal lain (meja/lantai) akan "lawan" P-controller di
+            // updateGrabbedObjectTransform() dalam SEMUA arah (bukan cuma angkat naik — geseran
+            // melintang pun kena) sebab solver cannon.js terus cuba selesaikan kekangan sentuh
+            // tu tiap langkah fizik, buat objek rasa "berat"/degil nak gerak walau velocity dah
+            // diarah betul. Dipulihkan (restoreGrabbedBodyCollisionResponse) serta-merta bila
+            // dilepas — jadi pelanggaran sebenar (sekat tembus objek Pepejal lain) HANYA
+            // tak aktif SEMASA sedang digenggam, bukan selepas dilepas.
+            let prevCollisionResponse = true;
+            if (bodyToWake) {
+                prevCollisionResponse = bodyToWake.collisionResponse;
+                bodyToWake.collisionResponse = false;
+            }
+
             const objWorldPosStart = new THREE.Vector3();
             const objWorldQuatStart = new THREE.Quaternion();
             hitModel.getWorldPosition(objWorldPosStart);
@@ -5106,7 +5121,8 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevCollisionResponse
             };
         }
 
@@ -5221,6 +5237,13 @@
             const obj = grabbedObject;
             const mode = grabStartState ? grabStartState.mode : 'move';
 
+            // Pulihkan respons pelanggaran badan fizik SERTA-MERTA bila dilepas (lihat nota
+            // di onControllerSelectStart()) — graviti/pelanggaran sebenar aktif semula terus.
+            const releasedBody = obj.userData._physicsBody;
+            if (releasedBody && grabStartState) {
+                releasedBody.collisionResponse = grabStartState.prevCollisionResponse;
+            }
+
             let docked = false;
             if (mode === 'move') {
                 docked = checkPlacementZones(obj);
@@ -5270,6 +5293,13 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // Sama macam onControllerSelectStart() — lihat nota kat sana.
+            let prevCollisionResponse = true;
+            if (bodyToWake) {
+                prevCollisionResponse = bodyToWake.collisionResponse;
+                bodyToWake.collisionResponse = false;
+            }
+
             mainCamera.getWorldDirection(mouseGrabPlaneNormal);
             mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
             mouseGrabProxy.position.copy(grabPoint);
@@ -5291,7 +5321,8 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevCollisionResponse
             };
 
             isMouseGrabbing = true;
