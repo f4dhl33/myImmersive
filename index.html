@@ -2878,8 +2878,25 @@
             };
         }
 
+        // PENJAGA PUSAT — SATU-SATUNYA fungsi yang benar-benar menulis `data` (kandungan
+        // scene/objek) projek ke Supabase (saveProjectRow() cuma dipanggil dari sini).
+        // Sekatan `isPreviewMode` di sini bermakna TIADA laluan/butang/kod lain — tak kira
+        // scheduleAutoSave(), klik butang, atau apa-apa yang akan ditambah pada masa depan —
+        // boleh terlepas pandang simpan keadaan fizik/ujian Pratonton/VR/AR secara TAK
+        // SENGAJA. (Insiden 2026-10-27: butang "My Projects" panggil saveCurrentProject()
+        // terus TANPA sekatan ni, jadi keadaan rosak semasa ujian VR grab [objek jatuh tembus
+        // lantai akibat bug fizik] berjaya tersimpan kekal ke Supabase, nyaris kehilangan
+        // seluruh projek pengguna — cuma dapat dipulihkan sebab kebetulan ada fail eksport
+        // HTML standalone projek tu. Jangan alih keluar/kurangkan sekatan ni — kalau satu
+        // laluan/butang BENAR-BENAR perlu simpan semasa Pratonton aktif pada masa depan,
+        // kena keluar Pratonton (setPreviewMode(false), yg pulihkan snapshot dulu) SEBELUM
+        // simpan, bukan buang sekatan ni.)
         async function saveCurrentProject() {
             if (!activeProjectId) return;
+            if (isPreviewMode) {
+                console.warn('[Save] Blocked — refusing to save while Preview/VR/AR mode is active (would persist test-only physics/interaction state).');
+                return;
+            }
             const dataObj = serializeSceneForSave();
             try {
                 await saveProjectRow(activeProjectId, dataObj);
