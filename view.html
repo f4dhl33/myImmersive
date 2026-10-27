@@ -1916,6 +1916,11 @@
                         THREE.MathUtils.lerp(body.velocity.z, vz * scale, GRAB_VELOCITY_BLEND)
                     );
                     body.angularVelocity.set(0, 0, 0);
+                    // Tangkis graviti SEPENUHNYA utk langkah fizik ni selagi digenggam —
+                    // lihat index.html untuk nota penuh (objek berehat atas Pepejal rasa
+                    // "berat"/x boleh diangkat sebab graviti dibah setiap bingkai hampir
+                    // sama magnitud dgn velocity sasaran P-controller bila angkat perlahan).
+                    body.applyForce(new CANNON.Vec3(0, -physicsWorld.gravity.y * body.mass, 0), body.position);
                 } else {
                     obj.position.copy(newWorldPos);
                 }

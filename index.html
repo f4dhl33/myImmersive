@@ -5051,6 +5051,17 @@
                         THREE.MathUtils.lerp(body.velocity.z, vz * scale, GRAB_VELOCITY_BLEND)
                     );
                     body.angularVelocity.set(0, 0, 0);
+                    // Tangkis graviti SEPENUHNYA utk langkah fizik ni selagi digenggam —
+                    // tanpa ni, physicsWorld.step() tambah graviti (-9.82/60 ≈ -0.16 m/s
+                    // SETIAP bingkai) ATAS velocity P-controller di atas, yang bagi objek
+                    // berehat atas permukaan Pepejal, saiznya hampir SAMA dgn velocity
+                    // sasaran bila cuba angkat perlahan — nyaris membatalkan terus (punca
+                    // laporan "objek berat/x mampu diangkat" utk controller KANAN/mod
+                    // 'move' — mod 'rotate' controller KIRI tak kena isu ni sebab ia set
+                    // quaternion terus, tak pernah lalui integrasi fizik langsung). Cuma
+                    // tangkis DAYA LUAR (graviti) — respons pelanggaran dgn objek Pepejal
+                    // lain (sekatan tembus) KEKAL terpakai sebab jenis/jisim badan tak ubah.
+                    body.applyForce(new CANNON.Vec3(0, -physicsWorld.gravity.y * body.mass, 0), body.position);
                 } else {
                     obj.position.copy(newWorldPos);
                 }
