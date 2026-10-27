@@ -1837,6 +1837,9 @@
         chkExcludeFromCutout.addEventListener('change', function() {
             if (selectedModel && selectedModel !== previewCameraMarker) {
                 selectedModel.userData.excludeFromCutout = this.checked;
+                // Togol pada objek waypoint pengaruhi segmen laluan yang bersambung
+                // dengannya (lihat rebuildWaypointPath()) — bina semula supaya flag terpakai.
+                maybeRebuildWaypointPathFor(selectedModel);
                 scheduleAutoSave();
             }
         });
@@ -2379,6 +2382,7 @@
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) {
                 loadedModelsList.forEach(m => restoreOriginalMaterial(m));
+                waypointPathMeshes.forEach(m => restoreOriginalMaterial(m));
                 return;
             }
             loadedModelsList.forEach(mesh => {
@@ -2388,6 +2392,11 @@
                 } else if (mesh.userData.excludeFromCutout) {
                     restoreOriginalMaterial(mesh);
                 }
+            });
+            // Segmen laluan waypoint (bukan senarai loadedModelsList) ikut flag
+            // excludeFromCutout yang sama seperti objek biasa — lihat rebuildWaypointPath().
+            waypointPathMeshes.forEach(mesh => {
+                if (mesh.userData.excludeFromCutout) restoreOriginalMaterial(mesh);
             });
             updateCutoutCameraGating();
         }
@@ -2450,10 +2459,7 @@
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
 
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.primType === 'zone') return;
-                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
-
+            const gateMesh = (mesh) => {
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
                 const meshCenter = meshBox.getCenter(new THREE.Vector3());
                 const meshDist = camPos.distanceTo(meshBox.clampPoint(camPos, new THREE.Vector3()));
@@ -2471,6 +2477,20 @@
 
                 const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
                 setCuttableMaterial(mesh, cutterDist < meshDist);
+            };
+
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return;
+                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
+                gateMesh(mesh);
+            });
+
+            // Segmen laluan waypoint boleh dipilih sama ada immune (excludeFromCutout,
+            // ikut flag objek waypoint yang bersambung dengannya) atau ikut gating jarak
+            // kamera yang sama macam objek biasa.
+            waypointPathMeshes.forEach(mesh => {
+                if (mesh.userData.excludeFromCutout) return;
+                gateMesh(mesh);
             });
         }
 
@@ -2484,6 +2504,7 @@
                     restoreOriginalMaterial(mesh);
                 }
             });
+            waypointPathMeshes.forEach(mesh => restoreOriginalMaterial(mesh));
         }
 
         // Dipanggil dalam mod Editing (bukan Pratonton) setiap kali senarai objek/flag
@@ -4291,6 +4312,10 @@
                 segMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
                 segMesh.renderOrder = 10;
                 segMesh.userData.isWaypointPathSegment = true;
+                // Segmen ikut flag "Exclude From Cutout" objek waypoint yang disambungkannya
+                // (boleh pilih sama seperti objek biasa) — jika salah satu hujung ditanda
+                // immune, segmen antara mereka pun immune.
+                segMesh.userData.excludeFromCutout = !!(waypoints[i].userData.excludeFromCutout || waypoints[i + 1].userData.excludeFromCutout);
 
                 contentRoot.add(segMesh);
                 waypointPathMeshes.push(segMesh);

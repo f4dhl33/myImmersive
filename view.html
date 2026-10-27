@@ -587,6 +587,7 @@
             const cutters = loadedModelsList.filter(m => m.userData.isCutter);
             if (cutters.length === 0) {
                 loadedModelsList.forEach(m => restoreOriginalMaterial(m));
+                waypointPathMeshes.forEach(m => restoreOriginalMaterial(m));
                 return;
             }
             loadedModelsList.forEach(mesh => {
@@ -596,6 +597,10 @@
                 } else if (mesh.userData.excludeFromCutout) {
                     restoreOriginalMaterial(mesh);
                 }
+            });
+            // Segmen laluan waypoint ikut flag excludeFromCutout yang sama seperti objek biasa.
+            waypointPathMeshes.forEach(mesh => {
+                if (mesh.userData.excludeFromCutout) restoreOriginalMaterial(mesh);
             });
             updateCutoutCameraGating();
         }
@@ -644,10 +649,7 @@
 
             const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
 
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.primType === 'zone') return;
-                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
-
+            const gateMesh = (mesh) => {
                 const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
                 const meshCenter = meshBox.getCenter(new THREE.Vector3());
                 const meshDist = camPos.distanceTo(meshBox.clampPoint(camPos, new THREE.Vector3()));
@@ -661,6 +663,19 @@
 
                 const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
                 setCuttableMaterial(mesh, cutterDist < meshDist);
+            };
+
+            loadedModelsList.forEach(mesh => {
+                if (mesh.userData.primType === 'zone') return;
+                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
+                gateMesh(mesh);
+            });
+
+            // Segmen laluan waypoint boleh dipilih immune (excludeFromCutout) atau ikut
+            // gating jarak kamera yang sama macam objek biasa.
+            waypointPathMeshes.forEach(mesh => {
+                if (mesh.userData.excludeFromCutout) return;
+                gateMesh(mesh);
             });
         }
 
@@ -1016,6 +1031,7 @@
                 segMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
                 segMesh.renderOrder = 10;
                 segMesh.userData.isWaypointPathSegment = true;
+                segMesh.userData.excludeFromCutout = !!(waypoints[i].userData.excludeFromCutout || waypoints[i + 1].userData.excludeFromCutout);
 
                 contentRoot.add(segMesh);
                 waypointPathMeshes.push(segMesh);
