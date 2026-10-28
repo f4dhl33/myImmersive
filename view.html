@@ -1904,7 +1904,9 @@
                 obj.parent.worldToLocal(newWorldPos);
 
                 if (body) {
-                    const dtSafe = Math.max(delta || 1 / 60, 1 / 60);
+                    // Guna delta BINGKAI SEBENAR (bukan floor ke 1/60) — lihat index.html
+                    // utk nota penuh (floor lama underestimate kelajuan sasaran di VR ~90Hz).
+                    const dtSafe = Math.min(Math.max(delta || 1 / 60, 1 / 240), 1 / 20);
                     const vx = (newWorldPos.x - body.position.x) / dtSafe;
                     const vy = (newWorldPos.y - body.position.y) / dtSafe;
                     const vz = (newWorldPos.z - body.position.z) / dtSafe;
@@ -1947,6 +1949,18 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // Lumpuhkan damping sementara semasa digenggam — lihat nota penuh dlm index.html
+            // (damping 0.2/0.4 terpakai setiap sub-langkah fizik dalaman, bukan setiap
+            // bingkai render; di VR ~90Hz ia boleh termampat 2x antara kemaskini kita,
+            // punca "berat/bergerak sikit" dlm semua arah). Pulih bila lepas (selectEnd).
+            let prevLinearDamping = null, prevAngularDamping = null;
+            if (bodyToWake) {
+                prevLinearDamping = bodyToWake.linearDamping;
+                prevAngularDamping = bodyToWake.angularDamping;
+                bodyToWake.linearDamping = 0;
+                bodyToWake.angularDamping = 0;
+            }
+
             const objWorldPosStart = new THREE.Vector3();
             const objWorldQuatStart = new THREE.Quaternion();
             hitModel.getWorldPosition(objWorldPosStart);
@@ -1963,7 +1977,9 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevLinearDamping,
+                prevAngularDamping
             };
         }
 
@@ -2058,6 +2074,12 @@
             const obj = grabbedObject;
             const mode = grabStartState ? grabStartState.mode : 'move';
 
+            const releasedBody = obj.userData._physicsBody;
+            if (releasedBody && grabStartState && grabStartState.prevLinearDamping !== null) {
+                releasedBody.linearDamping = grabStartState.prevLinearDamping;
+                releasedBody.angularDamping = grabStartState.prevAngularDamping;
+            }
+
             let docked = false;
             if (mode === 'move') {
                 docked = checkPlacementZones(obj);
@@ -2100,6 +2122,15 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // Lumpuhkan damping sementara semasa digenggam — lihat nota dlm index.html.
+            let prevLinearDamping = null, prevAngularDamping = null;
+            if (bodyToWake) {
+                prevLinearDamping = bodyToWake.linearDamping;
+                prevAngularDamping = bodyToWake.angularDamping;
+                bodyToWake.linearDamping = 0;
+                bodyToWake.angularDamping = 0;
+            }
+
             mainCamera.getWorldDirection(mouseGrabPlaneNormal);
             mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
             mouseGrabProxy.position.copy(grabPoint);
@@ -2121,7 +2152,9 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevLinearDamping,
+                prevAngularDamping
             };
 
             isMouseGrabbing = true;

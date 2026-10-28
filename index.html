@@ -5054,7 +5054,13 @@
                 obj.parent.worldToLocal(newWorldPos);
 
                 if (body) {
-                    const dtSafe = Math.max(delta || 1 / 60, 1 / 60);
+                    // Guna delta BINGKAI SEBENAR (bukan floor ke 1/60) — floor lama buat
+                    // dtSafe jadi LEBIH BESAR dari delta tulen di VR (~90Hz, delta≈1/90 <
+                    // 1/60), jadi kelajuan sasaran (gap/dtSafe) terkurang-anggar ~1.5x
+                    // secara berterusan, tambah kpd isu damping di atas. Had bawah (1/240)
+                    // cuma elak bahagi-dgn-sifar; had atas (1/20) elak lonjakan kelajuan
+                    // kalau ada bingkai tersekat/lag.
+                    const dtSafe = Math.min(Math.max(delta || 1 / 60, 1 / 240), 1 / 20);
                     const vx = (newWorldPos.x - body.position.x) / dtSafe;
                     const vy = (newWorldPos.y - body.position.y) / dtSafe;
                     const vz = (newWorldPos.z - body.position.z) / dtSafe;
@@ -5107,6 +5113,28 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // SEBAB SEBENAR "berat/bergerak sikit sangat": setiap badan dinamik dicipta dgn
+            // linearDamping 0.2 / angularDamping 0.4 (createPhysicsBodyForMesh) utk objek
+            // lepas-genggam reda elok-elok. Tapi SEMASA digenggam, kelajuan sasaran kita
+            // set terus ke body.velocity setiap bingkai render — damping cannon.js pula
+            // terpakai setiap SUB-LANGKAH fizik dalaman (internalStep), bukan setiap bingkai
+            // render. Di VR (~90Hz) kadar sub-langkah per bingkai tak tetap (0 atau 2,
+            // accumulator world.step()), jadi damping boleh termampat 2x antara dua kemaskini
+            // kita (0.8*0.8=0.64 baki) sebelum kita sempat set velocity semula — nyaris
+            // membatalkan gerakan P-controller di atas, sama rata semua arah (padan dgn
+            // laporan "berat" dlm SEMUA arah, bukan cuma angkat). Desktop (~60Hz) tak nampak
+            // sebab 1 sub-langkah/bingkai konsisten. Lumpuhkan damping SEMENTARA semasa
+            // digenggam (pulih bila lepas, onControllerSelectEnd) — ini TAK sentuh
+            // collisionResponse/pelanggaran, jadi sokongan lantai/permukaan Pepejal kekal
+            // penuh (beza dgn percubaan collisionResponse=false yg dah gagal sebelum ni).
+            let prevLinearDamping = null, prevAngularDamping = null;
+            if (bodyToWake) {
+                prevLinearDamping = bodyToWake.linearDamping;
+                prevAngularDamping = bodyToWake.angularDamping;
+                bodyToWake.linearDamping = 0;
+                bodyToWake.angularDamping = 0;
+            }
+
             const objWorldPosStart = new THREE.Vector3();
             const objWorldQuatStart = new THREE.Quaternion();
             hitModel.getWorldPosition(objWorldPosStart);
@@ -5123,7 +5151,9 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevLinearDamping,
+                prevAngularDamping
             };
         }
 
@@ -5238,6 +5268,12 @@
             const obj = grabbedObject;
             const mode = grabStartState ? grabStartState.mode : 'move';
 
+            const releasedBody = obj.userData._physicsBody;
+            if (releasedBody && grabStartState && grabStartState.prevLinearDamping !== null) {
+                releasedBody.linearDamping = grabStartState.prevLinearDamping;
+                releasedBody.angularDamping = grabStartState.prevAngularDamping;
+            }
+
             let docked = false;
             if (mode === 'move') {
                 docked = checkPlacementZones(obj);
@@ -5287,6 +5323,16 @@
                 bodyToWake.angularVelocity.set(0, 0, 0);
             }
 
+            // Lumpuhkan damping sementara semasa digenggam — lihat nota panjang dlm
+            // onControllerSelectStart (sebab sama terpakai utk mouse-grab desktop).
+            let prevLinearDamping = null, prevAngularDamping = null;
+            if (bodyToWake) {
+                prevLinearDamping = bodyToWake.linearDamping;
+                prevAngularDamping = bodyToWake.angularDamping;
+                bodyToWake.linearDamping = 0;
+                bodyToWake.angularDamping = 0;
+            }
+
             mainCamera.getWorldDirection(mouseGrabPlaneNormal);
             mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
             mouseGrabProxy.position.copy(grabPoint);
@@ -5308,7 +5354,9 @@
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
-                controllerWorldQuatInvStart
+                controllerWorldQuatInvStart,
+                prevLinearDamping,
+                prevAngularDamping
             };
 
             isMouseGrabbing = true;
