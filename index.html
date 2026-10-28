@@ -2475,6 +2475,29 @@
                     if (gap < bestGap) { bestGap = gap; chosenCutterBox = box; }
                 });
 
+                // FIX #5 (laporan "bulldozer duduk ATAS cut tool, tapi terpotong jugak"):
+                // Fix #4 di atas guna titik TERHAMPIR SELURUH box objek/cutter ke kamera
+                // sbg "depth" — DIBUKTIKAN guna ujian box matematik berasingan (bukan teka)
+                // ni PECAH bila objek (cth bulldozer) duduk/berehat ATAS cutter yg lebih
+                // besar/dalam (cth platform/tangga): titik terhampir CUTTER (selalunya
+                // penjuru bawah-depan platform yg luas) selalu lebih dekat drpd titik
+                // terhampir objek kecil yg duduk atas permukaan atasnya — walhal secara
+                // fizikal objek tu JELAS "di atas" (luar) cutter, bukan "di dalam"/belakang
+                // ia. Diuji: SALAH (terpotong) pada 7 drpd 8 sudut kamera diuji (hanya
+                // betul tepat-depan) — bukan setakat jarang/edge-case, ROSAK HAMPIR SEMUA
+                // SUDUT. Objek yang pusat Y dia >= bahagian ATAS cutter (duduk/berehat atas
+                // permukaan atasnya, bukan tenggelam/berada dlm julat Y cutter tu) TAK
+                // PERNAH patut dipotong cutter ni — tak kira sudut kamera langsung (immune
+                // sudut by construction, sama prinsip fix #4). Guard ni TAMBAHAN di atas
+                // gating jarak kamera sedia ada — kes dinding/cutaway asal (objek dlm
+                // julat Y sama dgn cutter, cth bilik di belakang dinding) TAK terjejas
+                // langsung (meshCenter.y dia berada DALAM julat Y cutter, bukan >= max.y,
+                // jadi terus jatuh ke gating jarak kamera sedia ada macam biasa).
+                if (meshCenter.y >= chosenCutterBox.max.y) {
+                    setCuttableMaterial(mesh, false);
+                    return;
+                }
+
                 const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
                 setCuttableMaterial(mesh, cutterDist < meshDist);
             };

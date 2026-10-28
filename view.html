@@ -661,6 +661,16 @@
                     if (gap < bestGap) { bestGap = gap; chosenCutterBox = box; }
                 });
 
+                // FIX #5 — objek yg pusat Y dia berada DI ATAS bahagian atas cutter (duduk/
+                // berehat atas permukaannya, bukan dlm julat Y cutter) tak pernah patut
+                // dipotong, tak kira sudut kamera — lihat nota penuh dlm index.html
+                // (dibuktikan guna ujian box matematik: gating jarak lama rosak pd 7/8
+                // sudut kamera diuji utk kes ni).
+                if (meshCenter.y >= chosenCutterBox.max.y) {
+                    setCuttableMaterial(mesh, false);
+                    return;
+                }
+
                 const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
                 setCuttableMaterial(mesh, cutterDist < meshDist);
             };
