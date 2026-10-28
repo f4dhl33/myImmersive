@@ -5059,6 +5059,28 @@
         // had kelajuan lagi) — diterima sbg kos reka bentuk sedia ada (kekal guna fizik
         // sebenar, bukan teleport, supaya objek tak boleh ditarik tembus Pepejal lain).
         const GRAB_MAX_SPEED = 20; // meter/saat
+
+        // NISBAH GERAK IKUT SAIZ OBJEK (VR sahaja) — laporan: "aku gerakkan controller
+        // hanya beberapa cm... tetapi objek... besar, panjang cecah 3 meter... macam tak
+        // bergerak." Disahkan betul: deltaPos di bawah SEBELUM ni 1:1 terus jarak controller
+        // SEBENAR (meter dunia nyata dari WebXR) ke jarak objek, TIADA pekali nisbah
+        // langsung tak kira saiz objek — gerakan tangan 5cm akan geser objek 3 meter
+        // sebanyak 5cm je (betul dari segi fizik, tapi nampak/rasa "tak bergerak" bila
+        // dibandingkan dgn saiz objek sendiri). Objek yg dimensi TERBESARNYA >= 1 meter
+        // kini dapat gandaan automatik (objek 3m -> gandaan 3x, 8m+ -> plafond 8x; objek
+        // < 1m kekal gandaan 1x/tepat). Dikira SEKALI sahaja semasa commitVRGrab (saiz
+        // objek tak berubah sepanjang genggaman). PENTING — had kelajuan GRAB_MAX_SPEED
+        // kena digandakan SAMA dgn moveGain di updateGrabbedObjectTransform (bukan kekal
+        // tetap): diuji guna replika fizik, pd gandaan 8x dgn had kelajuan tetap (tak
+        // digandakan), jurang ketinggalan melonjak smpai 0.67m (balik isu "lambat" asal)
+        // — sbb sasaran kini bergerak 8x lagi jauh utk gerakan tangan yg sama, jadi had
+        // kelajuan yg sama tak lagi cukup. Gandakan had sekali dgn moveGain kekalkan
+        // jurang ~0.05m tak kira gandaan (diuji 1x/3x/8x). Mouse (desktop) TAK disentuh —
+        // laporan ni khusus controller VR; mouse dah guna unjuran skrin-ke-dunia yg
+        // sedia ada "scale" ikut perspektif, bukan unit meter dunia-nyata tetap.
+        const GRAB_GAIN_REFERENCE_SIZE = 1; // meter — objek bersaiz ni & lebih kecil kekal gandaan 1x
+        const GRAB_GAIN_MIN = 1;
+        const GRAB_GAIN_MAX = 8;
         // SEBAB SEBENAR "trail"/objek rasa terapung-apung di belakang kursor — DIBUKTIKAN
         // guna simulasi fizik berasingan (bukan teka): vx/vy/vz di bawah dikira sebagai
         // (jurang kedudukan / dtSafe) — ni dah TEPAT (dtSafe = delta bingkai SEBENAR lepas
@@ -5097,7 +5119,8 @@
                 }
             } else {
                 controller.getWorldPosition(_grabTmpVec);
-                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart);
+                const moveGain = st.moveGain || 1;
+                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart).multiplyScalar(moveGain);
                 const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
                 obj.parent.worldToLocal(newWorldPos);
 
@@ -5113,7 +5136,11 @@
                     const vy = (newWorldPos.y - body.position.y) / dtSafe;
                     const vz = (newWorldPos.z - body.position.z) / dtSafe;
                     const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-                    const scale = speed > GRAB_MAX_SPEED ? GRAB_MAX_SPEED / speed : 1;
+                    // Had kelajuan digandakan SAMA dgn moveGain — tanpa ni, objek bergandaan
+                    // tinggi (cth 8x) jatuh balik ke isu "lambat" asal (diuji: jurang
+                    // melonjak smpai 0.67m tanpa penggandaan had ni, kekal ~0.05m dengannya).
+                    const effMaxSpeed = GRAB_MAX_SPEED * moveGain;
+                    const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
                     // Blend (bukan timpa terus) dengan velocity sedia ada — redam lonjakan
                     // bingkai-ke-bingkai yang buat objek nampak bergegar semasa digenggam.
                     body.velocity.set(
@@ -5198,6 +5225,14 @@
             controller.getWorldPosition(controllerWorldPosStart);
             controller.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
+            // Nisbah gerak ikut saiz objek (mod 'move' sahaja) — lihat nota GRAB_GAIN_* di
+            // atas. Dikira dari dimensi TERBESAR kotak sempadan dunia objek.
+            const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
+            const moveGain = THREE.MathUtils.clamp(
+                Math.max(objSize.x, objSize.y, objSize.z) / GRAB_GAIN_REFERENCE_SIZE,
+                GRAB_GAIN_MIN, GRAB_GAIN_MAX
+            );
+
             grabStartState = {
                 mode,
                 controller,
@@ -5206,7 +5241,8 @@
                 controllerWorldPosStart,
                 controllerWorldQuatInvStart,
                 prevLinearDamping,
-                prevAngularDamping
+                prevAngularDamping,
+                moveGain
             };
         }
 

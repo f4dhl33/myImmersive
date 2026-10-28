@@ -1887,6 +1887,11 @@
         // (cannon.js) ambil alih terus.
         // Had 20 (bukan 6) — terbukti perlu utk VR, lihat index.html utk nota penuh.
         const GRAB_MAX_SPEED = 20;
+        // Nisbah gerak ikut saiz objek (VR, mod 'move' sahaja) — lihat nota penuh dlm
+        // index.html.
+        const GRAB_GAIN_REFERENCE_SIZE = 1;
+        const GRAB_GAIN_MIN = 1;
+        const GRAB_GAIN_MAX = 8;
         // blend < 1 kekalkan velocity LAMA (utk jurang yg dah lapuk) bersama yg baru —
         // lepas dtSafe jadi tepat (lihat index.html), ni buat badan overshoot sasaran lalu
         // "patah balik" tiap bingkai (ringing), dirasai sbg "trail"/goyang. Dibuktikan guna
@@ -1914,7 +1919,8 @@
                 }
             } else {
                 controller.getWorldPosition(_grabTmpVec);
-                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart);
+                const moveGain = st.moveGain || 1;
+                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart).multiplyScalar(moveGain);
                 const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
                 obj.parent.worldToLocal(newWorldPos);
 
@@ -1926,7 +1932,9 @@
                     const vy = (newWorldPos.y - body.position.y) / dtSafe;
                     const vz = (newWorldPos.z - body.position.z) / dtSafe;
                     const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-                    const scale = speed > GRAB_MAX_SPEED ? GRAB_MAX_SPEED / speed : 1;
+                    // Had kelajuan digandakan sama dgn moveGain — lihat nota index.html.
+                    const effMaxSpeed = GRAB_MAX_SPEED * moveGain;
+                    const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
                     body.velocity.set(
                         THREE.MathUtils.lerp(body.velocity.x, vx * scale, GRAB_VELOCITY_BLEND),
                         THREE.MathUtils.lerp(body.velocity.y, vy * scale, GRAB_VELOCITY_BLEND),
@@ -1984,6 +1992,12 @@
             controller.getWorldPosition(controllerWorldPosStart);
             controller.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
+            const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
+            const moveGain = THREE.MathUtils.clamp(
+                Math.max(objSize.x, objSize.y, objSize.z) / GRAB_GAIN_REFERENCE_SIZE,
+                GRAB_GAIN_MIN, GRAB_GAIN_MAX
+            );
+
             grabStartState = {
                 mode,
                 controller,
@@ -1992,7 +2006,8 @@
                 controllerWorldPosStart,
                 controllerWorldQuatInvStart,
                 prevLinearDamping,
-                prevAngularDamping
+                prevAngularDamping,
+                moveGain
             };
         }
 
