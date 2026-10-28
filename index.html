@@ -6417,7 +6417,26 @@
             if (physicsActive && isPreviewMode && (!isARSession || isPlaced)) {
                 updateCutoutCameraGating();
                 syncPhysicsBodiesWithVisibility();
-                physicsWorld.step(1 / 60, delta, 10);
+                if (grabbedObject) {
+                    // PUNCA SEBENAR "trail"/"berat" semasa genggam: step(1/60, delta, 10)
+                    // guna accumulator langkah-tetap 1/60s — kalau delta bingkai render
+                    // (VR ~90Hz, atau monitor PC 120/144Hz) TAK sepadan tepat dgn 1/60,
+                    // accumulator skip langkah sesetengah bingkai (0 langkah) lalu kejar 2
+                    // langkah sekaligus di bingkai lain. updateGrabbedObjectTransform() plak
+                    // hanya set velocity sasaran SEKALI setiap bingkai RENDER (bukan setiap
+                    // langkah fizik) — jadi di bingkai "0 langkah", objek fizik tak bergerak
+                    // langsung walaupun kursor/controller dah gerak, punca jurang/"trail"
+                    // kelihatan & rasa "berat". Semasa SESUATU digenggam, step guna delta
+                    // SEBENAR terus (satu langkah tepat sepadan satu bingkai render, tiada
+                    // accumulator/skip) supaya objek genggam 1:1 ikut kelajuan
+                    // kursor/controller — kekal guna velocity (bukan teleport terus) supaya
+                    // sekatan pelanggaran dgn objek Pepejal lain KEKAL terpakai (lihat nota
+                    // GENGGAM + FIZIK di atas). Had atas 1/20s elak lonjakan/tak stabil kalau
+                    // ada bingkai tersekat/lag semasa drag.
+                    physicsWorld.step(Math.min(delta || 1 / 60, 1 / 20));
+                } else {
+                    physicsWorld.step(1 / 60, delta, 10);
+                }
                 physicsBodies.forEach(pb => {
                     if (!pb.inWorld) return; // objek tersembunyi — tiada badan dlm dunia fizik, tiada posisi utk disegerak
                     if (pb.body.type !== CANNON.Body.STATIC) {

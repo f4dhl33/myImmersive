@@ -2293,7 +2293,14 @@
             if (physicsActive && (!isARSession || isPlaced)) {
                 updateCutoutCameraGating();
                 syncPhysicsBodiesWithVisibility();
-                physicsWorld.step(1 / 60, delta, 10);
+                if (grabbedObject) {
+                    // Semasa genggam, guna delta bingkai SEBENAR (satu langkah tepat, tiada
+                    // accumulator/skip) supaya objek 1:1 ikut kelajuan kursor/controller —
+                    // lihat nota penuh dlm index.html.
+                    physicsWorld.step(Math.min(delta || 1 / 60, 1 / 20));
+                } else {
+                    physicsWorld.step(1 / 60, delta, 10);
+                }
                 physicsBodies.forEach(pb => {
                     if (!pb.inWorld) return;
                     if (pb.body.type !== CANNON.Body.STATIC) {
