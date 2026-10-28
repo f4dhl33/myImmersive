@@ -1876,7 +1876,11 @@
         // pelanggaran fizik sebenar. Bila dilepas, graviti + pelanggaran + bounce
         // (cannon.js) ambil alih terus.
         const GRAB_MAX_SPEED = 6;
-        const GRAB_VELOCITY_BLEND = 0.55;
+        // blend < 1 kekalkan velocity LAMA (utk jurang yg dah lapuk) bersama yg baru —
+        // lepas dtSafe jadi tepat (lihat index.html), ni buat badan overshoot sasaran lalu
+        // "patah balik" tiap bingkai (ringing), dirasai sbg "trail"/goyang. Dibuktikan guna
+        // replika fizik berasingan. blend=1 (tiada baki momentum lama) hapuskan overshoot.
+        const GRAB_VELOCITY_BLEND = 1;
         function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;

@@ -5022,11 +5022,22 @@
         // terus. Bila dilepas, graviti + pelanggaran + bounce (cannon.js) ambil alih terus —
         // tiada lagi "snap ke kedudukan asal" macam dulu.
         const GRAB_MAX_SPEED = 6; // meter/saat
-        // Pekali "redaman" bila padankan velocity badan ke arah sasaran genggam — guna
-        // blend (lerp) dengan velocity SEDIA ADA setiap bingkai, bukan timpa terus 100%,
-        // supaya bunyi/lonjakan kecil (dari sampel mouse yang tak serata, pelanggaran
-        // dengan objek Pepejal lain, dsb.) tak bertukar jadi "bergegar" berterusan.
-        const GRAB_VELOCITY_BLEND = 0.55;
+        // SEBAB SEBENAR "trail"/objek rasa terapung-apung di belakang kursor — DIBUKTIKAN
+        // guna simulasi fizik berasingan (bukan teka): vx/vy/vz di bawah dikira sebagai
+        // (jurang kedudukan / dtSafe) — ni dah TEPAT (dtSafe = delta bingkai SEBENAR lepas
+        // fix accumulator), maksudnya terapkan nilai ni SATU langkah je dah cukup tutup
+        // jurang sepenuhnya, tiada overshoot. Tapi blend (lerp) < 1 kekalkan sebahagian
+        // velocity LAMA (dikira utk jurang SEBELUM ni, dah lapuk) bersama velocity baru —
+        // badan terlajak lepas sasaran, lalu kena "patah balik" bingkai seterusnya, patah
+        // balik tu pula terlajak sikit, dst — ringing/oscillation klasik yang pengguna
+        // rasa sbg "trail"/bergegar (bukan "slow", tapi "goyang" tak stabil kat sasaran).
+        // Diuji guna replika fizik berasingan: blend 0.55 -> vy berbalik tanda (+7.27 ->
+        // +6.15 -> +3.66 -> -0.23 -> -1.85 -> ...) tiap kali sasaran kekal tetap sekejap;
+        // blend 1.0 -> vy susut terus ke 0 (+7.51 -> +2.75 -> +1.13 -> 0), tiada overshoot.
+        // Pekali blend LAMA (0.55) wajar balik zaman dtSafe terapung/damping 0.2 aktif
+        // (nilai "mentah" sentiasa terkurang-anggar, blend jarang nampak kesan) — lepas dua
+        // fix tu (c064ea4/926eda9) nilai mentah jadi TEPAT, blend yg kekal jadi punca utama.
+        const GRAB_VELOCITY_BLEND = 1;
         function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;
