@@ -5081,15 +5081,20 @@
         // dicapai) merentasi gandaan 1x hingga 32x (diuji). Mouse (desktop) TAK disentuh —
         // laporan ni khusus controller VR; mouse dah guna unjuran skrin-ke-dunia yg
         // sedia ada "scale" ikut perspektif, bukan unit meter dunia-nyata tetap.
+        // 2026-10-29 — "improving but not enough.. need to double it again.. 4x..1:1 at
+        // start.. 8:2, 16:4.. the gradient should be 4": lengkung dinaikkan sekali lagi
+        // (gandaan kini ~2x lebih tinggi drpd versi lepas pada titik 4m/8m, sepadan
+        // "double it again"), dgn cerun (gradient) kawasan linear ditetapkan terus ke 4
+        // (dari 2 sebelum ni) — 4m=16x, 8m=32x (dulu 4m=8x, 8m=16x).
         const GRAB_GAIN_REFERENCE_SIZE = 1; // meter — objek bersaiz ni & lebih kecil kekal gandaan 1x
-        const GRAB_GAIN_CURVE_END = 4;      // meter — hujung lengkung kuasa 1.5 (1m..4m -> 1x..8x)
-        const GRAB_GAIN_MAX = 32;           // plafond keselamatan (saiz >4m: gandaan = 2 × saiz, dipotong sini)
+        const GRAB_GAIN_CURVE_END = 4;      // meter — hujung lengkung kuasa 2 (1m..4m -> 1x..16x)
+        const GRAB_GAIN_MAX = 64;           // plafond keselamatan (saiz >4m: gandaan = 4 × saiz, dipotong sini)
 
         function computeMoveGain(maxDim) {
             if (maxDim <= GRAB_GAIN_REFERENCE_SIZE) return 1;
             const gain = (maxDim <= GRAB_GAIN_CURVE_END)
-                ? Math.pow(maxDim, 1.5)   // 1m..4m: 1x..8x, lengkung licin
-                : 2 * maxDim;             // >4m: linear, "saiz 2x -> gandaan 2x" (4m=8x, 8m=16x, ...)
+                ? maxDim * maxDim   // 1m..4m: 1x..16x, lengkung licin (1^2=1, 4^2=16)
+                : 4 * maxDim;       // >4m: linear, cerun 4 (4m=16x, 8m=32x, 16m=64x, ...)
             return Math.min(gain, GRAB_GAIN_MAX);
         }
         // SEBAB SEBENAR "trail"/objek rasa terapung-apung di belakang kursor — DIBUKTIKAN
