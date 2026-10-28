@@ -5201,6 +5201,48 @@
         const VR_GRAB_POS_THRESHOLD = 0.03;   // meter — mod 'move' (controller kanan)
         const VR_GRAB_ANGLE_THRESHOLD = 0.08; // radian ~4.6° — mod 'rotate' (controller kiri)
 
+        // AR (tap skrin telefon): input source "transient-pointer" webXR TAK berkelakuan
+        // macam controller tangan VR — kedudukan DUNIA die kekal hampir statik (terikat
+        // kamera/telefon), cuma ARAH ray berubah bila jari diseret atas skrin. Pendekatan
+        // mod 'move' asal (deltaPos dari kedudukan controller sebenar) sentiasa dapat
+        // deltaPos ~0 utk AR walau macam mana jari digerakkan — punca sebenar "tak boleh
+        // genggam langsung dlm AR" (bukan isu gain/kelajuan macam VR). Guna teknik SAMA
+        // dgn genggam mouse desktop (ray-plane intersection): proksi Object3D yang
+        // kedudukannya dikemaskini setiap bingkai ikut titik persilangan ray controller
+        // (bukan kedudukan controller terus) dgn satah tegak lurus arah kamera melalui
+        // objek — updateGrabbedObjectTransform() guna proksi ni macam "controller" biasa,
+        // tiada ubah lain diperlukan sbb formula deltaPos sedia ada dah betul utk proksi
+        // yang bergerak ikut plane-intersection.
+        function computeARGrabProxyStart(rawController, planeCoplanarPoint) {
+            const normal = new THREE.Vector3();
+            mainCamera.getWorldDirection(normal);
+            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, planeCoplanarPoint);
+
+            const rayOrigin = new THREE.Vector3();
+            const rayDir = new THREE.Vector3();
+            rawController.getWorldPosition(rayOrigin);
+            rawController.getWorldDirection(rayDir);
+            const ray = new THREE.Ray(rayOrigin, rayDir);
+
+            const proxy = new THREE.Object3D();
+            const hitPoint = new THREE.Vector3();
+            proxy.position.copy(ray.intersectPlane(plane, hitPoint) ? hitPoint : planeCoplanarPoint);
+            return { proxy, plane };
+        }
+
+        const _arRayOrigin = new THREE.Vector3();
+        const _arRayDir = new THREE.Vector3();
+        const _arHitPoint = new THREE.Vector3();
+        function updateARGrabProxy(st) {
+            st.arRawController.getWorldPosition(_arRayOrigin);
+            st.arRawController.getWorldDirection(_arRayDir);
+            const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
+            // Ray selari dgn plane (jarang) — kekalkan kedudukan proxy terakhir, tak kemaskini.
+            if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
+                st.controller.position.copy(_arHitPoint);
+            }
+        }
+
         function commitVRGrab(pending) {
             const { hitModel, controller, mode } = pending;
             grabbedObject = hitModel;
@@ -5243,26 +5285,42 @@
             hitModel.getWorldPosition(objWorldPosStart);
             hitModel.getWorldQuaternion(objWorldQuatStart);
 
+            // AR mod 'move' — bina proksi ray-plane (lihat computeARGrabProxyStart/
+            // updateARGrabProxy di atas) sbb kedudukan DUNIA controller "transient-pointer"
+            // tak boleh dipercayai utk translate (lihat nota di atas fungsi tu).
+            let arGrabPlane = null, arRawController = null;
+            let effectiveController = controller;
+            if (isARSession && mode === 'move') {
+                const { proxy, plane } = computeARGrabProxyStart(controller, objWorldPosStart);
+                arGrabPlane = plane;
+                arRawController = controller;
+                effectiveController = proxy;
+            }
+
             const controllerWorldPosStart = new THREE.Vector3();
             const controllerWorldQuatInvStart = new THREE.Quaternion();
-            controller.getWorldPosition(controllerWorldPosStart);
-            controller.getWorldQuaternion(controllerWorldQuatInvStart).invert();
+            effectiveController.getWorldPosition(controllerWorldPosStart);
+            effectiveController.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
-            // Nisbah gerak ikut saiz objek (mod 'move' sahaja) — lihat nota GRAB_GAIN_* di
-            // atas. Dikira dari dimensi TERBESAR kotak sempadan dunia objek.
+            // Nisbah gerak ikut saiz objek (mod 'move' VR sahaja) — lihat nota GRAB_GAIN_* di
+            // atas. TAK terpakai utk AR: proksi ray-plane di atas dah bagi pergerakan 1:1
+            // sepadan unit dunia-nyata (sama konsep dgn mouse-grab desktop, bukan isu
+            // "controller gerak sikit drpd objek besar" yg GRAB_GAIN_* selesaikan utk VR).
             const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
-            const moveGain = computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
+            const moveGain = arGrabPlane ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {
                 mode,
-                controller,
+                controller: effectiveController,
                 objWorldPosStart,
                 objWorldQuatStart,
                 controllerWorldPosStart,
                 controllerWorldQuatInvStart,
                 prevLinearDamping,
                 prevAngularDamping,
-                moveGain
+                moveGain,
+                arGrabPlane,
+                arRawController
             };
         }
 
@@ -5294,7 +5352,14 @@
             if (!pending) return;
             const { controller, mode, startWorldPos, startWorldQuat } = pending;
 
-            if (mode === 'rotate') {
+            // AR tap skrin: kedudukan DUNIA controller "transient-pointer" kekal hampir
+            // statik (terikat kamera) walau jari diseret — threshold JARAK (macam VR hand
+            // controller) nyaris tak pernah tercapai, punca "tak boleh genggam langsung
+            // dlm AR". ARAH ray pula berubah banyak bila jari diseret — guna threshold
+            // SUDUT (macam mod rotate) utk kesan niat drag dlm AR gantinya.
+            const useAngleThreshold = mode === 'rotate' || (isARSession && mode === 'move');
+
+            if (useAngleThreshold) {
                 const q = new THREE.Quaternion();
                 controller.getWorldQuaternion(q);
                 const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
@@ -5460,9 +5525,12 @@
         // kedudukannya dikemaskini ikut titik persilangan mouse-ray dengan satah (plane) tegak
         // lurus arah kamera yang melalui titik genggaman asal. Sentiasa mod 'move' (tiada
         // rotate — mouse tiada input putaran semula jadi macam tangan VR).
-        // AR (tap di skrin telefon) TIDAK perlukan laluan berasingan — WebXR mewakilkan tap
-        // sebagai "transient-pointer" controller, jadi ia sudah tercakup oleh
-        // onControllerSelectStart/End di atas.
+        // AR (tap di skrin telefon): WebXR mewakilkan tap sebagai "transient-pointer"
+        // controller, melalui laluan onControllerSelectStart/End yang SAMA di atas —
+        // TAPI kedudukan DUNIA controller tu sendiri kekal hampir statik (terikat kamera),
+        // jadi commitVRGrab/checkVRPendingGrabCommit bina proksi ray-plane KHUSUS utk AR
+        // (computeARGrabProxyStart/updateARGrabProxy) drpd guna kedudukan controller mentah
+        // terus macam VR hand controller — rujuk nota panjang pada computeARGrabProxyStart.
         const mouseGrabProxy = new THREE.Object3D();
         const mouseGrabPlane = new THREE.Plane();
         const mouseGrabPlaneNormal = new THREE.Vector3();
@@ -6555,6 +6623,13 @@
             // Semak calon genggam VR tertunda (klik lwn genggam) SETIAP bingkai — lihat
             // checkVRPendingGrabCommit/onControllerSelectStart.
             if (isPreviewMode) checkVRPendingGrabCommit();
+
+            // Proksi genggam AR (ray-plane) — kemaskan SEBELUM updateGrabbedObjectTransform
+            // supaya formula deltaPos sedia ada (dikira dari kedudukan "controller", dlm
+            // AR ialah proksi ni) dapat kedudukan proksi TERKINI, bukan lapuk satu bingkai.
+            if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arGrabPlane) {
+                updateARGrabProxy(grabStartState);
+            }
 
             // Objek sedang digenggam — kemaskan kedudukan/putarannya ikut "pemegang" (controller
             // VR ATAU proksi mouse desktop, dua-dua guna fungsi sama). Diperiksa dulu di luar
