@@ -1888,10 +1888,16 @@
         // Had 20 (bukan 6) — terbukti perlu utk VR, lihat index.html utk nota penuh.
         const GRAB_MAX_SPEED = 20;
         // Nisbah gerak ikut saiz objek (VR, mod 'move' sahaja) — lihat nota penuh dlm
-        // index.html.
+        // index.html. 1m=1x, 4m=8x (lengkung kuasa 1.5), >4m linear "saiz 2x -> gandaan 2x".
         const GRAB_GAIN_REFERENCE_SIZE = 1;
-        const GRAB_GAIN_MIN = 1;
-        const GRAB_GAIN_MAX = 8;
+        const GRAB_GAIN_CURVE_END = 4;
+        const GRAB_GAIN_MAX = 32;
+
+        function computeMoveGain(maxDim) {
+            if (maxDim <= GRAB_GAIN_REFERENCE_SIZE) return 1;
+            const gain = (maxDim <= GRAB_GAIN_CURVE_END) ? Math.pow(maxDim, 1.5) : 2 * maxDim;
+            return Math.min(gain, GRAB_GAIN_MAX);
+        }
         // blend < 1 kekalkan velocity LAMA (utk jurang yg dah lapuk) bersama yg baru —
         // lepas dtSafe jadi tepat (lihat index.html), ni buat badan overshoot sasaran lalu
         // "patah balik" tiap bingkai (ringing), dirasai sbg "trail"/goyang. Dibuktikan guna
@@ -1993,10 +1999,7 @@
             controller.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
             const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
-            const moveGain = THREE.MathUtils.clamp(
-                Math.max(objSize.x, objSize.y, objSize.z) / GRAB_GAIN_REFERENCE_SIZE,
-                GRAB_GAIN_MIN, GRAB_GAIN_MAX
-            );
+            const moveGain = computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {
                 mode,
