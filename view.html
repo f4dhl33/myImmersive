@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '40';
+        const AR_DEBUG_BUILD = '41';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1967,6 +1967,13 @@
         function onControllerSelect(event) {
             if (isARSession) arDebug.selectCount++;
 
+            // Jgn andaikan 'selectend' SEMESTINYA cetus dahulu drpd 'select' — utk
+            // transient-pointer (tap skrin AR) susunan tu tak konsisten antara
+            // pelaksanaan. Semak grabbedObject SEKARANG (masih di-set kalau 'select'
+            // tiba dulu) SERTA justReleasedGrab (di-set kalau 'selectend' dah pun
+            // jalan) — dua-dua perlu disemak utk redam onClick lepas drag/genggam,
+            // tanpa kira urutan sebenar event ni ditembak oleh runtime WebXR.
+            if (grabbedObject) return;
             if (justReleasedGrab) {
                 justReleasedGrab = false;
                 return;
