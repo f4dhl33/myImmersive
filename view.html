@@ -1862,10 +1862,10 @@
             return hitModel;
         }
 
-        // Guna KHUSUS untuk mula genggam (bukan laser visual/klik) — skip objek
-        // bukan-grabbable yang menghalang ray (cth. zon/platform tumpang-tindih
-        // depan objek sebenar) dan terus cari objek grabbable paling dekat selepasnya,
-        // dalam jarak CONTROLLER_LASER_MAX_LENGTH yang sama.
+        // Guna KHUSUS untuk mula genggam (bukan laser visual/klik) — lihat nota penuh
+        // dlm index.html (SENGAJA tiada had CONTROLLER_LASER_MAX_LENGTH — itu cuma
+        // clamp panjang visual laser, bukan syarat tolak hit, attempt #16 tersilap
+        // tambah had yang tiada dlm logik asal, punca sebenar hit@start kosong).
         function getControllerGrabRaycastHit(controller) {
             controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
             controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
@@ -1875,7 +1875,6 @@
             const visibleObjects = loadedModelsList.filter(o => o.visible);
             const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
             for (let i = 0; i < intersects.length; i++) {
-                if (intersects[i].distance > CONTROLLER_LASER_MAX_LENGTH) break;
                 let root = intersects[i].object;
                 while (root.parent && root.parent !== scene && root.parent !== contentRoot) {
                     root = root.parent;

@@ -5028,8 +5028,16 @@
 
         // Guna KHUSUS untuk mula genggam (bukan laser visual/klik) — skip objek
         // bukan-grabbable yang menghalang ray (cth. zon/platform tumpang-tindih
-        // depan objek sebenar) dan terus cari objek grabbable paling dekat selepasnya,
-        // dalam jarak CONTROLLER_LASER_MAX_LENGTH yang sama.
+        // depan objek sebenar) dan terus cari objek grabbable paling dekat selepasnya.
+        // SENGAJA tiada had jarak (CONTROLLER_LASER_MAX_LENGTH) di sini — constant tu
+        // cuma clamp PANJANG VISUAL laser dalam getControllerRaycastHit (bukan tolak
+        // hit yang lebih jauh; intersects[0].object situ diterima tanpa syarat jarak
+        // langsung). Versi awal fungsi ni (attempt #16) tersilap tambah had jarak yang
+        // tiada dlm logik asal — punca sebenar "selalu tiada hit grabbable" (hit@start)
+        // walhal objek yg SAMA sentiasa kena di hit@click/laser (fungsi tu): objek
+        // terletak lebih jauh drpd 5m (CONTROLLER_LASER_MAX_LENGTH), jadi loop ni asyik
+        // break awal sebelum sempat check isGrabbable. Disahkan drpd data HUD sebenar
+        // 2026-10-29 — lihat attempt #19 dlm memori.
         function getControllerGrabRaycastHit(controller) {
             controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
             controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
@@ -5039,7 +5047,6 @@
             const visibleObjects = loadedModelsList.filter(o => o.visible);
             const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
             for (let i = 0; i < intersects.length; i++) {
-                if (intersects[i].distance > CONTROLLER_LASER_MAX_LENGTH) break;
                 let root = intersects[i].object;
                 while (root.parent && root.parent !== scene && root.parent !== contentRoot) {
                     root = root.parent;
