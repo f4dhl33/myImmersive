@@ -1874,6 +1874,51 @@
             lastCommitMode: null, lastCommitAt: 0
         };
 
+        // HUD WebGL (bukan bergantung dom-overlay) — lihat nota penuh dlm index.html.
+        const arDebugCanvas = document.createElement('canvas');
+        arDebugCanvas.width = 640; arDebugCanvas.height = 320;
+        const arDebugCtx = arDebugCanvas.getContext('2d');
+        const arDebugTexture = new THREE.CanvasTexture(arDebugCanvas);
+        const arDebugSprite = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.5, 0.25),
+            new THREE.MeshBasicMaterial({ map: arDebugTexture, transparent: true, depthTest: false, depthWrite: false })
+        );
+        arDebugSprite.renderOrder = 99999;
+        arDebugSprite.position.set(0, 0.12, -0.4);
+        arDebugSprite.visible = false;
+        mainCamera.add(arDebugSprite);
+
+        function updateARDebugHud() {
+            const active = isARSession && renderer.xr.isPresenting;
+            arDebugSprite.visible = active;
+            if (arDebugHud.style.display !== (active ? 'block' : 'none')) {
+                arDebugHud.style.display = active ? 'block' : 'none';
+            }
+            if (!active) return;
+
+            const lines = [
+                'AR GRAB DEBUG',
+                'start/sel/end: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount,
+                'rayMode:' + arDebug.lastTargetRayMode + '  hand:' + arDebug.lastHandedness,
+                'hit@start: ' + arDebug.lastHitOnSelectStart,
+                'hit@click: ' + arDebug.lastHitOnSelect,
+                'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
+                'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
+                'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-')
+            ];
+
+            arDebugHud.textContent = lines.join('\n');
+
+            const ctx = arDebugCtx;
+            ctx.clearRect(0, 0, arDebugCanvas.width, arDebugCanvas.height);
+            ctx.fillStyle = 'rgba(0,0,0,0.78)';
+            ctx.fillRect(0, 0, arDebugCanvas.width, arDebugCanvas.height);
+            ctx.fillStyle = '#00ff66';
+            ctx.font = '20px monospace';
+            lines.forEach((line, i) => ctx.fillText(line, 10, 28 + i * 26));
+            arDebugTexture.needsUpdate = true;
+        }
+
         function onControllerSelect(event) {
             if (isARSession) arDebug.selectCount++;
 
@@ -2457,24 +2502,9 @@
 
             checkVRPendingGrabCommit();
 
-            // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug
-            // AR grab tap-and-hold ni disahkan selesai.
-            if (isARSession && renderer.xr.isPresenting) {
-                arDebugHud.style.display = 'block';
-                arDebugHud.textContent =
-                    'AR GRAB DEBUG\n' +
-                    'selectstart/select/selectend: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount + '\n' +
-                    'targetRayMode: ' + arDebug.lastTargetRayMode + '  handedness: ' + arDebug.lastHandedness + '\n' +
-                    'hit@selectstart: ' + arDebug.lastHitOnSelectStart + '\n' +
-                    'hit@select(klik): ' + arDebug.lastHitOnSelect + '\n' +
-                    'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')) +
-                    '  maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + '°' +
-                    '  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm\n' +
-                    'grabbedObject: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') +
-                    '  lastCommit: ' + (arDebug.lastCommitMode || '-');
-            } else if (arDebugHud.style.display !== 'none') {
-                arDebugHud.style.display = 'none';
-            }
+            // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dekat deklarasi `arDebug`/
+            // `updateARDebugHud` di atas. BUANG lepas bug AR grab ni disahkan selesai.
+            updateARDebugHud();
 
             if (grabbedObject && grabStartState && grabStartState.arGrabPlane) {
                 updateARGrabProxy(grabStartState);
