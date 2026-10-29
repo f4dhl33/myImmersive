@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '25';
+        const AR_DEBUG_BUILD = '26';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5412,6 +5412,7 @@
         const _arHitPoint = new THREE.Vector3();
         const _arPlaneNormal = new THREE.Vector3();
         const _arViewerQuat = new THREE.Quaternion();
+        const _arRigWorldQuat = new THREE.Quaternion();
         // `mainCamera` cuma disegerakkan ikut pose XR SEBENAR di DALAM renderer.render()
         // — tapi fungsi ni dipanggil JAUH lebih awal dlm animate(), sebelum render()
         // bingkai ni jalan. mainCamera.getWorldDirection() di sini sebenarnya baca pose
@@ -5422,6 +5423,17 @@
         // Baca pose penonton TERUS drpd XRFrame (frame.getViewerPose) bila ada — ni
         // dijamin terkini utk bingkai SEMASA, tak bergantung langsung pada bila
         // renderer.render() jalan.
+        //
+        // PENTING: pose mentah drpd frame.getViewerPose() adalah RELATIF kpd
+        // cameraRig (mainCamera & controller1/2 SEMUA anak cameraRig — lihat
+        // deklarasinya di atas), BUKAN terus dlm ruang DUNIA scene. Kalau terus
+        // applyQuaternion pose mentah macam dunia (tanpa gabung putaran cameraRig
+        // SEMASA), hasilnya SALAH secara tekal/stabil setiap kali cameraRig ada
+        // putaran bukan-identiti (cth drpd previewCameraMarker) — sebab ray
+        // controller (getWorldDirection, turut lalui cameraRig) kekal BETUL, jadi
+        // "denom" jadi stabil tapi SALAH (cth -0.992 tekal, bukan ~1 macam
+        // dijangka utk ray yg kena objek depan kamera). Gabung dgn putaran DUNIA
+        // cameraRig SEMASA supaya padan betul2 dgn konvensyen getWorldDirection.
         function getCurrentCameraDirection(frame, target) {
             if (frame && renderer.xr.isPresenting) {
                 const refSpace = renderer.xr.getReferenceSpace();
@@ -5429,7 +5441,9 @@
                 if (viewerPose) {
                     const o = viewerPose.transform.orientation;
                     _arViewerQuat.set(o.x, o.y, o.z, o.w);
-                    return target.set(0, 0, -1).applyQuaternion(_arViewerQuat);
+                    cameraRig.getWorldQuaternion(_arRigWorldQuat);
+                    _arRigWorldQuat.multiply(_arViewerQuat);
+                    return target.set(0, 0, -1).applyQuaternion(_arRigWorldQuat);
                 }
             }
             return mainCamera.getWorldDirection(target);

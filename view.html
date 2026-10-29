@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '25';
+        const AR_DEBUG_BUILD = '26';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2105,8 +2105,11 @@
         const _arHitPoint = new THREE.Vector3();
         const _arPlaneNormal = new THREE.Vector3();
         const _arViewerQuat = new THREE.Quaternion();
+        const _arRigWorldQuat = new THREE.Quaternion();
         // mainCamera cuma disegerakkan ikut pose XR SEBENAR DALAM renderer.render(),
         // tapi fungsi ni jalan lebih awal dlm animate() — lihat nota penuh dlm index.html.
+        // Pose mentah XR adalah RELATIF kpd cameraRig, bukan terus dunia — gabung dgn
+        // putaran DUNIA cameraRig SEMASA.
         function getCurrentCameraDirection(frame, target) {
             if (frame && renderer.xr.isPresenting) {
                 const refSpace = renderer.xr.getReferenceSpace();
@@ -2114,7 +2117,9 @@
                 if (viewerPose) {
                     const o = viewerPose.transform.orientation;
                     _arViewerQuat.set(o.x, o.y, o.z, o.w);
-                    return target.set(0, 0, -1).applyQuaternion(_arViewerQuat);
+                    cameraRig.getWorldQuaternion(_arRigWorldQuat);
+                    _arRigWorldQuat.multiply(_arViewerQuat);
+                    return target.set(0, 0, -1).applyQuaternion(_arRigWorldQuat);
                 }
             }
             return mainCamera.getWorldDirection(target);
