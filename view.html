@@ -89,7 +89,7 @@
 
         <!-- HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         grab tap-and-hold ni disahkan selesai. -->
-        <div id="ar-debug-hud" style="display:none; position:fixed; top:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#0f0; font:11px monospace; padding:6px 8px; border-radius:4px; max-width:80vw; white-space:pre-wrap; pointer-events:none;"></div>
+        <div id="ar-debug-hud" style="display:none; position:fixed; bottom:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#0f0; font:11px monospace; padding:6px 8px; border-radius:4px; max-width:80vw; white-space:pre-wrap; pointer-events:none;"></div>
     </div>
 
     <script>
@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '32';
+        const AR_DEBUG_BUILD = '33';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1940,7 +1940,8 @@
                 'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
-                'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject
+                'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
+                'grabDistance: ' + (grabStartState && grabStartState.arGrabDistance !== null ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-')
             ];
 
             arDebugHud.textContent = lines.join('\n');
