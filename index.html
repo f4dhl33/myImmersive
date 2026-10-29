@@ -5308,7 +5308,13 @@
         // threshold, sama konsep macam mouse (jarak kursor), bukan tempoh genggam.
         let vrPendingGrabCandidate = null; // {hitModel, controller, mode, startWorldPos, startWorldQuat}
         const VR_GRAB_POS_THRESHOLD = 0.03;   // meter — mod 'move' (controller kanan)
-        const VR_GRAB_ANGLE_THRESHOLD = 0.08; // radian ~4.6° — mod 'rotate' (controller kiri)
+        const VR_GRAB_ANGLE_THRESHOLD = 0.08; // radian ~4.6° — mod 'rotate' (controller kiri, putaran pergelangan tangan sebenar)
+        // AR tap skrin (mod 'move', targetRayMode 'screen'): ray cuma berubah ikut jari
+        // diseret ATAS SKRIN, bukan putaran pergelangan tangan — jauh lebih kecil sudutnya
+        // utk seretan sengaja yg sama "rasa". Data debug HUD sebenar (2026-10-29): seretan
+        // sengaja pengguna cuma capai ~1.9° maksimum sebelum jari dilepas — jauh di bawah
+        // 4.6° (threshold VR di atas), jadi tak pernah commit, selalu jatuh balik jadi "klik".
+        const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175; // radian ~1° — mod 'move' AR tap skrin sahaja
 
         // AR (tap skrin telefon): input source "transient-pointer" webXR TAK berkelakuan
         // macam controller tangan VR — kedudukan DUNIA die kekal hampir statik (terikat
@@ -5502,10 +5508,12 @@
             }
 
             if (useAngleThreshold) {
+                const isARScreenMove = isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen';
+                const angleThreshold = isARScreenMove ? AR_SCREEN_GRAB_ANGLE_THRESHOLD : VR_GRAB_ANGLE_THRESHOLD;
                 const q = new THREE.Quaternion();
                 controller.getWorldQuaternion(q);
                 const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
-                if (angle < VR_GRAB_ANGLE_THRESHOLD) return;
+                if (angle < angleThreshold) return;
             } else {
                 const p = new THREE.Vector3();
                 controller.getWorldPosition(p);

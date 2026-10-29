@@ -2056,6 +2056,9 @@
         let vrPendingGrabCandidate = null;
         const VR_GRAB_POS_THRESHOLD = 0.03;
         const VR_GRAB_ANGLE_THRESHOLD = 0.08;
+        // AR tap skrin (mod 'move'): threshold jauh lebih kecil drpd VR wrist-rotation —
+        // lihat nota penuh dlm index.html.
+        const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175;
 
         // AR (tap skrin telefon): proksi ray-plane KHUSUS utk mod 'move' — lihat nota
         // penuh dlm index.html (kedudukan DUNIA controller "transient-pointer" kekal
@@ -2205,10 +2208,12 @@
             }
 
             if (useAngleThreshold) {
+                const isARScreenMove = isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen';
+                const angleThreshold = isARScreenMove ? AR_SCREEN_GRAB_ANGLE_THRESHOLD : VR_GRAB_ANGLE_THRESHOLD;
                 const q = new THREE.Quaternion();
                 controller.getWorldQuaternion(q);
                 const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
-                if (angle < VR_GRAB_ANGLE_THRESHOLD) return;
+                if (angle < angleThreshold) return;
             } else {
                 const p = new THREE.Vector3();
                 controller.getWorldPosition(p);
