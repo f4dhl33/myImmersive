@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '38';
+        const AR_DEBUG_BUILD = '39';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5311,6 +5311,21 @@
                 const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
                 obj.parent.worldToLocal(newWorldPos);
 
+                // EKSPERIMEN (cadangan Gemini) — AR tap skrin: teleport TERUS badan Cannon
+                // ke sasaran setiap bingkai (langkau integrasi velocity/speed-cap/blend sama
+                // sekali), bukan cuma "rotate" mode yg dah buat macam ni. AMARAN: ini akan
+                // HILANGKAN respons pelanggaran (badan boleh tiris terus menerusi objek
+                // Pepejal lain semasa diseret, sbb tiada momentum utk solver cannon.js
+                // selesaikan terhadap) — percubaan sbb boleh diundur via git, bukan krn
+                // yakin ni jalan betul.
+                if (body && st.arRawController) {
+                    body.position.set(newWorldPos.x, newWorldPos.y, newWorldPos.z);
+                    body.velocity.set(0, 0, 0);
+                    body.angularVelocity.set(0, 0, 0);
+                    obj.position.copy(newWorldPos);
+                    return;
+                }
+
                 if (body) {
                     // Guna delta BINGKAI SEBENAR (bukan floor ke 1/60) — floor lama buat
                     // dtSafe jadi LEBIH BESAR dari delta tulen di VR (~90Hz, delta≈1/90 <
@@ -5405,7 +5420,11 @@
             rawController.getWorldPosition(rayOrigin);
             const proxy = new THREE.Object3D();
             proxy.position.copy(objWorldPos);
-            return { proxy, distance: rayOrigin.distanceTo(objWorldPos) };
+            // EKSPERIMEN (cadangan Gemini) — had bawah 0.3m elak objek "terlekat" kat
+            // jarak hampir-sifar. Tak berkaitan isu ~7-8m yg disahkan (itu terlalu BESAR,
+            // bukan terlalu kecil) — kekal sbb tak merosakkan apa-apa.
+            const dist = Math.max(rayOrigin.distanceTo(objWorldPos), 0.3);
+            return { proxy, distance: dist };
         }
 
         // Tapis gegaran — lihat nota lama di atas (masih relevan: ray AR tap skrin
@@ -5420,10 +5439,16 @@
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
         const _arCamPos = new THREE.Vector3();
+        const _arMat = new THREE.Matrix4();
         function updateARGrabProxy(st) {
             st.arRawController.getWorldPosition(_arRayOrigin);
-            st.arRawController.getWorldDirection(_arRayDir);
-            _arRayDir.normalize();
+            // EKSPERIMEN (cadangan Gemini, 2026-10-30) — ekstrak arah -Z guna matrix terus
+            // (sama teknik dgn getControllerRaycastHit) dgn-pada getWorldDirection(). Secara
+            // teori patut hasilkan nilai SAMA (getWorldDirection() three.js memang pulangkan
+            // -Z dunia, bukan +Z macam dakwaan Gemini) — cuba empirik, bukan sbb kami rasa
+            // diagnosis asal Gemini betul.
+            _arMat.identity().extractRotation(st.arRawController.matrixWorld);
+            _arRayDir.set(0, 0, -1).applyMatrix4(_arMat).normalize();
             _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
 
             // DIAGNOSTIK — grabDistance tekal ~7m walau objek nampak ~1m dlm skrin,
@@ -5437,7 +5462,17 @@
 
             const jump = _arHitPoint.distanceTo(st.controller.position);
             arDebug.proxyJump = jump;
-            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
+            // EKSPERIMEN (cadangan Gemini) — snap TERUS walau lonjakan besar, bukan tolak.
+            // AMARAN: objVisualCenter/grabDistance masih DISAHKAN salah (~7-8m, lihat
+            // attempt #30-33) — snap ni akan hantar objek TERUS ke kedudukan SALAH tu
+            // (bukan "betulkan drag", sebaliknya buat objek "terbang" nampak jelas). Guna
+            // sbb tiada kerosakan tak boleh diundur (git), bukan sbb kami yakin ni fix
+            // sebenar — lihat apa yang berlaku sbg DATA, bukan terima terus sbg fix.
+            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) {
+                st.controller.position.copy(_arHitPoint);
+                arDebug.proxyReject = 'snap';
+                return;
+            }
             arDebug.proxyReject = 'ok';
             st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
         }

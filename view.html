@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '38';
+        const AR_DEBUG_BUILD = '39';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2049,6 +2049,15 @@
                 const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
                 obj.parent.worldToLocal(newWorldPos);
 
+                // EKSPERIMEN (cadangan Gemini) — lihat amaran penuh dlm index.html.
+                if (body && st.arRawController) {
+                    body.position.set(newWorldPos.x, newWorldPos.y, newWorldPos.z);
+                    body.velocity.set(0, 0, 0);
+                    body.angularVelocity.set(0, 0, 0);
+                    obj.position.copy(newWorldPos);
+                    return;
+                }
+
                 if (body) {
                     // Guna delta BINGKAI SEBENAR (bukan floor ke 1/60) — lihat index.html
                     // utk nota penuh (floor lama underestimate kelajuan sasaran di VR ~90Hz).
@@ -2095,7 +2104,9 @@
             rawController.getWorldPosition(rayOrigin);
             const proxy = new THREE.Object3D();
             proxy.position.copy(objWorldPos);
-            return { proxy, distance: rayOrigin.distanceTo(objWorldPos) };
+            // EKSPERIMEN (cadangan Gemini) — lihat nota penuh dlm index.html.
+            const dist = Math.max(rayOrigin.distanceTo(objWorldPos), 0.3);
+            return { proxy, distance: dist };
         }
 
         // Tapis gegaran — lihat nota penuh dlm index.html.
@@ -2105,10 +2116,12 @@
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
         const _arCamPos = new THREE.Vector3();
+        const _arMat = new THREE.Matrix4();
         function updateARGrabProxy(st) {
             st.arRawController.getWorldPosition(_arRayOrigin);
-            st.arRawController.getWorldDirection(_arRayDir);
-            _arRayDir.normalize();
+            // EKSPERIMEN (cadangan Gemini) — lihat nota penuh dlm index.html.
+            _arMat.identity().extractRotation(st.arRawController.matrixWorld);
+            _arRayDir.set(0, 0, -1).applyMatrix4(_arMat).normalize();
             _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
 
             // DIAGNOSTIK — lihat nota penuh dlm index.html.
@@ -2117,7 +2130,13 @@
 
             const jump = _arHitPoint.distanceTo(st.controller.position);
             arDebug.proxyJump = jump;
-            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
+            // EKSPERIMEN (cadangan Gemini) — snap terus, bukan tolak. Lihat amaran penuh
+            // dlm index.html: grabDistance masih DISAHKAN salah (~7-8m).
+            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) {
+                st.controller.position.copy(_arHitPoint);
+                arDebug.proxyReject = 'snap';
+                return;
+            }
             arDebug.proxyReject = 'ok';
             st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
         }
