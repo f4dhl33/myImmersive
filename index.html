@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '39';
+        const AR_DEBUG_BUILD = '40';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5389,6 +5389,10 @@
         // sengaja pengguna cuma capai ~1.9° maksimum sebelum jari dilepas — jauh di bawah
         // 4.6° (threshold VR di atas), jadi tak pernah commit, selalu jatuh balik jadi "klik".
         const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175; // radian ~1° — mod 'move' AR tap skrin sahaja
+        // Ambang MASA minimum (ms) SERTA dgn ambang sudut di atas (bukan ganti) — lihat
+        // nota penuh dlm checkVRPendingGrabCommit. Ketukan ringkas secara semula jadi
+        // singkat; seretan sengaja perlu sekurang2 tempoh ni utk dikira niat drag.
+        const AR_SCREEN_GRAB_MIN_HOLD_MS = 180;
 
         // AR (tap skrin telefon): input source "transient-pointer" webXR TAK berkelakuan
         // macam controller tangan VR — kedudukan DUNIA die kekal hampir statik (terikat
@@ -5615,7 +5619,7 @@
             controller.getWorldQuaternion(startWorldQuat);
 
             if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
-            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat, startTime: performance.now() };
             return true;
         }
 
@@ -5701,6 +5705,16 @@
                 controller.getWorldQuaternion(q);
                 const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
                 if (angle < angleThreshold) return;
+                // AR tap skrin SAHAJA — ambang sudut rendah (~1°) perlu utk benarkan
+                // drag sengaja bermula CEPAT, tapi gegaran tangan semula jadi semasa
+                // ketukan PENDEK pun cukup utk lepasi ambang tu sekarang pergerakan
+                // sebenar dah berfungsi (sebelum ni "silap klasifikasi jadi drag" tak
+                // nampak sbb proksi pecah, objek tak bergerak langsung pun). Tambah
+                // ambang MASA minimum (bukan ganti ambang sudut, SERTA dgn ia) — ketukan
+                // ringkas secara semula jadi singkat, drag sengaja perlukan sekurang2
+                // tempoh ni utk "terasa" sengaja. Lapoan pengguna 2026-10-30: "tak dapat
+                // bezakan tap/click dgn drag" lepas pergerakan mula berfungsi.
+                if (isARScreenMove && (performance.now() - pending.startTime) < AR_SCREEN_GRAB_MIN_HOLD_MS) return;
             } else {
                 const p = new THREE.Vector3();
                 controller.getWorldPosition(p);

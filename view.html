@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '39';
+        const AR_DEBUG_BUILD = '40';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2094,6 +2094,8 @@
         // AR tap skrin (mod 'move'): threshold jauh lebih kecil drpd VR wrist-rotation —
         // lihat nota penuh dlm index.html.
         const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175;
+        // Ambang MASA minimum (ms) — lihat nota penuh dlm index.html.
+        const AR_SCREEN_GRAB_MIN_HOLD_MS = 180;
 
         // AR (tap skrin telefon): proksi JARAK-TETAP KHUSUS utk mod 'move' — lihat nota
         // penuh dlm index.html. (Pendekatan ray-plane asal dibuang selepas 7 percubaan
@@ -2237,7 +2239,7 @@
             controller.getWorldQuaternion(startWorldQuat);
 
             if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
-            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat, startTime: performance.now() };
             return true;
         }
 
@@ -2300,6 +2302,8 @@
                 controller.getWorldQuaternion(q);
                 const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
                 if (angle < angleThreshold) return;
+                // Ambang masa minimum SERTA dgn sudut — lihat nota penuh dlm index.html.
+                if (isARScreenMove && (performance.now() - pending.startTime) < AR_SCREEN_GRAB_MIN_HOLD_MS) return;
             } else {
                 const p = new THREE.Vector3();
                 controller.getWorldPosition(p);
