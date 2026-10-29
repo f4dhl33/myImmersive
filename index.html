@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '34';
+        const AR_DEBUG_BUILD = '35';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5137,7 +5137,7 @@
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
                 'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
-                'grabDistance: ' + (grabStartState && grabStartState.arGrabDistance !== null ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-')
+                'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-')
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5325,7 +5325,7 @@
                     // AR tap skrin guna blend BERASINGAN (lebih lembut) — lihat nota
                     // AR_GRAB_VELOCITY_BLEND di atas; VR/desktop (GRAB_VELOCITY_BLEND)
                     // tidak disentuh.
-                    const velocityBlend = (st.arGrabDistance !== null) ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
+                    const velocityBlend = st.arRawController ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
                     body.velocity.set(
                         THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
                         THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
@@ -5851,7 +5851,17 @@
                 controllerWorldPosStart,
                 controllerWorldQuatInvStart,
                 prevLinearDamping,
-                prevAngularDamping
+                prevAngularDamping,
+                // SENGAJA eksplisit null (bukan ditinggalkan undefined) — commitVRGrab
+                // (laluan VR/AR) & tempat lain semak `arGrabDistance !== null`/
+                // `arRawController` utk kenal pasti grab AR proksi jarak-tetap. Lupa set
+                // explicit null di sini (bug sebenar 2026-10-29) buat `undefined !== null`
+                // jadi TRUE, updateARGrabProxy() terpanggil utk mouse-grab & crash baca
+                // st.arRawController.getWorldPosition() (undefined) — app "hang" (gelung
+                // animate() berhenti senyap lepas ralat tak ditangkap). JANGAN buang field
+                // ni drpd object literal ni walau nilai die sentiasa null.
+                arGrabDistance: null,
+                arRawController: null
             };
 
             isMouseGrabbing = true;
@@ -6899,7 +6909,7 @@
             // Proksi genggam AR (jarak-tetap) — kemaskan SEBELUM updateGrabbedObjectTransform
             // supaya formula deltaPos sedia ada (dikira dari kedudukan "controller", dlm
             // AR ialah proksi ni) dapat kedudukan proksi TERKINI, bukan lapuk satu bingkai.
-            if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arGrabDistance !== null) {
+            if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arRawController) {
                 updateARGrabProxy(grabStartState);
             }
 
