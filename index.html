@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '33';
+        const AR_DEBUG_BUILD = '34';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5466,6 +5466,20 @@
             hitModel.getWorldPosition(objWorldPosStart);
             hitModel.getWorldQuaternion(objWorldQuatStart);
 
+            // Kotak sempadan SEBENAR (geometri) objek — bukan objWorldPosStart (origin/pivot
+            // Object3D). Model GLB (lagi-lagi export Sketchfab) selalu ada pivot JAUH drpd
+            // pusat visual geometri — raycast/laser sentiasa betul sbb kena TRIANGLE sebenar,
+            // tapi apa-apa pengiraan guna .position/getWorldPosition() terus boleh terpesong
+            // jauh drpd kedudukan VISUAL. Data sebenar (2026-10-29): grabDistance terukur
+            // 7.583m drpd objWorldPosStart, walhal objek nampak ~1m je dlm skrin — pivot
+            // offset ni punca sebenar proksi jarak-tetap AR "proxy jump 19m/14m". Guna PUSAT
+            // kotak sempadan (padan visual) utk ukur jarak controller->objek drpd AR sahaja;
+            // movement delta (objWorldPosStart) kekal guna origin SEBENAR (betul utk kekal
+            // offset asal objek, bukan isu di sini).
+            const objBox = new THREE.Box3().setFromObject(hitModel);
+            const objVisualCenter = objBox.getCenter(new THREE.Vector3());
+            const objSize = objBox.getSize(new THREE.Vector3());
+
             // AR mod 'move' — bina proksi jarak-tetap (lihat computeARGrabDistance/
             // updateARGrabProxy di atas) sbb kedudukan DUNIA controller "transient-pointer"
             // tak boleh dipercayai utk translate (lihat nota di atas fungsi tu).
@@ -5477,7 +5491,7 @@
             // (jangan topang proksi ni atasnya — itu punca regresi "jadi rotation" yg
             // dilaporkan pengguna bila test headset AR dgn controller kiri+kanan sebenar).
             if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
-                const { proxy, distance } = computeARGrabDistance(controller, objWorldPosStart);
+                const { proxy, distance } = computeARGrabDistance(controller, objVisualCenter);
                 arGrabDistance = distance;
                 arRawController = controller;
                 effectiveController = proxy;
@@ -5492,7 +5506,6 @@
             // atas. TAK terpakai utk AR: proksi jarak-tetap di atas dah bagi pergerakan 1:1
             // sepadan unit dunia-nyata (sama konsep dgn mouse-grab desktop, bukan isu
             // "controller gerak sikit drpd objek besar" yg GRAB_GAIN_* selesaikan utk VR).
-            const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
             const moveGain = arGrabDistance !== null ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {

@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '33';
+        const AR_DEBUG_BUILD = '34';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2139,12 +2139,17 @@
             hitModel.getWorldPosition(objWorldPosStart);
             hitModel.getWorldQuaternion(objWorldQuatStart);
 
+            // Kotak sempadan SEBENAR (bukan pivot Object3D) — lihat nota penuh dlm index.html.
+            const objBox = new THREE.Box3().setFromObject(hitModel);
+            const objVisualCenter = objBox.getCenter(new THREE.Vector3());
+            const objSize = objBox.getSize(new THREE.Vector3());
+
             // AR mod 'move' — lihat nota penuh dlm index.html.
             let arGrabDistance = null, arRawController = null;
             let effectiveController = controller;
             // HANYA utk 'screen' (tap tanpa jejak kedudukan) — lihat index.html.
             if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
-                const { proxy, distance } = computeARGrabDistance(controller, objWorldPosStart);
+                const { proxy, distance } = computeARGrabDistance(controller, objVisualCenter);
                 arGrabDistance = distance;
                 arRawController = controller;
                 effectiveController = proxy;
@@ -2155,7 +2160,6 @@
             effectiveController.getWorldPosition(controllerWorldPosStart);
             effectiveController.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
-            const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
             const moveGain = arGrabDistance !== null ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {
