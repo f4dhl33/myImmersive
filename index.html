@@ -715,6 +715,12 @@
         </div>
 
         <div id="info-popup"></div>
+
+        <!-- HUD DIAGNOSTIK SEMENTARA — AR grab tap-and-hold tak jadi apa-apa (lapor pengguna
+        2026-10-29), tiada akses devtools kat telefon sebenar, jadi papar maklumat terus
+        atas skrin sepanjang AR Pratonton supaya pengguna boleh baca & laporkan balik.
+        BUANG div/kod berkaitan ni lepas bug AR grab ni disahkan selesai. -->
+        <div id="ar-debug-hud" style="display:none; position:fixed; top:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#0f0; font:11px monospace; padding:6px 8px; border-radius:4px; max-width:80vw; white-space:pre-wrap; pointer-events:none;"></div>
     </div>
 
     <!-- MODAL KONGSI LINK/QR VIEWER AR/VR -->
@@ -3960,6 +3966,7 @@
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         const infoPopup = document.getElementById('info-popup');
+        const arDebugHud = document.getElementById('ar-debug-hud'); // HUD diagnostik sementara — lihat nota pada deklarasi `arDebug`
 
         // AUDIO & ACTION INPUTS
         const audioInput = document.getElementById('audio-input');
@@ -5015,8 +5022,22 @@
 
         let justReleasedGrab = false;
 
+        // HUD DIAGNOSTIK SEMENTARA (lihat <div id="ar-debug-hud">) — "hold tap dekat objek
+        // tak jadi apa2" dlm AR telefon tak boleh disahkan tanpa devtools sebenar; state ni
+        // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
+        // BUANG lepas bug ni disahkan selesai.
+        const arDebug = {
+            selectCount: 0, selectStartCount: 0, selectEndCount: 0,
+            lastTargetRayMode: undefined, lastHandedness: undefined,
+            lastHitOnSelect: null, lastHitOnSelectStart: null,
+            pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
+            lastCommitMode: null, lastCommitAt: 0
+        };
+
         function onControllerSelect(event) {
             if (!isPreviewMode) return;
+
+            if (isARSession) arDebug.selectCount++;
 
             if (justReleasedGrab) {
                 justReleasedGrab = false;
@@ -5029,6 +5050,7 @@
             }
 
             const hitModel = getControllerRaycastHit(event.target);
+            if (isARSession) arDebug.lastHitOnSelect = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(none)';
             if (hitModel) {
                 triggerInteraction(hitModel, 'onClick');
             }
@@ -5336,11 +5358,23 @@
         }
 
         function onControllerSelectStart(event) {
-            if (!isPreviewMode || grabbedObject || vrPendingGrabCandidate) return;
-            if (isARSession && !isPlaced) return;
+            if (isARSession) {
+                arDebug.selectStartCount++;
+                arDebug.lastTargetRayMode = event.target.userData.targetRayMode;
+                arDebug.lastHandedness = event.target.userData.handedness;
+            }
+            if (!isPreviewMode || grabbedObject || vrPendingGrabCandidate) {
+                if (isARSession) arDebug.lastHitOnSelectStart = '(skip: ' + (!isPreviewMode ? 'bukan preview' : grabbedObject ? 'dah genggam' : 'dah pending') + ')';
+                return;
+            }
+            if (isARSession && !isPlaced) {
+                arDebug.lastHitOnSelectStart = '(skip: belum placed)';
+                return;
+            }
 
             const controller = event.target;
             const hitModel = getControllerRaycastHit(controller);
+            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') + (hitModel.userData.isGrabbable ? '' : ' [TAK grabbable]') : '(tiada hit)';
             if (!hitModel || !hitModel.userData.isGrabbable) return;
 
             const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
@@ -5349,6 +5383,7 @@
             controller.getWorldPosition(startWorldPos);
             controller.getWorldQuaternion(startWorldQuat);
 
+            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
             vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
         }
 
@@ -5371,6 +5406,20 @@
             const useAngleThreshold = mode === 'rotate' ||
                 (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen');
 
+            // DIAGNOSTIK AR — jejak SUDUT & JARAK sebenar setiap bingkai semasa pending
+            // (tak kira threshold mana dipakai) supaya HUD boleh tunjuk nombor SEBENAR
+            // yang dicapai, utk sahkan sama ada controller/ray AR langsung berubah semasa
+            // hold ATAU terus pegun (dua kemungkinan punca "hold tak jadi apa2" yang beza).
+            if (isARSession) {
+                const qDbg = new THREE.Quaternion();
+                controller.getWorldQuaternion(qDbg);
+                const angleDbg = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(qDbg)), -1, 1));
+                arDebug.pendingMaxAngleDeg = Math.max(arDebug.pendingMaxAngleDeg, angleDbg * 180 / Math.PI);
+                const pDbg = new THREE.Vector3();
+                controller.getWorldPosition(pDbg);
+                arDebug.pendingMaxDist = Math.max(arDebug.pendingMaxDist, pDbg.distanceTo(startWorldPos));
+            }
+
             if (useAngleThreshold) {
                 const q = new THREE.Quaternion();
                 controller.getWorldQuaternion(q);
@@ -5383,6 +5432,7 @@
             }
 
             vrPendingGrabCandidate = null;
+            if (isARSession) { arDebug.lastCommitMode = mode; arDebug.lastCommitAt = performance.now(); }
             commitVRGrab(pending);
         }
 
@@ -5492,10 +5542,13 @@
         }
 
         function onControllerSelectEnd(event) {
+            if (isARSession) arDebug.selectEndCount++;
+
             // Calon genggam VR tak pernah melepasi threshold (lihat checkVRPendingGrabCommit)
             // — ni KLIK tulen, bukan niat genggam. Biar laluan 'select' (onControllerSelect)
             // cetus onClick macam biasa (justReleasedGrab KEKAL false di bawah).
             if (vrPendingGrabCandidate && (!event || vrPendingGrabCandidate.controller === event.target)) {
+                if (isARSession) arDebug.pendingMode = '(klik — threshold x tercapai)';
                 vrPendingGrabCandidate = null;
                 return;
             }
@@ -6635,6 +6688,25 @@
             // Semak calon genggam VR tertunda (klik lwn genggam) SETIAP bingkai — lihat
             // checkVRPendingGrabCommit/onControllerSelectStart.
             if (isPreviewMode) checkVRPendingGrabCommit();
+
+            // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh pada <div id="ar-debug-hud"> &
+            // deklarasi `arDebug` di atas. BUANG lepas bug AR grab ni disahkan selesai.
+            if (isPreviewMode && isARSession && renderer.xr.isPresenting) {
+                arDebugHud.style.display = 'block';
+                arDebugHud.textContent =
+                    'AR GRAB DEBUG\n' +
+                    'selectstart/select/selectend: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount + '\n' +
+                    'targetRayMode: ' + arDebug.lastTargetRayMode + '  handedness: ' + arDebug.lastHandedness + '\n' +
+                    'hit@selectstart: ' + arDebug.lastHitOnSelectStart + '\n' +
+                    'hit@select(klik): ' + arDebug.lastHitOnSelect + '\n' +
+                    'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')) +
+                    '  maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + '°' +
+                    '  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm\n' +
+                    'grabbedObject: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') +
+                    '  lastCommit: ' + (arDebug.lastCommitMode || '-');
+            } else if (arDebugHud.style.display !== 'none') {
+                arDebugHud.style.display = 'none';
+            }
 
             // Proksi genggam AR (ray-plane) — kemaskan SEBELUM updateGrabbedObjectTransform
             // supaya formula deltaPos sedia ada (dikira dari kedudukan "controller", dlm
