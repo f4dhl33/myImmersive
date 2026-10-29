@@ -5444,6 +5444,28 @@
             };
         }
 
+        // Cuba cipta calon genggam tertunda drpd controller ni SEKARANG — diekstrak drpd
+        // onControllerSelectStart supaya checkARTouchAwaitingGrab (di bawah) boleh cuba
+        // SEMULA setiap bingkai guna logik SAMA, bukan hanya sekali di saat selectstart.
+        // Pulangkan true kalau berjaya cipta calon.
+        function tryCreateGrabCandidate(controller) {
+            if (!isPreviewMode || grabbedObject || vrPendingGrabCandidate) return false;
+
+            const hitModel = getControllerGrabRaycastHit(controller);
+            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
+            if (!hitModel) return false;
+
+            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
+            const startWorldPos = new THREE.Vector3();
+            const startWorldQuat = new THREE.Quaternion();
+            controller.getWorldPosition(startWorldPos);
+            controller.getWorldQuaternion(startWorldQuat);
+
+            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
+            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+            return true;
+        }
+
         function onControllerSelectStart(event) {
             if (isARSession) {
                 arDebug.selectStartCount++;
@@ -5460,18 +5482,30 @@
             }
 
             const controller = event.target;
-            const hitModel = getControllerGrabRaycastHit(controller);
-            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
-            if (!hitModel) return;
+            const created = tryCreateGrabCandidate(controller);
 
-            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
-            const startWorldPos = new THREE.Vector3();
-            const startWorldQuat = new THREE.Quaternion();
-            controller.getWorldPosition(startWorldPos);
-            controller.getWorldQuaternion(startWorldQuat);
+            // AR tap skrin: ray pada bingkai TEPAT jari turun kadang tersasar sikit drpd
+            // objek (touch-down bukan genap-genap kena), walhal laser/klik kemudian memang
+            // kena objek betul (dikesan setiap bingkai sepanjang sentuhan). Data HUD sebenar
+            // (2026-10-29) sahkan: hit@start kosong tapi hit@click (raycast sama, bingkai
+            // lain) kena objek yg SAMA, isGrabbable disahkan TRUE oleh pengguna (dah lama
+            // berfungsi di VR/PC). Jangan putus asa kat bingkai pertama — tandakan sentuhan
+            // ni "menunggu" dan cuba lagi SETIAP bingkai (checkARTouchAwaitingGrab) selagi
+            // jari belum diangkat (onControllerSelectEnd buang tanda ni).
+            if (!created && isARSession && controller.userData.targetRayMode === 'screen') {
+                controller.userData.arTouchAwaitingHit = true;
+            }
+        }
 
-            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
-            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+        // Dipanggil SETIAP BINGKAI (animate()) — lihat nota kat tryCreateGrabCandidate/
+        // onControllerSelectStart. Hanya utk tap skrin AR yg terlepas kat bingkai pertama.
+        function checkARTouchAwaitingGrab() {
+            if (!isARSession || !isPreviewMode || grabbedObject || vrPendingGrabCandidate) return;
+            [controller1, controller2].forEach(ctrl => {
+                if (!ctrl.userData.arTouchAwaitingHit) return;
+                if (grabbedObject || vrPendingGrabCandidate) return;
+                if (tryCreateGrabCandidate(ctrl)) ctrl.userData.arTouchAwaitingHit = false;
+            });
         }
 
         // Dipanggil SETIAP BINGKAI (animate()) selagi ada calon genggam tertunda — sah
@@ -5632,6 +5666,7 @@
 
         function onControllerSelectEnd(event) {
             if (isARSession) arDebug.selectEndCount++;
+            if (event && event.target) event.target.userData.arTouchAwaitingHit = false;
 
             // Calon genggam VR tak pernah melepasi threshold (lihat checkVRPendingGrabCommit)
             // — ni KLIK tulen, bukan niat genggam. Biar laluan 'select' (onControllerSelect)
@@ -6776,7 +6811,7 @@
 
             // Semak calon genggam VR tertunda (klik lwn genggam) SETIAP bingkai — lihat
             // checkVRPendingGrabCommit/onControllerSelectStart.
-            if (isPreviewMode) checkVRPendingGrabCommit();
+            if (isPreviewMode) { checkARTouchAwaitingGrab(); checkVRPendingGrabCommit(); }
 
             // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dekat deklarasi `arDebug`/
             // `updateARDebugHud` di atas. BUANG lepas bug AR grab ni disahkan selesai.

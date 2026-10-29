@@ -2157,6 +2157,25 @@
             };
         }
 
+        // Lihat nota penuh dlm index.html.
+        function tryCreateGrabCandidate(controller) {
+            if (grabbedObject || vrPendingGrabCandidate) return false;
+
+            const hitModel = getControllerGrabRaycastHit(controller);
+            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
+            if (!hitModel) return false;
+
+            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
+            const startWorldPos = new THREE.Vector3();
+            const startWorldQuat = new THREE.Quaternion();
+            controller.getWorldPosition(startWorldPos);
+            controller.getWorldQuaternion(startWorldQuat);
+
+            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
+            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+            return true;
+        }
+
         function onControllerSelectStart(event) {
             if (isARSession) {
                 arDebug.selectStartCount++;
@@ -2173,18 +2192,20 @@
             }
 
             const controller = event.target;
-            const hitModel = getControllerGrabRaycastHit(controller);
-            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
-            if (!hitModel) return;
+            const created = tryCreateGrabCandidate(controller);
+            if (!created && isARSession && controller.userData.targetRayMode === 'screen') {
+                controller.userData.arTouchAwaitingHit = true;
+            }
+        }
 
-            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
-            const startWorldPos = new THREE.Vector3();
-            const startWorldQuat = new THREE.Quaternion();
-            controller.getWorldPosition(startWorldPos);
-            controller.getWorldQuaternion(startWorldQuat);
-
-            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
-            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat };
+        // Lihat nota penuh dlm index.html.
+        function checkARTouchAwaitingGrab() {
+            if (!isARSession || grabbedObject || vrPendingGrabCandidate) return;
+            [controller1, controller2].forEach(ctrl => {
+                if (!ctrl.userData.arTouchAwaitingHit) return;
+                if (grabbedObject || vrPendingGrabCandidate) return;
+                if (tryCreateGrabCandidate(ctrl)) ctrl.userData.arTouchAwaitingHit = false;
+            });
         }
 
         function checkVRPendingGrabCommit() {
@@ -2312,6 +2333,7 @@
 
         function onControllerSelectEnd(event) {
             if (isARSession) arDebug.selectEndCount++;
+            if (event && event.target) event.target.userData.arTouchAwaitingHit = false;
 
             if (vrPendingGrabCandidate && (!event || vrPendingGrabCandidate.controller === event.target)) {
                 if (isARSession) arDebug.pendingMode = '(klik — threshold x tercapai)';
@@ -2528,6 +2550,7 @@
                 reticle.visible = false;
             }
 
+            checkARTouchAwaitingGrab();
             checkVRPendingGrabCommit();
 
             // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dekat deklarasi `arDebug`/
