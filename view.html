@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '22';
+        const AR_DEBUG_BUILD = '23';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2096,14 +2096,26 @@
 
         // Tapis gegaran — lihat nota penuh dlm index.html.
         const AR_GRAB_PROXY_SMOOTHING = 0.35;
+        const AR_GRAB_MAX_JUMP_PER_FRAME = 1.5;
+        const AR_GRAB_PLANE_MIN_DENOM = 0.2;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
+        const _arPlaneNormal = new THREE.Vector3();
         function updateARGrabProxy(st) {
+            // Satah hadap kamera SEMASA setiap bingkai — lihat nota penuh dlm index.html.
+            mainCamera.getWorldDirection(_arPlaneNormal);
+            st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
+
             st.arRawController.getWorldPosition(_arRayOrigin);
             st.arRawController.getWorldDirection(_arRayDir);
             const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
+
+            const denom = st.arGrabPlane.normal.dot(ray.direction);
+            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) return;
+
             if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
+                if (_arHitPoint.distanceTo(st.controller.position) > AR_GRAB_MAX_JUMP_PER_FRAME) return;
                 st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
             }
         }

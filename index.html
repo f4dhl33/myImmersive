@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '22';
+        const AR_DEBUG_BUILD = '23';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5397,15 +5397,41 @@
         // (bukan ubah pipeline fizik/velocity sedia ada langsung — risiko lebih rendah,
         // tak sentuh laluan VR/desktop).
         const AR_GRAB_PROXY_SMOOTHING = 0.35;
+        // Had jarak lonjakan setiap bingkai (meter) — jaring keselamatan KEDUA, lepas
+        // pembaikan satah-hidup/epsilon di bawah. Tolak terus sebarang lonjakan tunggal
+        // yang masih lebih besar drpd ni (ralat berangka hujung, bukan niat pengguna).
+        const AR_GRAB_MAX_JUMP_PER_FRAME = 1.5;
+        // Satah tegak lurus kamera di bawah paras denominator ni dianggap "hampir
+        // selari dgn ray" — tolak kemaskini bingkai tu (kekal kedudukan lama) drpd
+        // bahagi dgn nombor hampir sifar.
+        const AR_GRAB_PLANE_MIN_DENOM = 0.2;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
+        const _arPlaneNormal = new THREE.Vector3();
         function updateARGrabProxy(st) {
+            // Bina semula satah SETIAP bingkai, sentiasa hadap kamera SEMASA (bukan
+            // tetap drpd saat commit) — telefon digenggam tangan, orientasi berubah
+            // banyak sepanjang seretan (lain drpd VR/desktop yg kamera agak stabil
+            // semasa seret). Satah tetap jadi curam/hampir selari dgn ray bila tangan
+            // berpusing — denominator hampir 0 buat titik persilangan melonjak jauh
+            // ("infinite movement towards user"), atau t jadi negatif (ray.intersectPlane
+            // pulang null) — proksi "freeze" walau jari terus diseret jauh. Berpaksi pada
+            // kedudukan proksi TERKINI (bukan objWorldPosStart asal) supaya objek tak
+            // "melompat" bila satah bertukar orientasi.
+            mainCamera.getWorldDirection(_arPlaneNormal);
+            st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
+
             st.arRawController.getWorldPosition(_arRayOrigin);
             st.arRawController.getWorldDirection(_arRayDir);
             const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
+
+            const denom = st.arGrabPlane.normal.dot(ray.direction);
+            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) return;
+
             // Ray selari dgn plane (jarang) — kekalkan kedudukan proxy terakhir, tak kemaskini.
             if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
+                if (_arHitPoint.distanceTo(st.controller.position) > AR_GRAB_MAX_JUMP_PER_FRAME) return;
                 st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
             }
         }
