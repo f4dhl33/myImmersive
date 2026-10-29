@@ -5081,14 +5081,15 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '36';
+        const AR_DEBUG_BUILD = '37';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
             lastHitOnSelect: null, lastHitOnSelectStart: null,
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
             lastCommitMode: null, lastCommitAt: 0,
-            proxyJump: 0, proxyReject: '-', camControllerDist: 0
+            proxyJump: 0, proxyReject: '-', camControllerDist: 0,
+            commitObjPos: null, commitCtrlPos: null
         };
 
         // HUD DOM (<div id="ar-debug-hud">) bergantung pada ciri 'dom-overlay' WebXR —
@@ -5138,7 +5139,9 @@
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
                 'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
                 'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-'),
-                'camVsController: ' + arDebug.camControllerDist.toFixed(3) + 'm'
+                'camVsController: ' + arDebug.camControllerDist.toFixed(3) + 'm',
+                'obj@commit: ' + (arDebug.commitObjPos ? arDebug.commitObjPos.x.toFixed(2) + ',' + arDebug.commitObjPos.y.toFixed(2) + ',' + arDebug.commitObjPos.z.toFixed(2) : '-'),
+                'ctrl@commit: ' + (arDebug.commitCtrlPos ? arDebug.commitCtrlPos.x.toFixed(2) + ',' + arDebug.commitCtrlPos.y.toFixed(2) + ',' + arDebug.commitCtrlPos.z.toFixed(2) : '-')
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5504,6 +5507,15 @@
             if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
                 const { proxy, distance } = computeARGrabDistance(controller, objVisualCenter);
                 arGrabDistance = distance;
+                // DIAGNOSTIK — koordinat MENTAH, bukan jarak sahaja. Pengguna sahkan fizikal
+                // <1m drpd objek tapi grabDistance terbaca ~7-8m berulang kali walau lepas
+                // tukar anchor pivot->pusat kotak — perlu nampak X/Y/Z sebenar utk kenal
+                // pasti paksi/komponen mana yang terpesong, bukan teka lagi. BUANG lepas
+                // bug disahkan.
+                const ctrlPosNow = new THREE.Vector3();
+                controller.getWorldPosition(ctrlPosNow);
+                arDebug.commitObjPos = objVisualCenter.clone();
+                arDebug.commitCtrlPos = ctrlPosNow;
                 arRawController = controller;
                 effectiveController = proxy;
             }
