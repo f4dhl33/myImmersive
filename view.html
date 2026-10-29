@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '30';
+        const AR_DEBUG_BUILD = '31';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1925,7 +1925,8 @@
 
         function updateARDebugHud() {
             const active = isARSession && renderer.xr.isPresenting;
-            arDebugSprite.visible = active;
+            // dom-overlay BERFUNGSI — lihat nota penuh dlm index.html.
+            arDebugSprite.visible = false;
             if (arDebugHud.style.display !== (active ? 'block' : 'none')) {
                 arDebugHud.style.display = active ? 'block' : 'none';
             }

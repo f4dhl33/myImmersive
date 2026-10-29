@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '30';
+        const AR_DEBUG_BUILD = '31';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5119,7 +5119,10 @@
 
         function updateARDebugHud() {
             const active = isPreviewMode && isARSession && renderer.xr.isPresenting;
-            arDebugSprite.visible = active;
+            // dom-overlay didapati BERFUNGSI selepas semua (lain drpd andaian awal) —
+            // 2 HUD terpapar serentak (DOM + sprite WebGL ni) cuma mengelirukan, bukan
+            // punca masalah grab. Lumpuhkan sprite 3D, DOM sahaja cukup.
+            arDebugSprite.visible = false;
             if (arDebugHud.style.display !== (active ? 'block' : 'none')) {
                 arDebugHud.style.display = active ? 'block' : 'none';
             }
