@@ -1862,6 +1862,29 @@
             return hitModel;
         }
 
+        // Guna KHUSUS untuk mula genggam (bukan laser visual/klik) — skip objek
+        // bukan-grabbable yang menghalang ray (cth. zon/platform tumpang-tindih
+        // depan objek sebenar) dan terus cari objek grabbable paling dekat selepasnya,
+        // dalam jarak CONTROLLER_LASER_MAX_LENGTH yang sama.
+        function getControllerGrabRaycastHit(controller) {
+            controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
+            controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(controllerTempMatrix);
+
+            if (loadedModelsList.length === 0) return null;
+            const visibleObjects = loadedModelsList.filter(o => o.visible);
+            const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
+            for (let i = 0; i < intersects.length; i++) {
+                if (intersects[i].distance > CONTROLLER_LASER_MAX_LENGTH) break;
+                let root = intersects[i].object;
+                while (root.parent && root.parent !== scene && root.parent !== contentRoot) {
+                    root = root.parent;
+                }
+                if (root.userData.isGrabbable) return root;
+            }
+            return null;
+        }
+
         let justReleasedGrab = false;
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
@@ -2147,9 +2170,9 @@
             }
 
             const controller = event.target;
-            const hitModel = getControllerRaycastHit(controller);
-            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') + (hitModel.userData.isGrabbable ? '' : ' [TAK grabbable]') : '(tiada hit)';
-            if (!hitModel || !hitModel.userData.isGrabbable) return;
+            const hitModel = getControllerGrabRaycastHit(controller);
+            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
+            if (!hitModel) return;
 
             const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
             const startWorldPos = new THREE.Vector3();
