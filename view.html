@@ -1888,7 +1888,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '20';
+        const AR_DEBUG_BUILD = '21';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2081,6 +2081,8 @@
             return { proxy, plane };
         }
 
+        // Tapis gegaran — lihat nota penuh dlm index.html.
+        const AR_GRAB_PROXY_SMOOTHING = 0.35;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
@@ -2089,7 +2091,7 @@
             st.arRawController.getWorldDirection(_arRayDir);
             const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
             if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
-                st.controller.position.copy(_arHitPoint);
+                st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
             }
         }
 

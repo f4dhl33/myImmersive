@@ -5063,7 +5063,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '20';
+        const AR_DEBUG_BUILD = '21';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5354,6 +5354,17 @@
             return { proxy, plane };
         }
 
+        // Tapis gegaran — titik persilangan ray-plane boleh melantun jauh LEBIH drpd
+        // pergerakan jari sebenar, sebab ray AR tap skrin bergantung pada orientasi
+        // tangan/telefon SEBENAR (bukan cuma kedudukan jari atas skrin), dan sudut ray
+        // yang sama menghasilkan jarak gerak yang lebih BESAR bila objek/satah jauh drpd
+        // kamera (geometri asas laser pada jarak) — jauh lebih ketara drpd VR controller
+        // (jarak tangan sebenar, terhad lingkungan lengan). Lonjakan bingkai-ke-bingkai
+        // yang tak ditapis ni terus suap pipeline kelajuan/fizik yang ditala utk jarak
+        // VR, punca laporan "tersentak-sentak, bergerak jauh drpd jari". EMA mudah di sini
+        // (bukan ubah pipeline fizik/velocity sedia ada langsung — risiko lebih rendah,
+        // tak sentuh laluan VR/desktop).
+        const AR_GRAB_PROXY_SMOOTHING = 0.35;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
@@ -5363,7 +5374,7 @@
             const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
             // Ray selari dgn plane (jarang) — kekalkan kedudukan proxy terakhir, tak kemaskini.
             if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
-                st.controller.position.copy(_arHitPoint);
+                st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
             }
         }
 
