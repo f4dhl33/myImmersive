@@ -5081,13 +5081,14 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '23';
+        const AR_DEBUG_BUILD = '24';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
             lastHitOnSelect: null, lastHitOnSelectStart: null,
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
-            lastCommitMode: null, lastCommitAt: 0
+            lastCommitMode: null, lastCommitAt: 0,
+            proxyDenom: 0, proxyJump: 0, proxyReject: '-'
         };
 
         // HUD DOM (<div id="ar-debug-hud">) bergantung pada ciri 'dom-overlay' WebXR —
@@ -5127,7 +5128,8 @@
                 'hit@click: ' + arDebug.lastHitOnSelect,
                 'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
-                'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-')
+                'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
+                'proxy denom:' + arDebug.proxyDenom.toFixed(3) + ' jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5427,12 +5429,18 @@
             const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
 
             const denom = st.arGrabPlane.normal.dot(ray.direction);
-            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) return;
+            arDebug.proxyDenom = denom;
+            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) { arDebug.proxyReject = 'denom'; return; }
 
             // Ray selari dgn plane (jarang) — kekalkan kedudukan proxy terakhir, tak kemaskini.
             if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
-                if (_arHitPoint.distanceTo(st.controller.position) > AR_GRAB_MAX_JUMP_PER_FRAME) return;
+                const jump = _arHitPoint.distanceTo(st.controller.position);
+                arDebug.proxyJump = jump;
+                if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
+                arDebug.proxyReject = 'ok';
                 st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
+            } else {
+                arDebug.proxyReject = 'null';
             }
         }
 
