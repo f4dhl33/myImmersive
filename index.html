@@ -5061,7 +5061,9 @@
         // HUD DIAGNOSTIK SEMENTARA (lihat <div id="ar-debug-hud">) — "hold tap dekat objek
         // tak jadi apa2" dlm AR telefon tak boleh disahkan tanpa devtools sebenar; state ni
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
-        // BUANG lepas bug ni disahkan selesai.
+        // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
+        // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
+        const AR_DEBUG_BUILD = '20';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5100,7 +5102,7 @@
             if (!active) return;
 
             const lines = [
-                'AR GRAB DEBUG',
+                'AR GRAB DEBUG (build ' + AR_DEBUG_BUILD + ')',
                 'start/sel/end: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount,
                 'rayMode:' + arDebug.lastTargetRayMode + '  hand:' + arDebug.lastHandedness,
                 'hit@start: ' + arDebug.lastHitOnSelectStart,

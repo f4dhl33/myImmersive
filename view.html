@@ -1888,6 +1888,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
+        const AR_DEBUG_BUILD = '20';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1919,7 +1920,7 @@
             if (!active) return;
 
             const lines = [
-                'AR GRAB DEBUG',
+                'AR GRAB DEBUG (build ' + AR_DEBUG_BUILD + ')',
                 'start/sel/end: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount,
                 'rayMode:' + arDebug.lastTargetRayMode + '  hand:' + arDebug.lastHandedness,
                 'hit@start: ' + arDebug.lastHitOnSelectStart,
