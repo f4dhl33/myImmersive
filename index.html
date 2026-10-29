@@ -5081,14 +5081,14 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '35';
+        const AR_DEBUG_BUILD = '36';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
             lastHitOnSelect: null, lastHitOnSelectStart: null,
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
             lastCommitMode: null, lastCommitAt: 0,
-            proxyJump: 0, proxyReject: '-'
+            proxyJump: 0, proxyReject: '-', camControllerDist: 0
         };
 
         // HUD DOM (<div id="ar-debug-hud">) bergantung pada ciri 'dom-overlay' WebXR —
@@ -5137,7 +5137,8 @@
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
                 'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
-                'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-')
+                'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-'),
+                'camVsController: ' + arDebug.camControllerDist.toFixed(3) + 'm'
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5411,11 +5412,21 @@
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
+        const _arCamPos = new THREE.Vector3();
         function updateARGrabProxy(st) {
             st.arRawController.getWorldPosition(_arRayOrigin);
             st.arRawController.getWorldDirection(_arRayDir);
             _arRayDir.normalize();
             _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
+
+            // DIAGNOSTIK — grabDistance tekal ~7m walau objek nampak ~1m dlm skrin,
+            // tak berubah lepas tukar anchor pivot->pusat kotak sempadan (attempt #30),
+            // jadi punca mesti di hujung LAIN pengukuran (origin ray, bukan objek).
+            // Banding terus kedudukan DUNIA kamera lawan kedudukan DUNIA controller raw
+            // SETIAP bingkai — patut hampir SAMA (ray AR tap skrin "terikat kamera")
+            // kalau andaian asal (attempt #11) betul. BUANG lepas bug disahkan.
+            mainCamera.getWorldPosition(_arCamPos);
+            arDebug.camControllerDist = _arCamPos.distanceTo(_arRayOrigin);
 
             const jump = _arHitPoint.distanceTo(st.controller.position);
             arDebug.proxyJump = jump;
