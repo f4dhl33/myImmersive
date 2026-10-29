@@ -334,6 +334,15 @@
         physicsWorld.broadphase = new CANNON.NaiveBroadphase();
         physicsWorld.solver.iterations = 10;
 
+        // Zero angularVelocity SETIAP sub-langkah fizik (bukan cuma setiap bingkai render)
+        // selagi ada objek digenggam — lihat nota penuh dlm index.html.
+        physicsWorld.addEventListener('postStep', function () {
+            if (grabbedObject) {
+                const grabbedBody = grabbedObject.userData._physicsBody;
+                if (grabbedBody) grabbedBody.angularVelocity.set(0, 0, 0);
+            }
+        });
+
         const physicsDefaultMaterial = new CANNON.Material('default');
         const physicsContactMaterial = new CANNON.ContactMaterial(physicsDefaultMaterial, physicsDefaultMaterial, {
             friction: 0.4,
@@ -1888,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '21';
+        const AR_DEBUG_BUILD = '22';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1997,6 +2006,9 @@
         // "patah balik" tiap bingkai (ringing), dirasai sbg "trail"/goyang. Dibuktikan guna
         // replika fizik berasingan. blend=1 (tiada baki momentum lama) hapuskan overshoot.
         const GRAB_VELOCITY_BLEND = 1;
+        // AR tap skrin SAHAJA — lihat nota penuh dlm index.html. JANGAN ubah
+        // GRAB_VELOCITY_BLEND sendiri (shared dgn VR/desktop).
+        const AR_GRAB_VELOCITY_BLEND = 0.3;
         function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;
@@ -2035,10 +2047,11 @@
                     // Had kelajuan digandakan sama dgn moveGain — lihat nota index.html.
                     const effMaxSpeed = GRAB_MAX_SPEED * moveGain;
                     const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
+                    const velocityBlend = st.arGrabPlane ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
                     body.velocity.set(
-                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, GRAB_VELOCITY_BLEND),
-                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, GRAB_VELOCITY_BLEND),
-                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, GRAB_VELOCITY_BLEND)
+                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
+                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
+                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, velocityBlend)
                     );
                     body.angularVelocity.set(0, 0, 0);
                     // Tangkis graviti SEPENUHNYA utk langkah fizik ni selagi digenggam —

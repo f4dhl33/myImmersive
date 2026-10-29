@@ -2032,6 +2032,24 @@
         physicsWorld.broadphase = new CANNON.NaiveBroadphase();
         physicsWorld.solver.iterations = 10;
 
+        // updateGrabbedObjectTransform (lihat di bawah) zero-kan angularVelocity badan
+        // digenggam SEKALI je setiap bingkai RENDER — tapi physicsWorld.step() boleh
+        // jalankan BEBERAPA sub-langkah fizik dalaman setiap bingkai render (accumulator).
+        // Antara kemaskini kita, solver langgaran cannon.js boleh terap tork sentuhan
+        // (objek digenggam melanggar/mencakar geometri Pepejal lain semasa diseret) yang
+        // tak sempat di-zero sampai bingkai render SETERUSNYA — nampak macam "objek
+        // pusing sendiri" semasa genggam (laporan AR tap skrin 2026-10-29, proksi
+        // ray-plane lebih kerap buat objek terlanggar geometri drpd gerakan controller
+        // VR yang lebih terkawal/terhad). Zero SETIAP sub-langkah di sini jadi jaring
+        // keselamatan tambahan — tak ubah apa-apa utk kes yang dah OK (VR/desktop),
+        // cuma pastikan tork sentuhan tak pernah "bocor" walau sekejap.
+        physicsWorld.addEventListener('postStep', function () {
+            if (grabbedObject) {
+                const grabbedBody = grabbedObject.userData._physicsBody;
+                if (grabbedBody) grabbedBody.angularVelocity.set(0, 0, 0);
+            }
+        });
+
         const physicsDefaultMaterial = new CANNON.Material('default');
         const physicsContactMaterial = new CANNON.ContactMaterial(physicsDefaultMaterial, physicsDefaultMaterial, {
             friction: 0.4,
@@ -5063,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '21';
+        const AR_DEBUG_BUILD = '22';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5238,6 +5256,16 @@
         // (nilai "mentah" sentiasa terkurang-anggar, blend jarang nampak kesan) — lepas dua
         // fix tu (c064ea4/926eda9) nilai mentah jadi TEPAT, blend yg kekal jadi punca utama.
         const GRAB_VELOCITY_BLEND = 1;
+        // AR tap skrin SAHAJA — proxy ray-plane (AR_GRAB_PROXY_SMOOTHING) dah tapis
+        // sedikit gegaran, tapi GRAB_VELOCITY_BLEND=1 di atas (sengaja, jangan ubah —
+        // lihat nota overshoot VR di atas) bermakna body.velocity TERUS tukar penuh
+        // ikut sasaran setiap bingkai tanpa tapisan tambahan langsung, jadi bunyi/gegaran
+        // yang tinggal lepas smoothing proxy masih "bocor" penuh ke pergerakan objek
+        // sebenar — punca laporan "random movement, kadang rotate sendiri, kadang
+        // menjauh/mendekat" (2026-10-29). JANGAN ubah GRAB_VELOCITY_BLEND sendiri (shared
+        // dgn VR/desktop, dah ditala dgn teliti) — guna constant BERASINGAN ni khusus
+        // laluan proksi AR sahaja.
+        const AR_GRAB_VELOCITY_BLEND = 0.3;
         function updateGrabbedObjectTransform(delta) {
             const obj = grabbedObject;
             const st = grabStartState;
@@ -5284,10 +5312,14 @@
                     const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
                     // Blend (bukan timpa terus) dengan velocity sedia ada — redam lonjakan
                     // bingkai-ke-bingkai yang buat objek nampak bergegar semasa digenggam.
+                    // AR tap skrin guna blend BERASINGAN (lebih lembut) — lihat nota
+                    // AR_GRAB_VELOCITY_BLEND di atas; VR/desktop (GRAB_VELOCITY_BLEND)
+                    // tidak disentuh.
+                    const velocityBlend = st.arGrabPlane ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
                     body.velocity.set(
-                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, GRAB_VELOCITY_BLEND),
-                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, GRAB_VELOCITY_BLEND),
-                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, GRAB_VELOCITY_BLEND)
+                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
+                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
+                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, velocityBlend)
                     );
                     body.angularVelocity.set(0, 0, 0);
                     // Tangkis graviti SEPENUHNYA utk langkah fizik ni selagi digenggam —
