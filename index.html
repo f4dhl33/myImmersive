@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '27';
+        const AR_DEBUG_BUILD = '28';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5109,7 +5109,7 @@
             new THREE.MeshBasicMaterial({ map: arDebugTexture, transparent: true, depthTest: false, depthWrite: false })
         );
         arDebugSprite.renderOrder = 99999;
-        arDebugSprite.position.set(0, 0.12, -0.4); // sikit atas & hadapan kamera, head-locked
+        arDebugSprite.position.set(-0.22, 0, -0.4); // tepi KIRI (bukan atas-tengah) — elak kamera depan/notch telefon
         arDebugSprite.visible = false;
         mainCamera.add(arDebugSprite);
 

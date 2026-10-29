@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '27';
+        const AR_DEBUG_BUILD = '28';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -1918,7 +1918,7 @@
             new THREE.MeshBasicMaterial({ map: arDebugTexture, transparent: true, depthTest: false, depthWrite: false })
         );
         arDebugSprite.renderOrder = 99999;
-        arDebugSprite.position.set(0, 0.12, -0.4);
+        arDebugSprite.position.set(-0.22, 0, -0.4); // tepi KIRI — elak kamera depan/notch telefon
         arDebugSprite.visible = false;
         mainCamera.add(arDebugSprite);
 
