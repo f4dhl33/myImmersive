@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '37';
+        const AR_DEBUG_BUILD = '38';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5089,7 +5089,8 @@
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
             lastCommitMode: null, lastCommitAt: 0,
             proxyJump: 0, proxyReject: '-', camControllerDist: 0,
-            commitObjPos: null, commitCtrlPos: null
+            commitObjPos: null, commitCtrlPos: null,
+            commitObjLocalPos: null, commitContentRootPos: null, commitContentRootRotDeg: null
         };
 
         // HUD DOM (<div id="ar-debug-hud">) bergantung pada ciri 'dom-overlay' WebXR —
@@ -5141,7 +5142,10 @@
                 'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-'),
                 'camVsController: ' + arDebug.camControllerDist.toFixed(3) + 'm',
                 'obj@commit: ' + (arDebug.commitObjPos ? arDebug.commitObjPos.x.toFixed(2) + ',' + arDebug.commitObjPos.y.toFixed(2) + ',' + arDebug.commitObjPos.z.toFixed(2) : '-'),
-                'ctrl@commit: ' + (arDebug.commitCtrlPos ? arDebug.commitCtrlPos.x.toFixed(2) + ',' + arDebug.commitCtrlPos.y.toFixed(2) + ',' + arDebug.commitCtrlPos.z.toFixed(2) : '-')
+                'ctrl@commit: ' + (arDebug.commitCtrlPos ? arDebug.commitCtrlPos.x.toFixed(2) + ',' + arDebug.commitCtrlPos.y.toFixed(2) + ',' + arDebug.commitCtrlPos.z.toFixed(2) : '-'),
+                'objLocal: ' + (arDebug.commitObjLocalPos ? arDebug.commitObjLocalPos.x.toFixed(2) + ',' + arDebug.commitObjLocalPos.y.toFixed(2) + ',' + arDebug.commitObjLocalPos.z.toFixed(2) : '-'),
+                'rootPos: ' + (arDebug.commitContentRootPos ? arDebug.commitContentRootPos.x.toFixed(2) + ',' + arDebug.commitContentRootPos.y.toFixed(2) + ',' + arDebug.commitContentRootPos.z.toFixed(2) : '-'),
+                'rootRotDeg: ' + (arDebug.commitContentRootRotDeg ? arDebug.commitContentRootRotDeg.x.toFixed(0) + ',' + arDebug.commitContentRootRotDeg.y.toFixed(0) + ',' + arDebug.commitContentRootRotDeg.z.toFixed(0) : '-')
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5516,6 +5520,18 @@
                 controller.getWorldPosition(ctrlPosNow);
                 arDebug.commitObjPos = objVisualCenter.clone();
                 arDebug.commitCtrlPos = ctrlPosNow;
+                // DIAGNOSTIK — rantaian PENUH: kedudukan LOKAL objek (dlm contentRoot, patut
+                // padan panel Transform editor) + kedudukan/putaran contentRoot sendiri
+                // (penjangkaran AR, hasil tap-to-place). Dunia = contentRoot transform
+                // diterapkan pada lokal — kalau dua-dua ni waras tapi obj@commit (dunia)
+                // masih jauh, puncanya DI SINI, bukan objek/controller.
+                arDebug.commitObjLocalPos = hitModel.position.clone();
+                arDebug.commitContentRootPos = contentRoot.position.clone();
+                arDebug.commitContentRootRotDeg = new THREE.Vector3(
+                    THREE.MathUtils.radToDeg(contentRoot.rotation.x),
+                    THREE.MathUtils.radToDeg(contentRoot.rotation.y),
+                    THREE.MathUtils.radToDeg(contentRoot.rotation.z)
+                );
                 arRawController = controller;
                 effectiveController = proxy;
             }
