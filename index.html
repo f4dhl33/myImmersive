@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '24';
+        const AR_DEBUG_BUILD = '25';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5411,7 +5411,30 @@
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
         const _arPlaneNormal = new THREE.Vector3();
-        function updateARGrabProxy(st) {
+        const _arViewerQuat = new THREE.Quaternion();
+        // `mainCamera` cuma disegerakkan ikut pose XR SEBENAR di DALAM renderer.render()
+        // — tapi fungsi ni dipanggil JAUH lebih awal dlm animate(), sebelum render()
+        // bingkai ni jalan. mainCamera.getWorldDirection() di sini sebenarnya baca pose
+        // BINGKAI SEBELUM (lapuk 1 bingkai), manakala arah ray controller (drpd XRFrame
+        // input source) SUDAH terkini utk bingkai ni — percanggahan "lapuk vs terkini"
+        // ni yg punca denom melantun ekstrem antara bingkai (0.117 -> -0.984, >170°,
+        // mustahil secara fizikal utk putaran tangan sebenar dlm sepersekian saat).
+        // Baca pose penonton TERUS drpd XRFrame (frame.getViewerPose) bila ada — ni
+        // dijamin terkini utk bingkai SEMASA, tak bergantung langsung pada bila
+        // renderer.render() jalan.
+        function getCurrentCameraDirection(frame, target) {
+            if (frame && renderer.xr.isPresenting) {
+                const refSpace = renderer.xr.getReferenceSpace();
+                const viewerPose = refSpace && frame.getViewerPose(refSpace);
+                if (viewerPose) {
+                    const o = viewerPose.transform.orientation;
+                    _arViewerQuat.set(o.x, o.y, o.z, o.w);
+                    return target.set(0, 0, -1).applyQuaternion(_arViewerQuat);
+                }
+            }
+            return mainCamera.getWorldDirection(target);
+        }
+        function updateARGrabProxy(st, frame) {
             // Bina semula satah SETIAP bingkai, sentiasa hadap kamera SEMASA (bukan
             // tetap drpd saat commit) — telefon digenggam tangan, orientasi berubah
             // banyak sepanjang seretan (lain drpd VR/desktop yg kamera agak stabil
@@ -5421,7 +5444,7 @@
             // pulang null) — proksi "freeze" walau jari terus diseret jauh. Berpaksi pada
             // kedudukan proksi TERKINI (bukan objWorldPosStart asal) supaya objek tak
             // "melompat" bila satah bertukar orientasi.
-            mainCamera.getWorldDirection(_arPlaneNormal);
+            getCurrentCameraDirection(frame, _arPlaneNormal);
             st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
 
             st.arRawController.getWorldPosition(_arRayOrigin);
@@ -6907,7 +6930,7 @@
             // supaya formula deltaPos sedia ada (dikira dari kedudukan "controller", dlm
             // AR ialah proksi ni) dapat kedudukan proksi TERKINI, bukan lapuk satu bingkai.
             if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arGrabPlane) {
-                updateARGrabProxy(grabStartState);
+                updateARGrabProxy(grabStartState, frame);
             }
 
             // Objek sedang digenggam — kemaskan kedudukan/putarannya ikut "pemegang" (controller

@@ -1897,7 +1897,7 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '24';
+        const AR_DEBUG_BUILD = '25';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -2104,9 +2104,24 @@
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
         const _arPlaneNormal = new THREE.Vector3();
-        function updateARGrabProxy(st) {
+        const _arViewerQuat = new THREE.Quaternion();
+        // mainCamera cuma disegerakkan ikut pose XR SEBENAR DALAM renderer.render(),
+        // tapi fungsi ni jalan lebih awal dlm animate() — lihat nota penuh dlm index.html.
+        function getCurrentCameraDirection(frame, target) {
+            if (frame && renderer.xr.isPresenting) {
+                const refSpace = renderer.xr.getReferenceSpace();
+                const viewerPose = refSpace && frame.getViewerPose(refSpace);
+                if (viewerPose) {
+                    const o = viewerPose.transform.orientation;
+                    _arViewerQuat.set(o.x, o.y, o.z, o.w);
+                    return target.set(0, 0, -1).applyQuaternion(_arViewerQuat);
+                }
+            }
+            return mainCamera.getWorldDirection(target);
+        }
+        function updateARGrabProxy(st, frame) {
             // Satah hadap kamera SEMASA setiap bingkai — lihat nota penuh dlm index.html.
-            mainCamera.getWorldDirection(_arPlaneNormal);
+            getCurrentCameraDirection(frame, _arPlaneNormal);
             st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
 
             st.arRawController.getWorldPosition(_arRayOrigin);
@@ -2593,7 +2608,7 @@
             updateARDebugHud();
 
             if (grabbedObject && grabStartState && grabStartState.arGrabPlane) {
-                updateARGrabProxy(grabStartState);
+                updateARGrabProxy(grabStartState, frame);
             }
 
             if (grabbedObject) {
