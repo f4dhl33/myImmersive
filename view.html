@@ -170,8 +170,10 @@
                 button.onmouseleave = () => { button.style.opacity = '0.5'; };
                 button.onclick = () => {
                     if (currentSession === null) {
+                        // 'dom-overlay' perlukan `domOverlay: {root}` turut dihantar utk
+                        // SEBENARNYA aktif — lihat nota penuh dlm index.html.
                         const sessionInit = isAR
-                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'] }
+                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'], domOverlay: { root: document.body } }
                             : { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] };
                         navigator.xr.requestSession(sessionMode, sessionInit).then(onSessionStarted);
                     } else {

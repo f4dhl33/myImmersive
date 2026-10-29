@@ -1104,8 +1104,14 @@
                 button.onmouseleave = () => { button.style.opacity = '0.5'; };
                 button.onclick = () => {
                     if (currentSession === null) {
+                        // 'dom-overlay' disenaraikan dlm optionalFeatures tapi spec WebXR DOM
+                        // Overlays PERLUKAN `domOverlay: {root}` turut dihantar utk feature tu
+                        // SEBENARNYA diaktifkan — tanpa ni, browser terus SOROK semua DOM biasa
+                        // (info-popup, HUD diagnostik, dll) sepanjang sesi AR/VR immersive,
+                        // walaupun fitur disenaraikan. Punca "HUD diagnostik tak nampak
+                        // langsung" di AR telefon (2026-10-29).
                         const sessionInit = isAR
-                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'] }
+                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'], domOverlay: { root: document.body } }
                             : { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] };
                         navigator.xr.requestSession(sessionMode, sessionInit).then(onSessionStarted);
                     } else {
