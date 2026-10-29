@@ -5081,15 +5081,14 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '31';
+        const AR_DEBUG_BUILD = '32';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
             lastHitOnSelect: null, lastHitOnSelectStart: null,
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
             lastCommitMode: null, lastCommitAt: 0,
-            proxyDenom: 0, proxyJump: 0, proxyReject: '-',
-            proxyCamCheckDot: 0
+            proxyJump: 0, proxyReject: '-'
         };
 
         // HUD DOM (<div id="ar-debug-hud">) bergantung pada ciri 'dom-overlay' WebXR —
@@ -5137,8 +5136,7 @@
                 'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
-                'proxy denom:' + arDebug.proxyDenom.toFixed(3) + ' jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
-                'frameDir vs mainCamDir: ' + arDebug.proxyCamCheckDot.toFixed(3)
+                'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -5326,7 +5324,7 @@
                     // AR tap skrin guna blend BERASINGAN (lebih lembut) — lihat nota
                     // AR_GRAB_VELOCITY_BLEND di atas; VR/desktop (GRAB_VELOCITY_BLEND)
                     // tidak disentuh.
-                    const velocityBlend = st.arGrabPlane ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
+                    const velocityBlend = (st.arGrabDistance !== null) ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
                     body.velocity.set(
                         THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
                         THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
@@ -5373,129 +5371,56 @@
         // kamera/telefon), cuma ARAH ray berubah bila jari diseret atas skrin. Pendekatan
         // mod 'move' asal (deltaPos dari kedudukan controller sebenar) sentiasa dapat
         // deltaPos ~0 utk AR walau macam mana jari digerakkan — punca sebenar "tak boleh
-        // genggam langsung dlm AR" (bukan isu gain/kelajuan macam VR). Guna teknik SAMA
-        // dgn genggam mouse desktop (ray-plane intersection): proksi Object3D yang
-        // kedudukannya dikemaskini setiap bingkai ikut titik persilangan ray controller
-        // (bukan kedudukan controller terus) dgn satah tegak lurus arah kamera melalui
-        // objek — updateGrabbedObjectTransform() guna proksi ni macam "controller" biasa,
-        // tiada ubah lain diperlukan sbb formula deltaPos sedia ada dah betul utk proksi
-        // yang bergerak ikut plane-intersection.
-        function computeARGrabProxyStart(rawController, planeCoplanarPoint) {
-            const normal = new THREE.Vector3();
-            mainCamera.getWorldDirection(normal);
-            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, planeCoplanarPoint);
-
+        // genggam langsung dlm AR" (bukan isu gain/kelajuan macam VR).
+        //
+        // PERCUBAAN #1 (dibuang): ray-plane intersection (satah tegak lurus arah kamera).
+        // Perlukan bacaan "arah kamera SEMASA" setiap bingkai yang boleh dipercayai — selepas
+        // 7 percubaan (#21-#27, lihat memori vr_grab_gravity_fix) cuba pelbagai cara baca
+        // arah kamera (mainCamera.getWorldDirection, frame.getViewerPose, gabung cameraRig),
+        // denom (sudut ray lawan satah) tetap TAK MASUK AKAL (stabil tapi songsang, ~-0.96,
+        // patut ~+0.96) — bug jenis timing/reference-frame WebXR yang sukar disahkan tanpa
+        // devtools sebenar. BUKAN pendekatan mantap utk kes ni.
+        //
+        // PERCUBAAN #2 (SEKARANG): kekalkan proksi pada JARAK TETAP sepanjang ray controller
+        // (ditetapkan SEKALI di commitVRGrab, drpd jarak controller->objek masa genggam
+        // bermula) — proxy = rayOrigin + rayDirection.normalize() * jarakTetap, dikemaskini
+        // setiap bingkai. TIADA satah, TIADA arah kamera langsung — cuma bergantung pada ray
+        // controller SENDIRI (kedudukan + arah), yang SUDAH terbukti betul sepanjang saga ni
+        // (laser/penanda hover sentiasa kena objek dgn tepat, guna teknik SAMA). Jauh lebih
+        // ringkas & tahan lasak: tiada kes degenerat (selari/songsang satah), tiada bahagi
+        // dgn nombor hampir sifar. Objek kekal jarak SAMA dari kamera sepanjang seretan,
+        // bergerak sisi/atas-bawah ikut ke mana ray dihalakan — serupa teknik "holographic
+        // drag" biasa dlm apl AR lain.
+        function computeARGrabDistance(rawController, objWorldPos) {
             const rayOrigin = new THREE.Vector3();
-            const rayDir = new THREE.Vector3();
             rawController.getWorldPosition(rayOrigin);
-            rawController.getWorldDirection(rayDir);
-            const ray = new THREE.Ray(rayOrigin, rayDir);
-
             const proxy = new THREE.Object3D();
-            const hitPoint = new THREE.Vector3();
-            proxy.position.copy(ray.intersectPlane(plane, hitPoint) ? hitPoint : planeCoplanarPoint);
-            return { proxy, plane };
+            proxy.position.copy(objWorldPos);
+            return { proxy, distance: rayOrigin.distanceTo(objWorldPos) };
         }
 
-        // Tapis gegaran — titik persilangan ray-plane boleh melantun jauh LEBIH drpd
-        // pergerakan jari sebenar, sebab ray AR tap skrin bergantung pada orientasi
-        // tangan/telefon SEBENAR (bukan cuma kedudukan jari atas skrin), dan sudut ray
-        // yang sama menghasilkan jarak gerak yang lebih BESAR bila objek/satah jauh drpd
-        // kamera (geometri asas laser pada jarak) — jauh lebih ketara drpd VR controller
-        // (jarak tangan sebenar, terhad lingkungan lengan). Lonjakan bingkai-ke-bingkai
-        // yang tak ditapis ni terus suap pipeline kelajuan/fizik yang ditala utk jarak
-        // VR, punca laporan "tersentak-sentak, bergerak jauh drpd jari". EMA mudah di sini
-        // (bukan ubah pipeline fizik/velocity sedia ada langsung — risiko lebih rendah,
-        // tak sentuh laluan VR/desktop).
+        // Tapis gegaran — lihat nota lama di atas (masih relevan: ray AR tap skrin
+        // bergantung pada orientasi tangan/telefon SEBENAR, bukan cuma kedudukan jari
+        // atas skrin, jadi gegaran tangan halus pun jadi pergerakan ketara pada jarak).
         const AR_GRAB_PROXY_SMOOTHING = 0.35;
-        // Had jarak lonjakan setiap bingkai (meter) — jaring keselamatan KEDUA, lepas
-        // pembaikan satah-hidup/epsilon di bawah. Tolak terus sebarang lonjakan tunggal
-        // yang masih lebih besar drpd ni (ralat berangka hujung, bukan niat pengguna).
+        // Had jarak lonjakan setiap bingkai (meter) — jaring keselamatan terhadap ralat
+        // berangka hujung (bukan sepatutnya tercetus langsung dgn teknik jarak-tetap ni,
+        // sbb tiada kes degenerat/pembahagian — tapi kekalkan sebagai lapisan selamat).
         const AR_GRAB_MAX_JUMP_PER_FRAME = 1.5;
-        // Satah tegak lurus kamera di bawah paras denominator ni dianggap "hampir
-        // selari dgn ray" — tolak kemaskini bingkai tu (kekal kedudukan lama) drpd
-        // bahagi dgn nombor hampir sifar.
-        const AR_GRAB_PLANE_MIN_DENOM = 0.2;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
-        const _arPlaneNormal = new THREE.Vector3();
-        const _arMainCamCheckDir = new THREE.Vector3();
-        const _arViewerQuat = new THREE.Quaternion();
-        const _arRigWorldQuat = new THREE.Quaternion();
-        // `mainCamera` cuma disegerakkan ikut pose XR SEBENAR di DALAM renderer.render()
-        // — tapi fungsi ni dipanggil JAUH lebih awal dlm animate(), sebelum render()
-        // bingkai ni jalan. mainCamera.getWorldDirection() di sini sebenarnya baca pose
-        // BINGKAI SEBELUM (lapuk 1 bingkai), manakala arah ray controller (drpd XRFrame
-        // input source) SUDAH terkini utk bingkai ni — percanggahan "lapuk vs terkini"
-        // ni yg punca denom melantun ekstrem antara bingkai (0.117 -> -0.984, >170°,
-        // mustahil secara fizikal utk putaran tangan sebenar dlm sepersekian saat).
-        // Baca pose penonton TERUS drpd XRFrame (frame.getViewerPose) bila ada — ni
-        // dijamin terkini utk bingkai SEMASA, tak bergantung langsung pada bila
-        // renderer.render() jalan.
-        //
-        // PENTING: pose mentah drpd frame.getViewerPose() adalah RELATIF kpd
-        // cameraRig (mainCamera & controller1/2 SEMUA anak cameraRig — lihat
-        // deklarasinya di atas), BUKAN terus dlm ruang DUNIA scene. Kalau terus
-        // applyQuaternion pose mentah macam dunia (tanpa gabung putaran cameraRig
-        // SEMASA), hasilnya SALAH secara tekal/stabil setiap kali cameraRig ada
-        // putaran bukan-identiti (cth drpd previewCameraMarker) — sebab ray
-        // controller (getWorldDirection, turut lalui cameraRig) kekal BETUL, jadi
-        // "denom" jadi stabil tapi SALAH (cth -0.992 tekal, bukan ~1 macam
-        // dijangka utk ray yg kena objek depan kamera). Gabung dgn putaran DUNIA
-        // cameraRig SEMASA supaya padan betul2 dgn konvensyen getWorldDirection.
-        function getCurrentCameraDirection(frame, target) {
-            if (frame && renderer.xr.isPresenting) {
-                const refSpace = renderer.xr.getReferenceSpace();
-                const viewerPose = refSpace && frame.getViewerPose(refSpace);
-                if (viewerPose) {
-                    const o = viewerPose.transform.orientation;
-                    _arViewerQuat.set(o.x, o.y, o.z, o.w);
-                    cameraRig.getWorldQuaternion(_arRigWorldQuat);
-                    _arRigWorldQuat.multiply(_arViewerQuat);
-                    return target.set(0, 0, -1).applyQuaternion(_arRigWorldQuat);
-                }
-            }
-            return mainCamera.getWorldDirection(target);
-        }
-        function updateARGrabProxy(st, frame) {
-            // Bina semula satah SETIAP bingkai, sentiasa hadap kamera SEMASA (bukan
-            // tetap drpd saat commit) — telefon digenggam tangan, orientasi berubah
-            // banyak sepanjang seretan (lain drpd VR/desktop yg kamera agak stabil
-            // semasa seret). Satah tetap jadi curam/hampir selari dgn ray bila tangan
-            // berpusing — denominator hampir 0 buat titik persilangan melonjak jauh
-            // ("infinite movement towards user"), atau t jadi negatif (ray.intersectPlane
-            // pulang null) — proksi "freeze" walau jari terus diseret jauh. Berpaksi pada
-            // kedudukan proksi TERKINI (bukan objWorldPosStart asal) supaya objek tak
-            // "melompat" bila satah bertukar orientasi.
-            getCurrentCameraDirection(frame, _arPlaneNormal);
-            // DIAGNOSTIK — banding arah frame.getViewerPose() (baharu) lawan
-            // mainCamera.getWorldDirection() (lama, terbukti betul utk kedudukan
-            // AWAL proksi di commitVRGrab) DALAM bingkai yg SAMA. Kalau dekat +1,
-            // dua2 sepakat (bug di tempat lain); kalau dekat -1/0, fungsi baharu ni
-            // sendiri yang silap, bukan cameraRig/timing. BUANG lepas bug disahkan.
-            mainCamera.getWorldDirection(_arMainCamCheckDir);
-            arDebug.proxyCamCheckDot = _arPlaneNormal.dot(_arMainCamCheckDir);
-            st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
-
+        function updateARGrabProxy(st) {
             st.arRawController.getWorldPosition(_arRayOrigin);
             st.arRawController.getWorldDirection(_arRayDir);
-            const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
+            _arRayDir.normalize();
+            _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
 
-            const denom = st.arGrabPlane.normal.dot(ray.direction);
-            arDebug.proxyDenom = denom;
-            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) { arDebug.proxyReject = 'denom'; return; }
-
-            // Ray selari dgn plane (jarang) — kekalkan kedudukan proxy terakhir, tak kemaskini.
-            if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
-                const jump = _arHitPoint.distanceTo(st.controller.position);
-                arDebug.proxyJump = jump;
-                if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
-                arDebug.proxyReject = 'ok';
-                st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
-            } else {
-                arDebug.proxyReject = 'null';
-            }
+            const jump = _arHitPoint.distanceTo(st.controller.position);
+            arDebug.proxyJump = jump;
+            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
+            arDebug.proxyReject = 'ok';
+            st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
         }
 
         function commitVRGrab(pending) {
@@ -5540,10 +5465,10 @@
             hitModel.getWorldPosition(objWorldPosStart);
             hitModel.getWorldQuaternion(objWorldQuatStart);
 
-            // AR mod 'move' — bina proksi ray-plane (lihat computeARGrabProxyStart/
+            // AR mod 'move' — bina proksi jarak-tetap (lihat computeARGrabDistance/
             // updateARGrabProxy di atas) sbb kedudukan DUNIA controller "transient-pointer"
             // tak boleh dipercayai utk translate (lihat nota di atas fungsi tu).
-            let arGrabPlane = null, arRawController = null;
+            let arGrabDistance = null, arRawController = null;
             let effectiveController = controller;
             // HANYA utk tap skrin TANPA jejak kedudukan ('screen') — controller 6DOF SEBENAR
             // (targetRayMode 'tracked-pointer', termasuk controller fizikal headset AR cth
@@ -5551,8 +5476,8 @@
             // (jangan topang proksi ni atasnya — itu punca regresi "jadi rotation" yg
             // dilaporkan pengguna bila test headset AR dgn controller kiri+kanan sebenar).
             if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
-                const { proxy, plane } = computeARGrabProxyStart(controller, objWorldPosStart);
-                arGrabPlane = plane;
+                const { proxy, distance } = computeARGrabDistance(controller, objWorldPosStart);
+                arGrabDistance = distance;
                 arRawController = controller;
                 effectiveController = proxy;
             }
@@ -5563,11 +5488,11 @@
             effectiveController.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
             // Nisbah gerak ikut saiz objek (mod 'move' VR sahaja) — lihat nota GRAB_GAIN_* di
-            // atas. TAK terpakai utk AR: proksi ray-plane di atas dah bagi pergerakan 1:1
+            // atas. TAK terpakai utk AR: proksi jarak-tetap di atas dah bagi pergerakan 1:1
             // sepadan unit dunia-nyata (sama konsep dgn mouse-grab desktop, bukan isu
             // "controller gerak sikit drpd objek besar" yg GRAB_GAIN_* selesaikan utk VR).
             const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
-            const moveGain = arGrabPlane ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
+            const moveGain = arGrabDistance !== null ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {
                 mode,
@@ -5579,7 +5504,7 @@
                 prevLinearDamping,
                 prevAngularDamping,
                 moveGain,
-                arGrabPlane,
+                arGrabDistance,
                 arRawController
             };
         }
@@ -5857,9 +5782,9 @@
         // AR (tap di skrin telefon): WebXR mewakilkan tap sebagai "transient-pointer"
         // controller, melalui laluan onControllerSelectStart/End yang SAMA di atas —
         // TAPI kedudukan DUNIA controller tu sendiri kekal hampir statik (terikat kamera),
-        // jadi commitVRGrab/checkVRPendingGrabCommit bina proksi ray-plane KHUSUS utk AR
-        // (computeARGrabProxyStart/updateARGrabProxy) drpd guna kedudukan controller mentah
-        // terus macam VR hand controller — rujuk nota panjang pada computeARGrabProxyStart.
+        // jadi commitVRGrab/checkVRPendingGrabCommit bina proksi jarak-tetap KHUSUS utk AR
+        // (computeARGrabDistance/updateARGrabProxy) drpd guna kedudukan controller mentah
+        // terus macam VR hand controller — rujuk nota panjang pada computeARGrabDistance.
         const mouseGrabProxy = new THREE.Object3D();
         const mouseGrabPlane = new THREE.Plane();
         const mouseGrabPlaneNormal = new THREE.Vector3();
@@ -6957,11 +6882,11 @@
             // `updateARDebugHud` di atas. BUANG lepas bug AR grab ni disahkan selesai.
             updateARDebugHud();
 
-            // Proksi genggam AR (ray-plane) — kemaskan SEBELUM updateGrabbedObjectTransform
+            // Proksi genggam AR (jarak-tetap) — kemaskan SEBELUM updateGrabbedObjectTransform
             // supaya formula deltaPos sedia ada (dikira dari kedudukan "controller", dlm
             // AR ialah proksi ni) dapat kedudukan proksi TERKINI, bukan lapuk satu bingkai.
-            if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arGrabPlane) {
-                updateARGrabProxy(grabStartState, frame);
+            if (isPreviewMode && grabbedObject && grabStartState && grabStartState.arGrabDistance !== null) {
+                updateARGrabProxy(grabStartState);
             }
 
             // Objek sedang digenggam — kemaskan kedudukan/putarannya ikut "pemegang" (controller

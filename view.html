@@ -1897,15 +1897,14 @@
 
         // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
         // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '31';
+        const AR_DEBUG_BUILD = '32';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
             lastHitOnSelect: null, lastHitOnSelectStart: null,
             pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
             lastCommitMode: null, lastCommitAt: 0,
-            proxyDenom: 0, proxyJump: 0, proxyReject: '-',
-            proxyCamCheckDot: 0
+            proxyJump: 0, proxyReject: '-'
         };
 
         // HUD WebGL (bukan bergantung dom-overlay) — lihat nota penuh dlm index.html.
@@ -1941,8 +1940,7 @@
                 'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
                 'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
                 'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
-                'proxy denom:' + arDebug.proxyDenom.toFixed(3) + ' jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
-                'frameDir vs mainCamDir: ' + arDebug.proxyCamCheckDot.toFixed(3)
+                'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject
             ];
 
             arDebugHud.textContent = lines.join('\n');
@@ -2053,7 +2051,7 @@
                     // Had kelajuan digandakan sama dgn moveGain — lihat nota index.html.
                     const effMaxSpeed = GRAB_MAX_SPEED * moveGain;
                     const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
-                    const velocityBlend = st.arGrabPlane ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
+                    const velocityBlend = (st.arGrabDistance !== null) ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
                     body.velocity.set(
                         THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
                         THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
@@ -2079,80 +2077,35 @@
         // lihat nota penuh dlm index.html.
         const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175;
 
-        // AR (tap skrin telefon): proksi ray-plane KHUSUS utk mod 'move' — lihat nota
-        // penuh dlm index.html (kedudukan DUNIA controller "transient-pointer" kekal
-        // hampir statik, cuma arah ray berubah bila jari diseret; deltaPos dari kedudukan
-        // controller mentah sentiasa ~0, punca "tak boleh genggam langsung dlm AR").
-        function computeARGrabProxyStart(rawController, planeCoplanarPoint) {
-            const normal = new THREE.Vector3();
-            mainCamera.getWorldDirection(normal);
-            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, planeCoplanarPoint);
-
+        // AR (tap skrin telefon): proksi JARAK-TETAP KHUSUS utk mod 'move' — lihat nota
+        // penuh dlm index.html. (Pendekatan ray-plane asal dibuang selepas 7 percubaan
+        // #21-#27 gagal dapatkan bacaan arah kamera yang boleh dipercayai setiap bingkai —
+        // teknik jarak-tetap ni cuma guna ray controller sendiri, terbukti betul via laser.)
+        function computeARGrabDistance(rawController, objWorldPos) {
             const rayOrigin = new THREE.Vector3();
-            const rayDir = new THREE.Vector3();
             rawController.getWorldPosition(rayOrigin);
-            rawController.getWorldDirection(rayDir);
-            const ray = new THREE.Ray(rayOrigin, rayDir);
-
             const proxy = new THREE.Object3D();
-            const hitPoint = new THREE.Vector3();
-            proxy.position.copy(ray.intersectPlane(plane, hitPoint) ? hitPoint : planeCoplanarPoint);
-            return { proxy, plane };
+            proxy.position.copy(objWorldPos);
+            return { proxy, distance: rayOrigin.distanceTo(objWorldPos) };
         }
 
         // Tapis gegaran — lihat nota penuh dlm index.html.
         const AR_GRAB_PROXY_SMOOTHING = 0.35;
         const AR_GRAB_MAX_JUMP_PER_FRAME = 1.5;
-        const AR_GRAB_PLANE_MIN_DENOM = 0.2;
         const _arRayOrigin = new THREE.Vector3();
         const _arRayDir = new THREE.Vector3();
         const _arHitPoint = new THREE.Vector3();
-        const _arPlaneNormal = new THREE.Vector3();
-        const _arMainCamCheckDir = new THREE.Vector3();
-        const _arViewerQuat = new THREE.Quaternion();
-        const _arRigWorldQuat = new THREE.Quaternion();
-        // mainCamera cuma disegerakkan ikut pose XR SEBENAR DALAM renderer.render(),
-        // tapi fungsi ni jalan lebih awal dlm animate() — lihat nota penuh dlm index.html.
-        // Pose mentah XR adalah RELATIF kpd cameraRig, bukan terus dunia — gabung dgn
-        // putaran DUNIA cameraRig SEMASA.
-        function getCurrentCameraDirection(frame, target) {
-            if (frame && renderer.xr.isPresenting) {
-                const refSpace = renderer.xr.getReferenceSpace();
-                const viewerPose = refSpace && frame.getViewerPose(refSpace);
-                if (viewerPose) {
-                    const o = viewerPose.transform.orientation;
-                    _arViewerQuat.set(o.x, o.y, o.z, o.w);
-                    cameraRig.getWorldQuaternion(_arRigWorldQuat);
-                    _arRigWorldQuat.multiply(_arViewerQuat);
-                    return target.set(0, 0, -1).applyQuaternion(_arRigWorldQuat);
-                }
-            }
-            return mainCamera.getWorldDirection(target);
-        }
-        function updateARGrabProxy(st, frame) {
-            // Satah hadap kamera SEMASA setiap bingkai — lihat nota penuh dlm index.html.
-            getCurrentCameraDirection(frame, _arPlaneNormal);
-            mainCamera.getWorldDirection(_arMainCamCheckDir);
-            arDebug.proxyCamCheckDot = _arPlaneNormal.dot(_arMainCamCheckDir);
-            st.arGrabPlane.setFromNormalAndCoplanarPoint(_arPlaneNormal, st.controller.position);
-
+        function updateARGrabProxy(st) {
             st.arRawController.getWorldPosition(_arRayOrigin);
             st.arRawController.getWorldDirection(_arRayDir);
-            const ray = new THREE.Ray(_arRayOrigin, _arRayDir);
+            _arRayDir.normalize();
+            _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
 
-            const denom = st.arGrabPlane.normal.dot(ray.direction);
-            arDebug.proxyDenom = denom;
-            if (Math.abs(denom) < AR_GRAB_PLANE_MIN_DENOM) { arDebug.proxyReject = 'denom'; return; }
-
-            if (ray.intersectPlane(st.arGrabPlane, _arHitPoint)) {
-                const jump = _arHitPoint.distanceTo(st.controller.position);
-                arDebug.proxyJump = jump;
-                if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
-                arDebug.proxyReject = 'ok';
-                st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
-            } else {
-                arDebug.proxyReject = 'null';
-            }
+            const jump = _arHitPoint.distanceTo(st.controller.position);
+            arDebug.proxyJump = jump;
+            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) { arDebug.proxyReject = 'jump'; return; }
+            arDebug.proxyReject = 'ok';
+            st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
         }
 
         function commitVRGrab(pending) {
@@ -2186,12 +2139,12 @@
             hitModel.getWorldQuaternion(objWorldQuatStart);
 
             // AR mod 'move' — lihat nota penuh dlm index.html.
-            let arGrabPlane = null, arRawController = null;
+            let arGrabDistance = null, arRawController = null;
             let effectiveController = controller;
             // HANYA utk 'screen' (tap tanpa jejak kedudukan) — lihat index.html.
             if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
-                const { proxy, plane } = computeARGrabProxyStart(controller, objWorldPosStart);
-                arGrabPlane = plane;
+                const { proxy, distance } = computeARGrabDistance(controller, objWorldPosStart);
+                arGrabDistance = distance;
                 arRawController = controller;
                 effectiveController = proxy;
             }
@@ -2202,7 +2155,7 @@
             effectiveController.getWorldQuaternion(controllerWorldQuatInvStart).invert();
 
             const objSize = new THREE.Box3().setFromObject(hitModel).getSize(new THREE.Vector3());
-            const moveGain = arGrabPlane ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
+            const moveGain = arGrabDistance !== null ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
 
             grabStartState = {
                 mode,
@@ -2214,7 +2167,7 @@
                 prevLinearDamping,
                 prevAngularDamping,
                 moveGain,
-                arGrabPlane,
+                arGrabDistance,
                 arRawController
             };
         }
@@ -2435,7 +2388,7 @@
         // GENGGAM GUNA MOUSE (desktop/bukan sesi XR — termasuk fallback "View tanpa AR/VR"
         // bila peranti tak sokong WebXR, sebab mod tu pun guna laluan mouse yang sama).
         // AR (tap di skrin telefon): laluan onControllerSelectStart/End di atas, TAPI guna
-        // proksi ray-plane (computeARGrabProxyStart/updateARGrabProxy) utk mod 'move' —
+        // proksi jarak-tetap (computeARGrabDistance/updateARGrabProxy) utk mod 'move' —
         // lihat nota penuh dlm index.html (kedudukan controller "transient-pointer" tak
         // boleh dipercayai utk translate terus macam VR hand controller).
         const mouseGrabProxy = new THREE.Object3D();
@@ -2619,8 +2572,8 @@
             // `updateARDebugHud` di atas. BUANG lepas bug AR grab ni disahkan selesai.
             updateARDebugHud();
 
-            if (grabbedObject && grabStartState && grabStartState.arGrabPlane) {
-                updateARGrabProxy(grabStartState, frame);
+            if (grabbedObject && grabStartState && grabStartState.arGrabDistance !== null) {
+                updateARGrabProxy(grabStartState);
             }
 
             if (grabbedObject) {
