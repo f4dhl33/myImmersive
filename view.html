@@ -1723,6 +1723,9 @@
         [controller1, controller2].forEach(ctrl => {
             ctrl.addEventListener('connected', (event) => {
                 ctrl.userData.handedness = event.data && event.data.handedness;
+                // 'screen' = tap tanpa jejak kedudukan (telefon AR); 'tracked-pointer' =
+                // controller 6DOF sebenar (VR ATAU headset AR fizikal) — lihat index.html.
+                ctrl.userData.targetRayMode = event.data && event.data.targetRayMode;
             });
 
             // Bahan laser KLON berasingan setiap controller (bukan kongsi satu
@@ -2032,7 +2035,8 @@
             // AR mod 'move' — lihat nota penuh dlm index.html.
             let arGrabPlane = null, arRawController = null;
             let effectiveController = controller;
-            if (isARSession && mode === 'move') {
+            // HANYA utk 'screen' (tap tanpa jejak kedudukan) — lihat index.html.
+            if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
                 const { proxy, plane } = computeARGrabProxyStart(controller, objWorldPosStart);
                 arGrabPlane = plane;
                 arRawController = controller;
@@ -2086,7 +2090,8 @@
 
             // AR tap skrin — guna threshold SUDUT gantian threshold jarak; lihat nota
             // penuh dlm index.html.
-            const useAngleThreshold = mode === 'rotate' || (isARSession && mode === 'move');
+            const useAngleThreshold = mode === 'rotate' ||
+                (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen');
 
             if (useAngleThreshold) {
                 const q = new THREE.Quaternion();

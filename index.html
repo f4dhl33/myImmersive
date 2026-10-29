@@ -4876,6 +4876,12 @@
         [controller1, controller2].forEach(ctrl => {
             ctrl.addEventListener('connected', (event) => {
                 ctrl.userData.handedness = event.data && event.data.handedness;
+                // 'screen' = tap input tanpa jejak kedudukan sebenar (telefon AR, pegang-skrin
+                // tanpa controller fizikal) — kedudukan dunia KEKAL statik, cuma arah ray
+                // berubah. 'tracked-pointer' = controller 6DOF SEBENAR (VR ATAU headset AR
+                // guna controller fizikal, cth Quest passthrough) — kedudukan dunia BERGERAK
+                // sebenar sama macam VR, proksi ray-plane AR TAK diperlukan/TAK sesuai utk ni.
+                ctrl.userData.targetRayMode = event.data && event.data.targetRayMode;
             });
 
             // Bahan laser KLON berasingan setiap controller (bukan kongsi satu
@@ -5290,7 +5296,12 @@
             // tak boleh dipercayai utk translate (lihat nota di atas fungsi tu).
             let arGrabPlane = null, arRawController = null;
             let effectiveController = controller;
-            if (isARSession && mode === 'move') {
+            // HANYA utk tap skrin TANPA jejak kedudukan ('screen') — controller 6DOF SEBENAR
+            // (targetRayMode 'tracked-pointer', termasuk controller fizikal headset AR cth
+            // Quest passthrough) kekal guna kedudukan controller terus macam VR, SAH sudah
+            // (jangan topang proksi ni atasnya — itu punca regresi "jadi rotation" yg
+            // dilaporkan pengguna bila test headset AR dgn controller kiri+kanan sebenar).
+            if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
                 const { proxy, plane } = computeARGrabProxyStart(controller, objWorldPosStart);
                 arGrabPlane = plane;
                 arRawController = controller;
@@ -5357,7 +5368,8 @@
             // controller) nyaris tak pernah tercapai, punca "tak boleh genggam langsung
             // dlm AR". ARAH ray pula berubah banyak bila jari diseret — guna threshold
             // SUDUT (macam mod rotate) utk kesan niat drag dlm AR gantinya.
-            const useAngleThreshold = mode === 'rotate' || (isARSession && mode === 'move');
+            const useAngleThreshold = mode === 'rotate' ||
+                (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen');
 
             if (useAngleThreshold) {
                 const q = new THREE.Quaternion();
