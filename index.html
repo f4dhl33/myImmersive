@@ -5081,7 +5081,7 @@
         // dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
         // NAIKKAN nombor ni setiap kali push baru — bukti telefon betul-betul dapat kod
         // terkini (bukan cache lapuk) tanpa perlu teka. BUANG kesemuanya lepas bug ni disahkan selesai.
-        const AR_DEBUG_BUILD = '29';
+        const AR_DEBUG_BUILD = '30';
         const arDebug = {
             selectCount: 0, selectStartCount: 0, selectEndCount: 0,
             lastTargetRayMode: undefined, lastHandedness: undefined,
@@ -5104,12 +5104,16 @@
         arDebugCanvas.width = 640; arDebugCanvas.height = 320;
         const arDebugCtx = arDebugCanvas.getContext('2d');
         const arDebugTexture = new THREE.CanvasTexture(arDebugCanvas);
+        // Panel 0.4m lebar pada 0.4m jarak = ~53° sudut tampak (hampir SEPARUH FOV
+        // kamera telefon) — itu sebab nampak macam kotak gelap besar menutup
+        // separuh skrin, bukan HUD sudut kecil macam disangka. 0.18m pada jarak
+        // SAMA (0.4m) ≈ 25° sudut tampak — jauh lebih munasabah utk panel sudut.
         const arDebugSprite = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.4, 0.2),
+            new THREE.PlaneGeometry(0.18, 0.09),
             new THREE.MeshBasicMaterial({ map: arDebugTexture, transparent: true, depthTest: false, depthWrite: false })
         );
         arDebugSprite.renderOrder = 99999;
-        arDebugSprite.position.set(-0.2, -0.17, -0.4); // tepi KIRI BAWAH — elak kamera depan/notch telefon (atas-tengah)
+        arDebugSprite.position.set(-0.12, -0.08, -0.4); // tepi KIRI BAWAH — elak kamera depan/notch telefon (atas-tengah)
         arDebugSprite.visible = false;
         mainCamera.add(arDebugSprite);
 
