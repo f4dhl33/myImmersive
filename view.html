@@ -1973,7 +1973,14 @@
             // tiba dulu) SERTA justReleasedGrab (di-set kalau 'selectend' dah pun
             // jalan) — dua-dua perlu disemak utk redam onClick lepas drag/genggam,
             // tanpa kira urutan sebenar event ni ditembak oleh runtime WebXR.
-            if (grabbedObject) return;
+            // Hadkan semakan ni pada controller yg SEDANG genggam shj (bandingkan
+            // event.target) — supaya controller LAIN (tangan sebelah, VR dua-tangan)
+            // masih boleh onClick objek lain macam biasa walaupun satu tangan tengah
+            // drag sesuatu.
+            if (grabbedObject && grabStartState &&
+                (event.target === grabStartState.controller || event.target === grabStartState.arRawController)) {
+                return;
+            }
             if (justReleasedGrab) {
                 justReleasedGrab = false;
                 return;
