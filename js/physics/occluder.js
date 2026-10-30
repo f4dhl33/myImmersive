@@ -305,5 +305,9 @@ export function createOccluder({ THREE, getLoadedModelsList, getWaypointPathMesh
         });
     }
 
-    return { applyCutoutEffect, updateCutoutCameraGating, clearCutoutEffect, refreshCutterEditVisuals };
+    // restoreOriginalMaterial diexport juga (selain dipakai dalaman) — view.html perlukan
+    // ia sendiri untuk teardownPhysicsWorld versi viewer (tiada mod Editing, jadi "clear"
+    // cutout di situ cuma pulihkan material asal terus, bukan tukar ke wireframe magenta
+    // edit mode macam clearCutoutEffect() editor di atas).
+    return { applyCutoutEffect, updateCutoutCameraGating, clearCutoutEffect, refreshCutterEditVisuals, restoreOriginalMaterial };
 }

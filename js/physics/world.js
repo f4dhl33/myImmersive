@@ -1,8 +1,12 @@
 // Setup Cannon.js world & broadphase — diekstrak dari index.html.
-// CANNON (UMD classic script) mesti sudah dimuat sebelum modul ni jalan — dijamin sebab
-// <script src=".../cannon.min.js"> di index.html bukan defer/module, jadi execute semasa
-// parsing, sebelum mana-mana <script type="module"> (termasuk modul ni) yang sentiasa
-// deferred sampai selepas dokumen siap di-parse.
+// Import TERUS 'cannon-es' (bukan bergantung pada window.CANNON global macam colliders.js/
+// grab-core.js/pointer-grab.js) — fail ni guna CANNON pada tahap ATAS modul (module-eval
+// time, `new CANNON.World()` di bawah jalan serta-merta bila modul ni diimport), SEBELUM
+// index.html/view.html sendiri sempat jalankan baris jambatan `window.CANNON = ...` di
+// bawah import mereka. cannon-es (fork ESM cannon.js yg diselenggara, API serasi — World/
+// Body/Box/Sphere/Material/ContactMaterial/NaiveBroadphase/Vec3 nama sama) TIADA build UMD/
+// global pun, jadi mustahil guna <script src> klasik lagi macam cannon.js 0.6.2 dulu.
+import * as CANNON from 'cannon-es';
 //
 // Simulasi berjalan dalam ruang LOKAL contentRoot (bukan dunia sebenar) — position/
 // quaternion badan fizik terus sepadan dengan position/quaternion objek THREE (anak

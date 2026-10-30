@@ -14,7 +14,14 @@ import { appState } from '../core/state.js';
 //     factory ni dipanggil) — nilai terus akan baca pembolehubah yang belum wujud (TDZ).
 // (2) isPreviewMode ialah pembolehubah index.html sendiri — fail modul ni ada skop
 //     berasingan, tiada akses closure terus kepadanya walaupun timing bukan isu.
-export function createColliders({ THREE, contentRoot, getLoadedModelsList, getShowCollidersChecked, getIsPreviewMode, applyCutoutEffect, clearCutoutEffect }) {
+// enableDebugVisuals (lalai true, kekalkan gelagat index.html 100% sama) — view.html hantar
+// false: ia tiada checkbox "Show Colliders"/mod Editing langsung, jadi wireframe debug mesh
+// per objek fizik tu overhead semata-mata (cipta Mesh+Geometry+Material setiap kali
+// buildPhysicsWorldFromScene jalan, walau tak pernah kelihatan) — releven dgn tujuan asal
+// pembersihan/load-time sesi ni. pb.debugMesh null bila false; semua caller sedia ada
+// (syncPhysicsBodiesWithVisibility/teardownPhysicsWorld/animate loop) dah guna corak
+// `if (pb.debugMesh) ...`, jadi selamat terus tanpa ubah apa-apa lagi.
+export function createColliders({ THREE, contentRoot, getLoadedModelsList, getShowCollidersChecked, getIsPreviewMode, applyCutoutEffect, clearCutoutEffect, enableDebugVisuals = true }) {
     function isMaterialEffectivelyInvisible(material) {
         if (!material) return false;
         const mats = Array.isArray(material) ? material : [material];
@@ -244,9 +251,12 @@ export function createColliders({ THREE, contentRoot, getLoadedModelsList, getSh
                 const inWorld = shouldColliderBeActive(mesh);
                 if (inWorld) physicsWorld.addBody(body);
 
-                const debugMesh = buildPhysicsDebugMesh(shape, offset);
-                debugMesh.visible = getShowCollidersChecked() && inWorld;
-                contentRoot.add(debugMesh);
+                let debugMesh = null;
+                if (enableDebugVisuals) {
+                    debugMesh = buildPhysicsDebugMesh(shape, offset);
+                    debugMesh.visible = getShowCollidersChecked() && inWorld;
+                    contentRoot.add(debugMesh);
+                }
 
                 appState.physicsBodies.push({ mesh, body, debugMesh, inWorld });
                 mesh.userData._physicsBody = body;

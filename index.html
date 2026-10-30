@@ -511,17 +511,22 @@
 
     <!-- THREE.JS CORE & LIBRARIES -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.min.js"></script>
-    <!-- THREE.JS kini dimuat sebagai ES module (lihat <script type="module"> di bawah) —
-         importmap ni bagi tahu browser mana nak cari bare specifier 'three' / 'three/addons/' -->
+    <!-- THREE.JS + CANNON-ES kini dimuat sebagai ES module (lihat <script type="module"> di
+         bawah) — importmap ni bagi tahu browser mana nak cari bare specifier 'three' /
+         'three/addons/' / 'cannon-es'. cannon.js (0.6.2) KLASIK dah digantikan dgn cannon-es
+         (fork ESM yg masih diselenggara, API serasi — World/Body/Box/Sphere/Material/
+         ContactMaterial/NaiveBroadphase/Vec3 semua nama sama) — cannon-es TIADA build UMD/
+         global langsung, jadi MESTI lalui importmap ni, tak boleh guna <script src> klasik
+         macam dulu. -->
     <script type="importmap">
     {
         "imports": {
             "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
         }
     }
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
 </head>
 <body>
 
@@ -1050,6 +1055,7 @@
     <!-- SCRIPT THREE.JS -->
     <script type="module">
         import * as THREE_NS from 'three';
+        import * as CANNON_NS from 'cannon-es';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TransformControls } from 'three/addons/controls/TransformControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -1102,6 +1108,18 @@
         // ke objek biasa yang boleh ditambah.
         const THREE = { ...THREE_NS, OrbitControls, TransformControls, GLTFLoader, FBXLoader, RoomEnvironment };
         window.THREE = THREE; // elak hilang akses THREE dari console semasa debug
+
+        // Jambatan sama utk CANNON (cannon-es) — js/physics/colliders.js, grab-core.js,
+        // pointer-grab.js, dan fungsi trigger/grab inline bawah ni semua rujuk `CANNON.xxx`
+        // sbg GLOBAL (bukan parameter factory macam THREE), sejak dulu bergantung pada
+        // <script src=".../cannon.min.js"> klasik set window.CANNON sblm modul ni jalan.
+        // cannon-es tiada build klasik, jadi jambatan ni gantikan peranan tu — selamat dari
+        // segi timing sebab fail ni cuma jalan LEPAS semua import (termasuk cannon-es) siap
+        // diselesaikan, dan setiap fungsi yg guna CANNON.xxx cuma dipanggil kemudian (event/
+        // animate loop), bukan semasa evaluate modul. (js/physics/world.js sendiri TAK
+        // bergantung pada jambatan ni — ia import terus 'cannon-es', sebab ia guna CANNON
+        // pada tahap ATAS modul/module-eval time, yg jalan SEBELUM baris ni.)
+        window.CANNON = CANNON_NS;
 
         // VRButton/ARButton — versi r128 cuma sedia sebagai ES module (examples/jsm/), bukan
         // classic script (examples/js/) macam pustaka lain dalam fail ni, jadi ditulis semula

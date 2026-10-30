@@ -1,10 +1,12 @@
-// HUD DIAGNOSTIK SEMENTARA (lihat <div id="ar-debug-hud"> di index.html) — "hold tap dekat
-// objek tak jadi apa2" dlm AR telefon tak boleh disahkan tanpa devtools sebenar; state ni
-// dibaca & dipaparkan terus atas skrin supaya pengguna boleh laporkan nombor sebenar.
-// Diekstrak dari index.html. CALON PADAM — bug AR grab yang HUD ni didiagnosis dah disahkan
-// selesai (2026-10-30); kekal buat masa ni sebab tugasan semasa cuma extraction, bukan
-// cleanup — boleh dibuang terus (fail ni + rujukan arDebug/updateARDebugHud di index.html +
-// elemen #ar-debug-hud dalam HTML) bila diminta.
+// HUD DIAGNOSTIK SEMENTARA (lihat <div id="ar-debug-hud"> di index.html) — dulu utk "hold
+// tap dekat objek tak jadi apa2" dlm AR telefon yg tak boleh disahkan tanpa devtools
+// sebenar. Diekstrak dari index.html. Bug AR grab yg HUD ni didiagnosis DAH DISAHKAN
+// SELESAI (2026-10-30) — dimatikan terus via ENABLE_DEBUG_HUD di bawah (bukan dibuang
+// terus) sebab arDebug.xxx masih ditulis dari grab-core.js/grab-ar.js/pointer-grab.js
+// sbg instrumentasi (murah, counter/state sahaja) — buang fail ni sepenuhnya akan perlu
+// bersihkan semua titik tulis tu jugak. Tukar ENABLE_DEBUG_HUD = true balik utk
+// debug AR grab pd masa depan tanpa perlu redo kerja tu.
+const ENABLE_DEBUG_HUD = false;
 export const AR_DEBUG_BUILD = '41';
 export const arDebug = {
     selectCount: 0, selectStartCount: 0, selectEndCount: 0,
@@ -24,6 +26,10 @@ export const arDebug = {
 // supaya head-locked) — tak bergantung pada dom-overlay SAMA SEKALI, sama macam
 // laser/dot/ring controller yang dah terbukti sentiasa nampak dlm AR/VR.
 export function createArDebugHud({ THREE, mainCamera, arDebugHud }) {
+    if (!ENABLE_DEBUG_HUD) {
+        return { updateARDebugHud: () => {} };
+    }
+
     const arDebugCanvas = document.createElement('canvas');
     arDebugCanvas.width = 640; arDebugCanvas.height = 320;
     const arDebugCtx = arDebugCanvas.getContext('2d');

@@ -241,7 +241,18 @@ export function createProjectStore({
     }
 
     function clearViewportObjects() {
-        [...getLoadedModelsList()].forEach(m => deleteObject(m));
+        // Henti & nyahcache AnimationMixer SEBELUM objek dipadam — deleteObject() lupus
+        // geometry/material tapi tak pernah uruskan mixer, jadi tanpa ni mixer animasi
+        // (THREE.AnimationMixer) terus hidup memegang rujukan ke root model yg dah
+        // dibuang dari scene bila tukar babak, punca kebocoran memori senyap.
+        const modelsSnapshot = [...getLoadedModelsList()];
+        modelsSnapshot.forEach(m => {
+            if (m.userData.mixer) {
+                m.userData.mixer.stopAllAction();
+                m.userData.mixer.uncacheRoot(m);
+            }
+        });
+        modelsSnapshot.forEach(m => deleteObject(m));
         setHoveredModel(null);
         setUndoStack([]);
         setRedoStack([]);

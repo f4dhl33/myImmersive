@@ -65,14 +65,25 @@
     <!-- SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-    <!-- THREE.JS -->
+    <!-- THREE.JS + CANNON-ES -->
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- THREE.JS + CANNON-ES kini dimuat sebagai ES module (sama pattern dgn index.html) —
+         importmap ni bagi tahu browser mana nak cari bare specifier 'three' / 'three/addons/'
+         / 'cannon-es'. Ini membolehkan view.html import terus fail js/ yang SAMA dengan
+         index.html (physics, occluder, grab, controller-visuals, dll) — satu sumber
+         kebenaran, bukan dua kopi yang boleh drift. cannon.js (0.6.2) klasik digantikan dgn
+         cannon-es (fork ESM diselenggara, API serasi) — tiada build UMD/global, jadi MESTI
+         lalui importmap ni. Lihat js/services/exporter.js untuk macam mana eksport "Export
+         HTML" tetap kekal 100% offline walau view.html kini guna CDN ESM sepenuhnya. -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/",
+            "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+        }
+    }
+    </script>
 </head>
 <body>
 
@@ -92,7 +103,44 @@
         <div id="ar-debug-hud" style="display:none; position:fixed; bottom:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#0f0; font:11px monospace; padding:6px 8px; border-radius:4px; max-width:80vw; white-space:pre-wrap; pointer-events:none;"></div>
     </div>
 
-    <script>
+    <script type="module">
+        import * as THREE_NS from 'three';
+        import * as CANNON_NS from 'cannon-es';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+        import { physicsWorld } from './js/physics/world.js';
+        import { createOccluder } from './js/physics/occluder.js';
+        import { createColliders } from './js/physics/colliders.js';
+        import { appState } from './js/core/state.js';
+        import { createXRButton } from './js/core/xr-session.js';
+        import { createSceneUtils } from './js/core/scene.js';
+        import { createControllerVisuals } from './js/ui/controller-visuals.js';
+        import { createArDebugHud, arDebug } from './js/ui/ar-debug-hud.js';
+        import { createWaypoint } from './js/interactions/waypoint.js';
+        import {
+            VR_GRAB_POS_THRESHOLD, VR_GRAB_ANGLE_THRESHOLD,
+            computeMoveGain, buildGrabStartState, createGrabCore
+        } from './js/interactions/grab-core.js';
+        import {
+            AR_SCREEN_GRAB_ANGLE_THRESHOLD, AR_SCREEN_GRAB_MIN_HOLD_MS, AR_GRAB_VELOCITY_BLEND,
+            createArGrab
+        } from './js/interactions/grab-ar.js';
+        import { createPointerGrab } from './js/interactions/pointer-grab.js';
+
+        // Jambatan ESM -> gaya THREE.XXX sedia ada (sama pattern dgn index.html). view.html
+        // tak perlukan TransformControls (editor-only, tiada gizmo di sini).
+        const THREE = { ...THREE_NS, OrbitControls, GLTFLoader, FBXLoader, RoomEnvironment };
+        window.THREE = THREE;
+
+        // Jambatan sama utk CANNON (cannon-es) — colliders.js/grab-core.js/pointer-grab.js
+        // dan fungsi trigger/grab inline bawah ni rujuk `CANNON.xxx` sbg GLOBAL (bukan
+        // parameter factory), warisan dari <script src=".../cannon.min.js"> klasik dulu.
+        // Selamat dari segi timing (lihat nota penuh dlm index.html) — js/physics/world.js
+        // sendiri import terus 'cannon-es', tak bergantung pada jambatan ni.
+        window.CANNON = CANNON_NS;
+
         // ---------------------------------------------------------------
         // SUPABASE (baca sahaja — projek awam)
         // ---------------------------------------------------------------
@@ -110,97 +158,6 @@
 
         function hideStatus() {
             document.getElementById('status-overlay').style.display = 'none';
-        }
-
-        // ---------------------------------------------------------------
-        // VRButton/ARButton — sama seperti index.html (r128 tiada versi
-        // classic script, ditulis semula terus di sini).
-        // ---------------------------------------------------------------
-        function createXRButton(renderer, sessionMode, label) {
-            const button = document.createElement('button');
-            const isAR = sessionMode === 'immersive-ar';
-
-            function stylizeElement(element) {
-                element.style.position = 'absolute';
-                element.style.bottom = '20px';
-                element.style.padding = '12px 6px';
-                element.style.border = '1px solid #fff';
-                element.style.borderRadius = '4px';
-                element.style.background = 'rgba(0,0,0,0.1)';
-                element.style.color = '#fff';
-                element.style.font = 'normal 13px sans-serif';
-                element.style.textAlign = 'center';
-                element.style.opacity = '0.5';
-                element.style.outline = 'none';
-                element.style.zIndex = '999';
-            }
-
-            // Peranti/browser tak sokong sesi XR ni (contoh: tiada ARCore, atau
-            // VR/AR session type tak disokong) — sorok terus butang (bukan papar
-            // "NOT SUPPORTED") supaya pengguna automatik teruskan dengan 3D biasa
-            // (OrbitControls) yang dah berfungsi sejak awal, tanpa nampak macam ralat.
-            function showXRNotFound() {
-                console.info(label + ' session not supported on this device/browser — falling back to regular 3D view.');
-                button.style.display = 'none';
-            }
-
-            function showEnterXR() {
-                let currentSession = null;
-
-                async function onSessionStarted(session) {
-                    session.addEventListener('end', onSessionEnded);
-                    await renderer.xr.setSession(session);
-                    button.textContent = 'EXIT ' + label;
-                    currentSession = session;
-                }
-
-                function onSessionEnded() {
-                    currentSession.removeEventListener('end', onSessionEnded);
-                    button.textContent = 'ENTER ' + label;
-                    currentSession = null;
-                }
-
-                button.style.display = '';
-                button.style.cursor = 'pointer';
-                button.style.left = 'calc(50% - 50px)';
-                button.style.width = '100px';
-                button.textContent = 'ENTER ' + label;
-
-                button.onmouseenter = () => { button.style.opacity = '1.0'; };
-                button.onmouseleave = () => { button.style.opacity = '0.5'; };
-                button.onclick = () => {
-                    if (currentSession === null) {
-                        // 'dom-overlay' perlukan `domOverlay: {root}` turut dihantar utk
-                        // SEBENARNYA aktif — lihat nota penuh dlm index.html.
-                        const sessionInit = isAR
-                            ? { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking', 'dom-overlay', 'hit-test'], domOverlay: { root: document.body } }
-                            : { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] };
-                        navigator.xr.requestSession(sessionMode, sessionInit).then(onSessionStarted);
-                    } else {
-                        currentSession.end();
-                    }
-                };
-            }
-
-            if ('xr' in navigator) {
-                button.id = sessionMode + '-button';
-                button.style.display = 'none';
-                stylizeElement(button);
-
-                navigator.xr.isSessionSupported(sessionMode).then(function (supported) {
-                    supported ? showEnterXR() : showXRNotFound();
-                }).catch(() => showXRNotFound());
-
-                return button;
-            } else {
-                // Browser ni langsung tiada WebXR API (contoh: Safari/iOS) — jangan
-                // papar sebarang mesej/link yang nampak macam ralat. Just sorokkan
-                // sepenuhnya dan biar 3D view (OrbitControls) jadi pengalaman default.
-                console.info('WebXR API not available in this browser' + (window.isSecureContext === false ? ' (page is not HTTPS)' : '') + ' — falling back to regular 3D view.');
-                const placeholder = document.createElement('div');
-                placeholder.style.display = 'none';
-                return placeholder;
-            }
         }
 
         // ---------------------------------------------------------------
@@ -227,6 +184,7 @@
         renderer.xr.setReferenceSpaceType('local-floor');
         container.appendChild(renderer.domElement);
 
+        // BUTANG MASUK VR/AR (js/core/xr-session.js) — fungsi tulen, sama persis dgn index.html.
         const vrButtonEl = createXRButton(renderer, 'immersive-vr', 'VR');
         vrButtonEl.style.position = 'absolute';
         vrButtonEl.style.bottom = '20px';
@@ -243,22 +201,6 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-
-        // Cari titik pivot yang sepadan dengan JARAK SEBENAR kandungan dari kamera —
-        // bukan jarak tetap (contoh 3 unit) yang tak kira di mana objek sebenar
-        // berada (boleh buat objek jauh "berpusar" dramatik keliling kamera bila
-        // jarak tu tak match). Raycast sepanjang arah pandangan kamera; kalau kena
-        // objek, guna titik tu sebagai pivot. Kalau tidak, fallback ke jarak tetap.
-        function findCameraOrbitTarget(camPosition, camQuaternion, fallbackDistance) {
-            contentRoot.updateMatrixWorld(true);
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camQuaternion).normalize();
-            const rc = new THREE.Raycaster(camPosition.clone(), forward.clone());
-            const hits = rc.intersectObjects(loadedModelsList.filter(o => o.visible), true);
-            if (hits.length > 0) {
-                return hits[0].point;
-            }
-            return camPosition.clone().add(forward.multiplyScalar(fallbackDistance));
-        }
 
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -284,12 +226,9 @@
                     if (mat.emissiveMap) mat.emissiveMap.encoding = THREE.sRGBEncoding;
                     if (mat.envMapIntensity !== undefined) mat.envMapIntensity = 0.8;
 
-                    // Material VFX (api/glow/asap): alpha SANGAT rendah + emissive kuat
-                    // (contoh diffuse alpha 0.07, emissiveFactor putih penuh) — shader
-                    // piawai darab KESELURUHAN piksel (termasuk glow terang) dengan
-                    // alpha rendah tu, jadi glow yang patut terang jadi hampir tak
-                    // nampak. Tukar jadi additive blending supaya glow terbit penuh
-                    // tanpa terikat alpha asap (macam software/viewer asal render dia).
+                    // Material VFX (api/glow/asap): alpha SANGAT rendah + emissive kuat — shader
+                    // piawai darab KESELURUHAN piksel dgn alpha rendah tu, jadi glow terang jadi
+                    // hampir tak nampak. Tukar jadi additive blending supaya glow terbit penuh.
                     const hasEmissiveGlow = mat.emissiveMap && mat.emissive &&
                         (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0);
                     if (mat.transparent && mat.opacity < 0.2 && hasEmissiveGlow) {
@@ -297,8 +236,6 @@
                         mat.depthWrite = false;
                     }
 
-                    // Tone mapping ACES mampatkan bahagian terang — material additive
-                    // (glow/particle) patut "terbit" penuh tanpa kena mampatan ni.
                     if (mat.blending === THREE.AdditiveBlending) {
                         mat.toneMapped = false;
                     }
@@ -320,442 +257,59 @@
         let sceneCameraData = { position: [0, 2, 6], rotation: [0, 0, 0] };
 
         // KANDUNGAN SCENE (semua objek) diletak dalam group ni, BUKAN terus dalam `scene`.
-        // Untuk desktop/VR, group ni kekal identity transform (sama macam sebelum ni).
-        // Untuk AR tap-to-place, group INI yang digerakkan ke titik hit-test, bukan kamera.
+        // Untuk desktop/VR, group ni kekal identity transform. Untuk AR tap-to-place, group
+        // INI yang digerakkan ke titik hit-test, bukan kamera.
         const contentRoot = new THREE.Group();
         contentRoot.name = 'ContentRoot';
         scene.add(contentRoot);
 
-        // ---- FIZIK RINGKAS (graviti, pelanggaran, bounce) — guna cannon.js ----
-        // Sama macam editor: simulasi berjalan dalam ruang LOKAL contentRoot supaya tak perlu
-        // tukar koordinat dunia bila contentRoot berpindah (tap-to-place AR).
-        const physicsWorld = new CANNON.World();
-        physicsWorld.gravity.set(0, -9.82, 0);
-        physicsWorld.broadphase = new CANNON.NaiveBroadphase();
-        physicsWorld.solver.iterations = 10;
+        // Utiliti kamera/orbit-pivot (js/core/scene.js) — findCameraOrbitTarget sahaja dipakai
+        // di sini (recenterOrbitPivot editor-only, tiada "Show Colliders"/structural-change
+        // hook dalam viewer yang perlukannya).
+        const { findCameraOrbitTarget } = createSceneUtils({
+            THREE,
+            getContentRoot: () => contentRoot,
+            getRenderer: () => renderer,
+            getLoadedModelsList: () => loadedModelsList,
+            getControls: () => controls
+        });
 
-        // Zero angularVelocity SETIAP sub-langkah fizik (bukan cuma setiap bingkai render)
+        // ---- FIZIK (graviti, pelanggaran, bounce) + "INVISIBLE OCCLUDER" CUTOUT ----
+        // Logik penuh (sejarah fix #1-#5 occluder, byk ujian box-math) kini di
+        // js/physics/world.js, js/physics/occluder.js, js/physics/colliders.js — fail yang
+        // SAMA dipakai index.html, bukan kopi berasingan. Zero SETIAP sub-langkah fizik
         // selagi ada objek digenggam — lihat nota penuh dlm index.html.
         physicsWorld.addEventListener('postStep', function () {
-            if (grabbedObject) {
-                const grabbedBody = grabbedObject.userData._physicsBody;
+            if (appState.grabbedObject) {
+                const grabbedBody = appState.grabbedObject.userData._physicsBody;
                 if (grabbedBody) grabbedBody.angularVelocity.set(0, 0, 0);
             }
         });
 
-        const physicsDefaultMaterial = new CANNON.Material('default');
-        const physicsContactMaterial = new CANNON.ContactMaterial(physicsDefaultMaterial, physicsDefaultMaterial, {
-            friction: 0.4,
-            restitution: 0.4
-        });
-        physicsWorld.addContactMaterial(physicsContactMaterial);
-        physicsWorld.defaultContactMaterial = physicsContactMaterial;
-
-        // Bahan fizik berasingan untuk setiap NILAI bounciness tersendiri (bukan setiap
-        // objek) — dicache ikut nilai supaya tak daftar ContactMaterial berulang-ulang
-        // setiap kali physics rebuild. Objek dengan bounciness lalai (0.4) kongsi
-        // physicsDefaultMaterial sedia ada.
-        const physicsBounceMaterialCache = new Map();
-        function getPhysicsMaterialForBounciness(bounciness) {
-            const key = Math.round(bounciness * 100) / 100;
-            if (key === 0.4) return physicsDefaultMaterial;
-            if (physicsBounceMaterialCache.has(key)) return physicsBounceMaterialCache.get(key);
-
-            const mat = new CANNON.Material('bounce_' + key);
-            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, physicsDefaultMaterial, {
-                friction: 0.4,
-                restitution: key
-            }));
-            physicsWorld.addContactMaterial(new CANNON.ContactMaterial(mat, mat, {
-                friction: 0.4,
-                restitution: key
-            }));
-            physicsBounceMaterialCache.set(key, mat);
-            return mat;
-        }
-
-        let physicsBodies = [];
-        let physicsActive = false;
-
-        function isMaterialEffectivelyInvisible(material) {
-            if (!material) return false;
-            const mats = Array.isArray(material) ? material : [material];
-            return mats.every(m => m && (m.visible === false || (m.transparent && m.opacity <= 0.02)));
-        }
-
-        function computeVisibleWorldBox3(root) {
-            root.updateMatrixWorld(true);
-            const box = new THREE.Box3();
-            const tmpBox = new THREE.Box3();
-            const tmpVec = new THREE.Vector3();
-            let hasAny = false;
-            (function recurse(node) {
-                if (node.visible === false) return;
-                if (node.isMesh && isMaterialEffectivelyInvisible(node.material)) return;
-                if (node.isSkinnedMesh && node.geometry && node.skeleton) {
-                    node.skeleton.update();
-                    const posAttr = node.geometry.attributes.position;
-                    let firstVertex = true;
-                    const skinnedBox = new THREE.Box3();
-                    for (let i = 0; i < posAttr.count; i++) {
-                        node.boneTransform(i, tmpVec);
-                        tmpVec.applyMatrix4(node.matrixWorld);
-                        if (firstVertex) { skinnedBox.min.copy(tmpVec); skinnedBox.max.copy(tmpVec); firstVertex = false; }
-                        else skinnedBox.expandByPoint(tmpVec);
-                    }
-                    if (!firstVertex) {
-                        if (!hasAny) { box.copy(skinnedBox); hasAny = true; }
-                        else box.union(skinnedBox);
-                    }
-                } else if (node.isMesh && node.geometry) {
-                    if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
-                    tmpBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld);
-                    if (!hasAny) { box.copy(tmpBox); hasAny = true; }
-                    else box.union(tmpBox);
-                }
-                for (let i = 0; i < node.children.length; i++) recurse(node.children[i]);
-            })(root);
-            if (!hasAny) box.setFromObject(root);
-            return box;
-        }
-
-        function computeLocalBoxHalfExtentsAndOffset(mesh) {
-            const savedQuat = mesh.quaternion.clone();
-            const savedPos = mesh.position.clone();
-            mesh.quaternion.identity();
-            mesh.position.set(0, 0, 0);
-            mesh.updateMatrixWorld(true);
-
-            // PENTING: position/quaternion MESTI dipulihkan tak kira apa jadi semasa
-            // pengiraan — kalau tidak, objek "terperangkap" di (0,0,0)/identity secara kekal.
-            let size, center;
-            try {
-                const box = computeVisibleWorldBox3(mesh);
-                size = new THREE.Vector3();
-                center = new THREE.Vector3();
-                box.getSize(size);
-                box.getCenter(center);
-            } catch (e) {
-                console.error('[Physics] computeVisibleWorldBox3 failed for "' + (mesh.userData.fileName || mesh.name) + '" — using a small fallback box:', e);
-                size = new THREE.Vector3(0.5, 0.5, 0.5);
-                center = new THREE.Vector3(0, 0, 0);
-            } finally {
-                mesh.quaternion.copy(savedQuat);
-                mesh.position.copy(savedPos);
-                mesh.updateMatrixWorld(true);
-            }
-
-            size.x = Math.max(size.x, 0.02);
-            size.y = Math.max(size.y, 0.02);
-            size.z = Math.max(size.z, 0.02);
-            return { halfExtents: size.multiplyScalar(0.5), offset: center };
-        }
-
-        function applyColliderTrim(mesh, halfExtents, offset) {
-            const t = mesh.userData.colliderTrim;
-            if (!t) return { halfExtents, offset };
-            const hx = Math.max(halfExtents.x - ((t.nx || 0) + (t.px || 0)) / 2, 0.02);
-            const hy = Math.max(halfExtents.y - ((t.ny || 0) + (t.py || 0)) / 2, 0.02);
-            const hz = Math.max(halfExtents.z - ((t.nz || 0) + (t.pz || 0)) / 2, 0.02);
-            return {
-                halfExtents: { x: hx, y: hy, z: hz },
-                offset: {
-                    x: offset.x + ((t.nx || 0) - (t.px || 0)) / 2,
-                    y: offset.y + ((t.ny || 0) - (t.py || 0)) / 2,
-                    z: offset.z + ((t.nz || 0) - (t.pz || 0)) / 2
-                }
-            };
-        }
-
-        function buildPhysicsShapeForMesh(mesh) {
-            const primType = mesh.userData.primType;
-
-            if (primType === 'sphere') {
-                const radius = 0.6 * ((mesh.scale.x + mesh.scale.y + mesh.scale.z) / 3);
-                return { shape: new CANNON.Sphere(Math.max(radius, 0.02)), offset: new CANNON.Vec3(0, 0, 0) };
-            }
-            if (primType === 'box') {
-                const hx = Math.max(0.5 * mesh.scale.x, 0.02);
-                const hy = Math.max(0.5 * mesh.scale.y, 0.02);
-                const hz = Math.max(0.5 * mesh.scale.z, 0.02);
-                const trimmed = applyColliderTrim(mesh, { x: hx, y: hy, z: hz }, { x: 0, y: 0, z: 0 });
-                return {
-                    shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
-                    offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
-                };
-            }
-
-            const base = computeLocalBoxHalfExtentsAndOffset(mesh);
-            const trimmed = applyColliderTrim(mesh, base.halfExtents, base.offset);
-            return {
-                shape: new CANNON.Box(new CANNON.Vec3(trimmed.halfExtents.x, trimmed.halfExtents.y, trimmed.halfExtents.z)),
-                offset: new CANNON.Vec3(trimmed.offset.x, trimmed.offset.y, trimmed.offset.z)
-            };
-        }
-
-        function createPhysicsBodyForMesh(mesh) {
-            const isDynamic = !!mesh.userData.isGrabbable;
-            const { shape, offset } = buildPhysicsShapeForMesh(mesh);
-            const bounciness = (typeof mesh.userData.bounciness === 'number') ? mesh.userData.bounciness : 0.4;
-
-            const body = new CANNON.Body({
-                mass: isDynamic ? 1 : 0,
-                material: getPhysicsMaterialForBounciness(bounciness),
-                linearDamping: 0.2,
-                angularDamping: 0.4
-            });
-            body.addShape(shape, offset);
-
-            body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
-            body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
-            if (!isDynamic) body.type = CANNON.Body.STATIC;
-
-            return body;
-        }
-
-        // ================================================================
-        // "INVISIBLE OCCLUDER" CUTOUT — hibrid stencil (bentuk potongan) + gating
-        // kedudukan kasar ikut kamera setiap frame (sama ada potongan aktif). Lihat
-        // komen penuh dalam index.html berhampiran buildPhysicsWorldFromScene().
-        // view.html jadi versi "sentiasa Pratonton" (tiada mod Editing), jadi tiada
-        // keperluan paparan kosmetik wireframe — cutter terus invisible sepenuhnya.
-        // ================================================================
-        const cutterStencilMarkMaterial = new THREE.MeshBasicMaterial({
-            colorWrite: false, depthWrite: false, depthTest: false,
-            stencilWrite: true, stencilRef: 1, stencilFunc: THREE.AlwaysStencilFunc,
-            stencilZPass: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilFail: THREE.ReplaceStencilOp,
-            side: THREE.DoubleSide
+        const { applyCutoutEffect, updateCutoutCameraGating, restoreOriginalMaterial } = createOccluder({
+            THREE,
+            getLoadedModelsList: () => loadedModelsList,
+            getWaypointPathMeshes: () => waypointPathMeshes,
+            getMainCamera: () => mainCamera
         });
 
-        function ensureCutoutMaterialBackup(mesh) {
-            if (mesh.userData._cutoutOrigMaterials) return;
-            const map = new Map();
-            mesh.traverse(node => { if (node.isMesh) map.set(node, node.material); });
-            mesh.userData._cutoutOrigMaterials = map;
-        }
-
-        function applyCutterStencilMaterial(mesh) {
-            ensureCutoutMaterialBackup(mesh);
-            mesh.traverse(node => {
-                if (!node.isMesh) return;
-                const orig = mesh.userData._cutoutOrigMaterials.get(node);
-                const mats = Array.isArray(orig) ? orig : [orig];
-                const allTransparent = mats.every(m => m && m.transparent === true);
-                node.visible = !allTransparent;
-                if (!allTransparent) node.material = cutterStencilMarkMaterial;
-                node.renderOrder = -1000;
-                node.frustumCulled = false;
-            });
-        }
-
-        // Sediakan (sekali sahaja, lazy) versi KLON material objek boleh-potong yang
-        // diuji terhadap stencil cutter — material sebenar (klon stencil vs asal)
-        // ditukar SETIAP FRAME oleh updateCutoutCameraGating() ikut kedudukan kamera.
-        function ensureCutoutStencilMaterials(mesh) {
-            if (mesh.userData._cutoutStencilMaterials) return;
-            ensureCutoutMaterialBackup(mesh);
-            const map = new Map();
-            mesh.traverse(node => {
-                if (!node.isMesh) return;
-                const orig = mesh.userData._cutoutOrigMaterials.get(node);
-                const wasArray = Array.isArray(orig);
-                const mats = wasArray ? orig : [orig];
-                const patched = mats.map(m => {
-                    const clone = m.clone();
-                    clone.stencilWrite = true;
-                    clone.stencilFunc = THREE.NotEqualStencilFunc;
-                    clone.stencilRef = 1;
-                    clone.stencilFuncMask = 0xff;
-                    clone.stencilFail = THREE.KeepStencilOp;
-                    clone.stencilZFail = THREE.KeepStencilOp;
-                    clone.stencilZPass = THREE.KeepStencilOp;
-                    return clone;
-                });
-                map.set(node, wasArray ? patched : patched[0]);
-            });
-            mesh.userData._cutoutStencilMaterials = map;
-        }
-
-        function setCuttableMaterial(mesh, shouldCut) {
-            ensureCutoutStencilMaterials(mesh);
-            mesh.traverse(node => {
-                if (!node.isMesh) return;
-                const mats = shouldCut ? mesh.userData._cutoutStencilMaterials : mesh.userData._cutoutOrigMaterials;
-                const m = mats.get(node);
-                if (m !== undefined) node.material = m;
-                node.renderOrder = 0;
-            });
-        }
-
-        function restoreOriginalMaterial(mesh) {
-            if (!mesh.userData._cutoutOrigMaterials) return;
-            mesh.traverse(node => {
-                if (!node.isMesh) return;
-                const orig = mesh.userData._cutoutOrigMaterials.get(node);
-                if (orig !== undefined) node.material = orig;
-                node.visible = true;
-                node.renderOrder = 0;
-            });
-        }
-
-        function applyCutoutEffect() {
-            const cutters = loadedModelsList.filter(m => m.userData.isCutter);
-            if (cutters.length === 0) {
-                loadedModelsList.forEach(m => restoreOriginalMaterial(m));
-                waypointPathMeshes.forEach(m => restoreOriginalMaterial(m));
-                return;
-            }
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.primType === 'zone') return;
-                if (mesh.userData.isCutter) {
-                    applyCutterStencilMaterial(mesh);
-                } else if (mesh.userData.excludeFromCutout) {
-                    restoreOriginalMaterial(mesh);
-                }
-            });
-            // Segmen laluan waypoint ikut flag excludeFromCutout yang sama seperti objek biasa.
-            waypointPathMeshes.forEach(mesh => {
-                if (mesh.userData.excludeFromCutout) restoreOriginalMaterial(mesh);
-            });
-            updateCutoutCameraGating();
-        }
-
-        // Dipanggil SETIAP FRAME semasa Pratonton (lihat animate()) selagi ada sekurang-
-        // kurangnya satu objek cutter — kedudukan kamera boleh berubah tiap frame, jadi
-        // gating ni kena dikira semula tiap frame. Guna kedudukan KASAR (bounding box),
-        // bukan per-pixel — elak isu precision/z-fighting yang punca hasil "lari"/tak
-        // tentu bila dicuba dgn depth-buffer penuh sebelum ni (lihat index.html).
-        //
-        // NOTA (fix #1, selepas laporan "pusing sikit, tiba2 potong byk/tak potong
-        // langsung walaupun nampak bertindih"): mulanya guna titik PIVOT objek
-        // (getWorldPosition()) utk kira depth. Fix #1: guna titik PALING HAMPIR pada
-        // bounding box CUTTER ke *pusat* target.
-        //
-        // NOTA (fix #2, superseded by fix #3 below — kept for history): tried mutual
-        // clampPoint (each box's nearest point toward the OTHER box's center). Broke when
-        // cutter & target overlap deeply with similar size (e.g. a duplicated cube): both
-        // centers end up mutually inside each other's box, so clampPoint returns each
-        // center UNCHANGED, and "cutter's point" ends up being literally the target's
-        // center (and vice versa) — inverting the comparison. That's why a duplicated
-        // cube stopped getting cut at all despite deep overlap.
-        //
-        // Fix #3 (superseded by fix #4 below — kept for history): own-center clamped into
-        // the 3D intersection region. Broke when the overlap region is THIN (boxes only
-        // touch at a corner/edge, e.g. after moving an object to one end) — clamping both
-        // centers into a thin sliver collapses them to nearly the same point regardless of
-        // their real original depths, giving wrong/inconsistent cut decisions as objects
-        // moved ("moved it to the front, now it wrongly gets cut").
-        //
-        // Fix #4 — different approach entirely: fix #1-#3 all projected points onto the
-        // camera's VIEW DIRECTION (dot product), which is inherently sensitive to camera
-        // rotation no matter which reference point is chosen. Fix #4 drops view direction
-        // completely: use straight-line DISTANCE from the camera to the closest point on
-        // each object's own bounding box (Box3.clampPoint(camPos)) — depends only on
-        // camera POSITION and each box's own geometry, never on view direction, so pure
-        // camera rotation (no movement) cannot change the cut decision at all. Also never
-        // clamps one box into another, so it can't collapse/invert like fix #2/#3 either.
-        const _cutoutGatingTmpA = new THREE.Vector3();
-        const _cutoutGatingTmpBox = new THREE.Box3();
-        function updateCutoutCameraGating() {
-            const cutters = loadedModelsList.filter(m => m.userData.isCutter);
-            if (cutters.length === 0) return;
-            mainCamera.getWorldPosition(_cutoutGatingTmpA);
-            const camPos = _cutoutGatingTmpA;
-
-            const cutterBoxes = cutters.map(c => new THREE.Box3().setFromObject(c));
-
-            const gateMesh = (mesh) => {
-                const meshBox = _cutoutGatingTmpBox.setFromObject(mesh);
-                const meshCenter = meshBox.getCenter(new THREE.Vector3());
-                const meshDist = camPos.distanceTo(meshBox.clampPoint(camPos, new THREE.Vector3()));
-
-                let chosenCutterBox = cutterBoxes[0];
-                let bestGap = Infinity;
-                cutterBoxes.forEach(box => {
-                    const gap = box.clampPoint(meshCenter, new THREE.Vector3()).distanceTo(meshCenter);
-                    if (gap < bestGap) { bestGap = gap; chosenCutterBox = box; }
-                });
-
-                // FIX #5 — objek yg pusat Y dia berada DI ATAS bahagian atas cutter (duduk/
-                // berehat atas permukaannya, bukan dlm julat Y cutter) tak pernah patut
-                // dipotong, tak kira sudut kamera — lihat nota penuh dlm index.html
-                // (dibuktikan guna ujian box matematik: gating jarak lama rosak pd 7/8
-                // sudut kamera diuji utk kes ni).
-                if (meshCenter.y >= chosenCutterBox.max.y) {
-                    setCuttableMaterial(mesh, false);
-                    return;
-                }
-
-                const cutterDist = camPos.distanceTo(chosenCutterBox.clampPoint(camPos, new THREE.Vector3()));
-                setCuttableMaterial(mesh, cutterDist < meshDist);
-            };
-
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.primType === 'zone') return;
-                if (mesh.userData.isCutter || mesh.userData.excludeFromCutout) return;
-                gateMesh(mesh);
-            });
-
-            // Segmen laluan waypoint boleh dipilih immune (excludeFromCutout) atau ikut
-            // gating jarak kamera yang sama macam objek biasa.
-            waypointPathMeshes.forEach(mesh => {
-                if (mesh.userData.excludeFromCutout) return;
-                gateMesh(mesh);
-            });
-        }
-
-        // Objek nampak → collider aktif. Objek tersembunyi → collider TAK aktif, KECUALI
-        // ditanda khas "Keep Collider Active While Hidden" (cth: dinding/penyekat tak
-        // kelihatan untuk motong laluan waypoint di sebalik dinding sebenar dalam AR).
-        function shouldColliderBeActive(mesh) {
-            return mesh.visible !== false || mesh.userData.colliderActiveWhenHidden === true;
-        }
-
-        function buildPhysicsWorldFromScene() {
-            physicsBodies.forEach(pb => { if (pb.inWorld) physicsWorld.removeBody(pb.body); });
-            physicsBodies = [];
-
-            loadedModelsList.forEach(mesh => {
-                if (mesh.userData.primType === 'zone') return;
-                if (!mesh.userData.isSolid && !mesh.userData.isGrabbable) return;
-
-                try {
-                    const body = createPhysicsBodyForMesh(mesh);
-                    const inWorld = shouldColliderBeActive(mesh);
-                    if (inWorld) physicsWorld.addBody(body);
-                    physicsBodies.push({ mesh, body, inWorld });
-                    mesh.userData._physicsBody = body;
-                } catch (e) {
-                    console.error('[Physics] Failed to build physics body for "' + (mesh.userData.fileName || mesh.name) + '" — skipping this object:', e);
-                }
-            });
-
-            physicsActive = true;
-            applyCutoutEffect();
-        }
-
-        function syncPhysicsBodiesWithVisibility() {
-            physicsBodies.forEach(pb => {
-                const shouldBeInWorld = shouldColliderBeActive(pb.mesh);
-                if (shouldBeInWorld && !pb.inWorld) {
-                    physicsWorld.addBody(pb.body);
-                    pb.inWorld = true;
-                } else if (!shouldBeInWorld && pb.inWorld) {
-                    physicsWorld.removeBody(pb.body);
-                    pb.inWorld = false;
-                }
-            });
-        }
-
-        function teardownPhysicsWorld() {
-            physicsActive = false;
-            physicsBodies.forEach(pb => {
-                if (pb.inWorld) physicsWorld.removeBody(pb.body);
-                delete pb.mesh.userData._physicsBody;
-            });
-            physicsBodies = [];
-            loadedModelsList.forEach(m => restoreOriginalMaterial(m));
-        }
+        // view.html = "sentiasa Pratonton" (tiada mod Editing), jadi: enableDebugVisuals:false
+        // (tiada checkbox "Show Colliders", elak overhead cipta wireframe mesh per objek
+        // fizik); clearCutoutEffect versi RINGKAS (pulih material asal terus) — BUKAN versi
+        // editor (createOccluder().clearCutoutEffect) yang tukar cutter ke wireframe magenta
+        // "edit mode", sebab viewer tiada mod Editing utk kembali ke situ pun.
+        const {
+            buildPhysicsWorldFromScene, syncPhysicsBodiesWithVisibility, teardownPhysicsWorld
+        } = createColliders({
+            THREE,
+            contentRoot,
+            getLoadedModelsList: () => loadedModelsList,
+            getShowCollidersChecked: () => false,
+            getIsPreviewMode: () => true,
+            applyCutoutEffect,
+            clearCutoutEffect: () => { loadedModelsList.forEach(m => restoreOriginalMaterial(m)); },
+            enableDebugVisuals: false
+        });
 
         // RETICLE (penunjuk tap-to-place semasa AR)
         const reticleGeometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
@@ -772,11 +326,10 @@
         let arAutoPlace = false;
 
         const clock = new THREE.Clock();
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
         const infoPopup = document.getElementById('info-popup');
         const arDebugHud = document.getElementById('ar-debug-hud'); // HUD diagnostik sementara — lihat index.html
         let infoPopupHideTimer = null;
+        function clearPopupHideTimer() { clearTimeout(infoPopupHideTimer); }
 
         const gltfLoader = new THREE.GLTFLoader();
         const fbxLoader = new THREE.FBXLoader();
@@ -966,113 +519,22 @@
         }
 
         // ---- WAYPOINT / LALUAN PANDU ARAH (garis anak panah biru mengalir antara waypoint) ----
-        // Sama macam editor: satah bertekstur anak panah berulang (bukan THREE.Line), disambung
-        // ikut turutan waypoint dalam loadedModelsList, dan condong ikut jarak 3D sebenar supaya
-        // boleh naik/turun tangga.
+        // Logik penuh (js/interactions/waypoint.js) kini dikongsi dgn index.html — fail yang
+        // SAMA, bukan kopi berasingan. waypointArrowTexture/waypointPathMeshes KEKAL `let` di
+        // sini (bukan dipindah ke modul) — occluder.js & animate() di bawah turut baca/tulis
+        // dua-dua ni, lihat nota dalam waypoint.js.
         let waypointArrowTexture = null;
-        function getWaypointArrowTexture() {
-            if (waypointArrowTexture) return waypointArrowTexture;
-            const size = 128;
-            const canvas = document.createElement('canvas');
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, size, size);
-            ctx.strokeStyle = '#29b6f6';
-            ctx.lineWidth = size * 0.16;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.beginPath();
-            ctx.moveTo(size * 0.2, size * 0.15);
-            ctx.lineTo(size * 0.7, size * 0.5);
-            ctx.lineTo(size * 0.2, size * 0.85);
-            ctx.stroke();
-
-            waypointArrowTexture = new THREE.CanvasTexture(canvas);
-            waypointArrowTexture.wrapS = THREE.RepeatWrapping;
-            waypointArrowTexture.wrapT = THREE.ClampToEdgeWrapping;
-            return waypointArrowTexture;
-        }
-
-        const WAYPOINT_PATH_TILE_SIZE = 0.4;
-        const WAYPOINT_PATH_WIDTH = 0.25;
-        const WAYPOINT_PATH_SCROLL_SPEED = 0.6;
-        const WAYPOINT_WORLD_UP = new THREE.Vector3(0, 1, 0);
         let waypointPathMeshes = [];
+        const WAYPOINT_PATH_SCROLL_SPEED = 0.6;
+        const { getWaypointArrowTexture, clearWaypointPath, rebuildWaypointPath } = createWaypoint({
+            THREE, contentRoot,
+            getLoadedModelsList: () => loadedModelsList,
+            getCachedArrowTexture: () => waypointArrowTexture,
+            setCachedArrowTexture: (v) => { waypointArrowTexture = v; },
+            getWaypointPathMeshesList: () => waypointPathMeshes,
+            setWaypointPathMeshesList: (v) => { waypointPathMeshes = v; }
+        });
 
-        function clearWaypointPath() {
-            waypointPathMeshes.forEach(m => {
-                contentRoot.remove(m);
-                m.geometry.dispose();
-                m.material.dispose();
-            });
-            waypointPathMeshes = [];
-        }
-
-        function rebuildWaypointPath() {
-            clearWaypointPath();
-
-            const waypoints = loadedModelsList.filter(o => o.userData.primType === 'waypoint');
-            if (waypoints.length < 2) return;
-
-            const baseTexture = getWaypointArrowTexture();
-
-            for (let i = 0; i < waypoints.length - 1; i++) {
-                const a = waypoints[i].position;
-                const b = waypoints[i + 1].position;
-                const dx = b.x - a.x;
-                const dy = b.y - a.y;
-                const dz = b.z - a.z;
-                const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                if (length < 0.001) continue;
-
-                const forward = new THREE.Vector3(dx, dy, dz).multiplyScalar(1 / length);
-                let right = new THREE.Vector3().crossVectors(forward, WAYPOINT_WORLD_UP);
-                if (right.lengthSq() < 1e-6) {
-                    right.crossVectors(forward, new THREE.Vector3(1, 0, 0));
-                }
-                right.normalize();
-                const up = new THREE.Vector3().crossVectors(right, forward).normalize();
-
-                const segGeometry = new THREE.PlaneGeometry(length, WAYPOINT_PATH_WIDTH);
-                segGeometry.rotateX(-Math.PI / 2);
-
-                const repeatX = Math.max(1, length / WAYPOINT_PATH_TILE_SIZE);
-                const uvAttr = segGeometry.attributes.uv;
-                for (let vi = 0; vi < uvAttr.count; vi++) {
-                    uvAttr.setX(vi, uvAttr.getX(vi) * repeatX);
-                }
-                uvAttr.needsUpdate = true;
-
-                const segMaterial = new THREE.MeshBasicMaterial({
-                    map: baseTexture,
-                    transparent: true,
-                    depthWrite: false,
-                    side: THREE.DoubleSide
-                });
-
-                const segMesh = new THREE.Mesh(segGeometry, segMaterial);
-                segMesh.position.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
-                segMesh.position.addScaledVector(up, 0.01);
-                segMesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(forward, up, right));
-                segMesh.renderOrder = 10;
-                segMesh.userData.isWaypointPathSegment = true;
-                segMesh.userData.excludeFromCutout = !!(waypoints[i].userData.excludeFromCutout || waypoints[i + 1].userData.excludeFromCutout);
-
-                contentRoot.add(segMesh);
-                waypointPathMeshes.push(segMesh);
-            }
-        }
-
-        // Pulangkan PROMISE (bukan mesh terus) — sama macam createModelFromData/
-        // createImageFromData — supaya applySceneDataToViewport() boleh await ia. Tanpa ni,
-        // texture custom (TextureLoader.load, async) boleh belum siap muat bila
-        // applyCutoutEffect() clone material objek (ensureCutoutStencilMaterials) — clone
-        // tu snapshot BEKU, texture yang sampai LEPAS clone dibuat takkan terpapar pada
-        // clone tu, jadi bahagian objek yang kena cutout tinggal base color je. Fail
-        // export/view.html terus jalan tanpa "jeda" (lain dgn editor yg ada jeda semula
-        // jadi: load projek → pengguna tengok-tengok → klik Preview), jadi race condition
-        // ni selalu kena di sini walaupun jarang nampak di editor.
         function createPrimitiveFromData(objData) {
             return new Promise((resolve) => {
             let geometry, material;
@@ -1148,10 +610,6 @@
             };
 
             if (['box', 'sphere', 'cylinder', 'plane'].includes(type) && objData.customColor) {
-                // renderer.outputEncoding = sRGBEncoding — Color.set() dari hex string
-                // (r128) simpan nilai MENTAH tanpa tukar ke linear, jadi perlu convert
-                // manual supaya warna terpapar sama macam dipilih dalam editor (lihat
-                // index.html untuk nota penuh).
                 material.color.set(objData.customColor).convertSRGBToLinear();
                 mesh.userData.customColor = objData.customColor;
             }
@@ -1183,6 +641,15 @@
         // PENGURUSAN SCENE (baca sahaja)
         // ---------------------------------------------------------------
         function clearViewportObjects() {
+            // Henti & lepaskan rujukan AnimationMixer ke root model SEBELUM dibuang — tanpa
+            // ni, mixer (disimpan dlm userData.mixer) terus pegang rujukan ke root yg dah
+            // dibuang dari scene, punca memory leak bila scene ditukar berulang kali.
+            [...loadedModelsList].forEach(m => {
+                if (m.userData.mixer) {
+                    m.userData.mixer.stopAllAction();
+                    m.userData.mixer.uncacheRoot(m);
+                }
+            });
             [...loadedModelsList].forEach(m => {
                 contentRoot.remove(m);
                 m.traverse((child) => {
@@ -1351,7 +818,11 @@
         }
 
         // ---------------------------------------------------------------
-        // SISTEM INTERAKSI (sama logik seperti editor mod pratonton)
+        // SISTEM INTERAKSI (sama logik seperti editor mod pratonton — teks UI kekal
+        // Malay di viewer ni, sengaja tak dikongsi dgn js/interactions/triggers.js
+        // sebab modul tu guna teks Inggeris + bergantung pada konsep editor-only
+        // seperti senarai "Registered Actions" & snapshot pra-Pratonton yang tiada
+        // makna dalam viewer baca-sahaja ni)
         // ---------------------------------------------------------------
         function getTargetObjects(sourceModel, targetIdsArray) {
             if (!targetIdsArray || !Array.isArray(targetIdsArray) || targetIdsArray.length === 0) {
@@ -1368,8 +839,6 @@
             });
             return targets.length > 0 ? targets : [sourceModel];
         }
-
-        function getActionSummaryDummy() { /* tidak diperlukan dalam viewer */ }
 
         function triggerInteraction(model, eventType, clientX, clientY) {
             if (!model.userData.interactions || !Array.isArray(model.userData.interactions)) return;
@@ -1503,832 +972,6 @@
             }
         }
 
-        // ---------------------------------------------------------------
-        // INPUT: TETIKUS/TOUCH (klik & hover)
-        // ---------------------------------------------------------------
-        let pointerDownPos = { x: 0, y: 0 };
-
-        renderer.domElement.addEventListener('pointerdown', (event) => {
-            pointerDownPos.x = event.clientX;
-            pointerDownPos.y = event.clientY;
-
-            // GENGGAM MOUSE (desktop, bukan sesi XR) — JANGAN genggam serta-merta; simpan
-            // sebagai CALON dulu, cuma sahkan jadi genggaman sebenar kalau mouse betul-betul
-            // bergerak melepasi threshold 5px (lihat pointermove) — kalau tidak (klik tulen),
-            // pointerup jatuh terus ke laluan klik/onClick biasa di bawah.
-            if (!renderer.xr.isPresenting && !grabbedObject && event.button === 0) {
-                const rect = renderer.domElement.getBoundingClientRect();
-                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-                raycaster.setFromCamera(mouse, mainCamera);
-
-                const grabTargets = loadedModelsList.filter(o => o.visible && o.userData.isGrabbable);
-                const intersects = raycaster.intersectObjects(grabTargets, true);
-                if (intersects.length > 0) {
-                    let hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
-                        hitModel = hitModel.parent;
-                    }
-                    if (hitModel.userData.isGrabbable) {
-                        pendingGrabCandidate = { hitModel, point: intersects[0].point.clone() };
-                        try { renderer.domElement.setPointerCapture(event.pointerId); } catch (e) {}
-                    }
-                }
-            }
-        });
-
-        renderer.domElement.addEventListener('pointerup', (event) => {
-            if (event.button !== 0) return;
-
-            if (isMouseGrabbing) {
-                isMouseGrabbing = false;
-                controls.enabled = true;
-                try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
-                onControllerSelectEnd();
-                return;
-            }
-
-            if (pendingGrabCandidate) {
-                pendingGrabCandidate = null;
-                try { renderer.domElement.releasePointerCapture(event.pointerId); } catch (e) {}
-            }
-
-            const deltaX = Math.abs(event.clientX - pointerDownPos.x);
-            const deltaY = Math.abs(event.clientY - pointerDownPos.y);
-            if (deltaX > 5 || deltaY > 5) return;
-
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, mainCamera);
-
-            if (loadedModelsList.length > 0) {
-                const visibleObjects = loadedModelsList.filter(o => o.visible);
-                const intersects = raycaster.intersectObjects(visibleObjects, true);
-                if (intersects.length > 0) {
-                    let hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
-                        hitModel = hitModel.parent;
-                    }
-                    triggerInteraction(hitModel, 'onClick', event.clientX, event.clientY);
-                }
-            }
-        });
-
-        renderer.domElement.addEventListener('pointermove', (event) => {
-            if (pendingGrabCandidate && !isMouseGrabbing) {
-                const dX = Math.abs(event.clientX - pointerDownPos.x);
-                const dY = Math.abs(event.clientY - pointerDownPos.y);
-                if (dX > 5 || dY > 5) {
-                    startMouseGrab(pendingGrabCandidate.hitModel, pendingGrabCandidate.point);
-                    pendingGrabCandidate = null;
-                } else {
-                    return;
-                }
-            }
-
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, mainCamera);
-
-            if (isMouseGrabbing && grabbedObject) {
-                const target = new THREE.Vector3();
-                if (raycaster.ray.intersectPlane(mouseGrabPlane, target)) {
-                    mouseGrabProxy.position.lerp(target, 0.6);
-                }
-                return;
-            }
-
-            let hitModel = null;
-            if (loadedModelsList.length > 0) {
-                const visibleObjects = loadedModelsList.filter(o => o.visible);
-                const intersects = raycaster.intersectObjects(visibleObjects, true);
-                if (intersects.length > 0) {
-                    hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
-                        hitModel = hitModel.parent;
-                    }
-                }
-            }
-
-            if (hitModel !== hoveredModel) {
-                hoveredModel = hitModel;
-                clearTimeout(infoPopupHideTimer);
-                infoPopup.style.display = 'none';
-                if (hoveredModel) {
-                    triggerInteraction(hoveredModel, 'onHover', event.clientX, event.clientY);
-                }
-            }
-        });
-
-        // ---------------------------------------------------------------
-        // INPUT: CONTROLLER VR (laser pointer)
-        // ---------------------------------------------------------------
-        const controller1 = renderer.xr.getController(0);
-        const controller2 = renderer.xr.getController(1);
-        // Controller MESTI jadi anak cameraRig (sama macam mainCamera), bukan scene
-        // terus — kalau tidak, bila cameraRig "teleport" (ikut Kedudukan Awal Kamera
-        // scene semasa), pandangan berpindah tapi controller kekal di kedudukan asal
-        // (dekat origin dunia) — tangan/laser jadi terputus & salah trajektori
-        // berbanding apa yang pengguna nampak/rasa.
-        cameraRig.add(controller1);
-        cameraRig.add(controller2);
-
-        const CONTROLLER_LASER_MAX_LENGTH = 5;
-        const CONTROLLER_LASER_IDLE_LENGTH = 1.6;
-        const CONTROLLER_LASER_RADIUS = 0.005;
-        const CONTROLLER_TRIGGER_FLASH_MS = 180;
-
-        // Laser dibina sebagai TIUB melengkung (quadratic bezier), dikira semula
-        // setiap frame ikut jarak hit semasa — bukan silinder lurus tegar. Hujung
-        // PANGKAL (P0) sentiasa di controller dengan tangen awal lurus ke hadapan
-        // (P1 diletak terus di depan P0, cuma sedikit "melentik" ke bawah), dan
-        // hujung AKHIR (P2) sentiasa TEPAT di titik hit sebenar (sama dgn raycast
-        // lurus yang dipakai untuk selection) — jadi nampak lebih natural/selesa
-        // tanpa jejaskan ketepatan sasaran.
-        const controllerLaserCurveP0 = new THREE.Vector3();
-        const controllerLaserCurveP1 = new THREE.Vector3();
-        const controllerLaserCurveP2 = new THREE.Vector3();
-        const controllerLaserCurve = new THREE.QuadraticBezierCurve3(controllerLaserCurveP0, controllerLaserCurveP1, controllerLaserCurveP2);
-
-        // Tiub dibina TANGAN (bukan terus THREE.TubeGeometry) supaya jejari boleh
-        // berubah sepanjang panjang (taper) — perlu untuk hujung "menirus" semasa
-        // idle. Frenet frame dari curve tu yang bagi orientasi cincin tiap gelang.
-        function buildLaserTubeGeometry(curve, tubularSegments, baseRadius, radialSegments, taperFn) {
-            const frames = curve.computeFrenetFrames(tubularSegments, false);
-            const points = curve.getPoints(tubularSegments);
-            const positions = [];
-            const indices = [];
-
-            for (let i = 0; i <= tubularSegments; i++) {
-                const t = i / tubularSegments;
-                const radius = baseRadius * taperFn(t);
-                const normal = frames.normals[i];
-                const binormal = frames.binormals[i];
-                const center = points[i];
-                for (let j = 0; j <= radialSegments; j++) {
-                    const angle = (j / radialSegments) * Math.PI * 2;
-                    const sin = Math.sin(angle), cos = -Math.cos(angle);
-                    const x = cos * normal.x + sin * binormal.x;
-                    const y = cos * normal.y + sin * binormal.y;
-                    const z = cos * normal.z + sin * binormal.z;
-                    positions.push(center.x + radius * x, center.y + radius * y, center.z + radius * z);
-                }
-            }
-
-            for (let i = 1; i <= tubularSegments; i++) {
-                for (let j = 1; j <= radialSegments; j++) {
-                    const a = (radialSegments + 1) * (i - 1) + (j - 1);
-                    const b = (radialSegments + 1) * i + (j - 1);
-                    const c = (radialSegments + 1) * i + j;
-                    const d = (radialSegments + 1) * (i - 1) + j;
-                    indices.push(a, b, d, b, c, d);
-                }
-            }
-
-            const geometry = new THREE.BufferGeometry();
-            geometry.setIndex(indices);
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-            return geometry;
-        }
-
-        const laserTaperFull = () => 1;
-        // Idle: jejari kekal penuh untuk 60% awal, lepas tu menirus terus ke 0 di
-        // hujung — nampak "hilang" secara natural, bukan terputus tiba-tiba.
-        function laserTaperIdle(t) {
-            const taperStart = 0.6;
-            if (t < taperStart) return 1;
-            return 1 - (t - taperStart) / (1 - taperStart);
-        }
-
-        function buildControllerLaserCurveGeometry(distance, isIdle) {
-            // Idle: tangen/lengkung dikurangkan supaya nampak lebih lurus (sebab
-            // laser ni belum "mengunci" apa-apa sasaran). Bila kena objek, kekal
-            // lengkung lembut asal.
-            const arc = isIdle ? Math.min(distance * 0.03, 0.06) : Math.min(distance * 0.12, 0.25);
-            controllerLaserCurveP0.set(0, 0, 0);
-            controllerLaserCurveP1.set(0, arc, -distance * 0.5);
-            controllerLaserCurveP2.set(0, 0, -distance);
-            return buildLaserTubeGeometry(controllerLaserCurve, 12, CONTROLLER_LASER_RADIUS, 6, isIdle ? laserTaperIdle : laserTaperFull);
-        }
-
-        // depthTest AKTIF — laser mesti hormat kedalaman SEBENAR dalam scene (ter-
-        // sorok di belakang objek yang lebih dekat dengan kamera berbanding titik
-        // yang disasar), supaya perspektif/occlusion antara dua objek berbeza jarak
-        // kekal betul. depthWrite dimatikan supaya laser (nipis & lutsinar) sendiri
-        // tak "menghalang" ujian kedalaman objek lut sinar lain di belakangnya.
-        const controllerLaserMaterial = new THREE.MeshBasicMaterial({
-            color: 0x00e5ff,
-            transparent: true,
-            opacity: 0.9,
-            depthTest: true,
-            depthWrite: false,
-            blending: THREE.AdditiveBlending,
-            toneMapped: false
-        });
-
-        const controllerDotGeometry = new THREE.SphereGeometry(0.025, 16, 16);
-        // Cincin padat (bukan bebola lut sinar/halo kabur) di sekeliling titik —
-        // penanda TEGAS & jelas supaya hujung laser tak nampak macam terapung
-        // tanpa kena mengena dengan objek, walaupun titik sendiri kecil dari jauh.
-        const controllerRingGeometry = new THREE.RingGeometry(0.032, 0.044, 24);
-
-        [controller1, controller2].forEach(ctrl => {
-            ctrl.addEventListener('connected', (event) => {
-                ctrl.userData.handedness = event.data && event.data.handedness;
-                // 'screen' = tap tanpa jejak kedudukan (telefon AR); 'tracked-pointer' =
-                // controller 6DOF sebenar (VR ATAU headset AR fizikal) — lihat index.html.
-                ctrl.userData.targetRayMode = event.data && event.data.targetRayMode;
-            });
-
-            // Bahan laser KLON berasingan setiap controller (bukan kongsi satu
-            // instance) — sebab opacity dia berubah ikut status hit SETIAP
-            // controller secara berasingan (idle vs kena objek).
-            const laser = new THREE.Mesh(buildControllerLaserCurveGeometry(CONTROLLER_LASER_IDLE_LENGTH, true), controllerLaserMaterial.clone());
-            laser.name = 'controller-laser';
-            laser.renderOrder = 998;
-            ctrl.add(laser);
-
-            const dot = new THREE.Mesh(controllerDotGeometry, new THREE.MeshBasicMaterial({
-                color: 0x00e5ff, transparent: true, opacity: 0.95, depthTest: true, depthWrite: false,
-                blending: THREE.AdditiveBlending, toneMapped: false
-            }));
-            dot.name = 'controller-laser-dot';
-            dot.position.set(0, 0, -CONTROLLER_LASER_IDLE_LENGTH);
-            dot.renderOrder = 999;
-            ctrl.add(dot);
-
-            const ring = new THREE.Mesh(controllerRingGeometry, new THREE.MeshBasicMaterial({
-                color: 0x00e5ff, transparent: true, opacity: 1, depthTest: true, depthWrite: false,
-                side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false
-            }));
-            ring.name = 'controller-laser-ring';
-            ring.position.set(0, 0, -CONTROLLER_LASER_IDLE_LENGTH);
-            ring.renderOrder = 999;
-            ring.visible = false;
-            ctrl.add(ring);
-
-            ctrl.userData.laser = laser;
-            ctrl.userData.laserDot = dot;
-            ctrl.userData.laserRing = ring;
-            ctrl.userData.triggerFlashUntil = 0;
-        });
-
-        // Kilauan kuning/putih SEKETIKA pada hujung laser bila trigger ditekan —
-        // bukan status hover berterusan (hover kekal biru). Ini bagi maklum balas
-        // visual yang jelas untuk tindakan "klik" itu sendiri.
-        function flashControllerTrigger(event) {
-            const controller = event.target;
-            const hitModel = getControllerRaycastHit(controller);
-            if (hitModel) {
-                controller.userData.triggerFlashUntil = performance.now() + CONTROLLER_TRIGGER_FLASH_MS;
-            }
-        }
-        controller1.addEventListener('selectstart', flashControllerTrigger);
-        controller2.addEventListener('selectstart', flashControllerTrigger);
-
-        const controllerRaycaster = new THREE.Raycaster();
-        const controllerTempMatrix = new THREE.Matrix4();
-        const controllerTempCamPos = new THREE.Vector3();
-
-        function getControllerRaycastHit(controller) {
-            controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
-            controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-            controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(controllerTempMatrix);
-
-            let hitModel = null;
-            let hitDistance = CONTROLLER_LASER_MAX_LENGTH;
-
-            if (loadedModelsList.length > 0) {
-                const visibleObjects = loadedModelsList.filter(o => o.visible);
-                const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
-                if (intersects.length > 0) {
-                    hitDistance = Math.min(intersects[0].distance, CONTROLLER_LASER_MAX_LENGTH);
-                    hitModel = intersects[0].object;
-                    while (hitModel.parent && hitModel.parent !== scene && hitModel.parent !== contentRoot) {
-                        hitModel = hitModel.parent;
-                    }
-                }
-            }
-
-            // TIADA sasaran — laser "hilang" pada jarak pendek yang sesuai (bukan
-            // sentiasa sampai jarak maksimum 5m macam rod tegar). ADA sasaran — laser
-            // sambung terus ke titik hit sebenar, berapa jauh sekalipun.
-            const didHit = !!hitModel;
-            const displayDistance = didHit ? hitDistance : CONTROLLER_LASER_IDLE_LENGTH;
-
-            const laser = controller.userData.laser;
-            if (laser) {
-                laser.geometry.dispose();
-                laser.geometry = buildControllerLaserCurveGeometry(displayDistance, !didHit);
-                laser.material.opacity = didHit ? 0.9 : 0.3;
-            }
-
-            // Kilauan kuning/putih HANYA seketika lepas trigger ditekan (lihat
-            // flashControllerTrigger) — selain tu laser/titik kekal biru tak kira
-            // sedang hover objek atau tidak.
-            const isFlashing = performance.now() < (controller.userData.triggerFlashUntil || 0);
-            const hitColor = isFlashing ? 0xffffff : 0x00e5ff;
-
-            // Saiz titik berkadar SONGSANG dengan jarak — lebih besar untuk objek
-            // dekat, lebih kecil untuk objek jauh (macam perspektif sebenar).
-            const distT = THREE.MathUtils.clamp(displayDistance / CONTROLLER_LASER_MAX_LENGTH, 0, 1);
-            const distanceScale = THREE.MathUtils.lerp(1.5, 0.7, distT);
-            const flashScale = isFlashing ? 1.3 : 1;
-            const markerScale = didHit ? distanceScale * flashScale : 0.55;
-
-            // Tarik penanda sikit ke arah controller (bukan tepat di permukaan) bila
-            // kena objek — elak z-fighting/kelipan dengan permukaan tu sekarang
-            // depthTest dah aktif. Tak perlu kalau tiada objek dikena.
-            const markerDistance = didHit ? Math.max(hitDistance - 0.01, 0.001) : displayDistance;
-
-            const dot = controller.userData.laserDot;
-            if (dot) {
-                dot.visible = didHit;
-                if (didHit) {
-                    dot.position.z = -markerDistance;
-                    dot.material.color.setHex(hitColor);
-                    dot.scale.setScalar(markerScale);
-                }
-            }
-            const ring = controller.userData.laserRing;
-            if (ring) {
-                ring.visible = didHit;
-                if (didHit) {
-                    ring.position.z = -markerDistance;
-                    ring.material.color.setHex(hitColor);
-                    ring.scale.setScalar(markerScale);
-                    // Billboard — cincin sentiasa hadap kamera supaya nampak sebagai
-                    // reticle tegas dari mana-mana sudut, bukan nipis/hilang dari tepi.
-                    mainCamera.getWorldPosition(controllerTempCamPos);
-                    ring.lookAt(controllerTempCamPos);
-                }
-            }
-
-            return hitModel;
-        }
-
-        // Guna KHUSUS untuk mula genggam (bukan laser visual/klik) — lihat nota penuh
-        // dlm index.html (SENGAJA tiada had CONTROLLER_LASER_MAX_LENGTH — itu cuma
-        // clamp panjang visual laser, bukan syarat tolak hit, attempt #16 tersilap
-        // tambah had yang tiada dlm logik asal, punca sebenar hit@start kosong).
-        function getControllerGrabRaycastHit(controller) {
-            controllerTempMatrix.identity().extractRotation(controller.matrixWorld);
-            controllerRaycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-            controllerRaycaster.ray.direction.set(0, 0, -1).applyMatrix4(controllerTempMatrix);
-
-            if (loadedModelsList.length === 0) return null;
-            const visibleObjects = loadedModelsList.filter(o => o.visible);
-            const intersects = controllerRaycaster.intersectObjects(visibleObjects, true);
-            for (let i = 0; i < intersects.length; i++) {
-                let root = intersects[i].object;
-                while (root.parent && root.parent !== scene && root.parent !== contentRoot) {
-                    root = root.parent;
-                }
-                if (root.userData.isGrabbable) return root;
-            }
-            return null;
-        }
-
-        let justReleasedGrab = false;
-
-        // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dlm index.html. BUANG lepas bug AR
-        // grab tap-and-hold ni disahkan selesai.
-        const AR_DEBUG_BUILD = '41';
-        const arDebug = {
-            selectCount: 0, selectStartCount: 0, selectEndCount: 0,
-            lastTargetRayMode: undefined, lastHandedness: undefined,
-            lastHitOnSelect: null, lastHitOnSelectStart: null,
-            pendingMode: null, pendingMaxAngleDeg: 0, pendingMaxDist: 0,
-            lastCommitMode: null, lastCommitAt: 0,
-            proxyJump: 0, proxyReject: '-', camControllerDist: 0,
-            commitObjPos: null, commitCtrlPos: null,
-            commitObjLocalPos: null, commitContentRootPos: null, commitContentRootRotDeg: null
-        };
-
-        // HUD WebGL (bukan bergantung dom-overlay) — lihat nota penuh dlm index.html.
-        const arDebugCanvas = document.createElement('canvas');
-        arDebugCanvas.width = 640; arDebugCanvas.height = 320;
-        const arDebugCtx = arDebugCanvas.getContext('2d');
-        const arDebugTexture = new THREE.CanvasTexture(arDebugCanvas);
-        // Panel 0.4m lebar pada 0.4m jarak = ~53° sudut tampak — lihat nota penuh dlm index.html.
-        const arDebugSprite = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.18, 0.09),
-            new THREE.MeshBasicMaterial({ map: arDebugTexture, transparent: true, depthTest: false, depthWrite: false })
-        );
-        arDebugSprite.renderOrder = 99999;
-        arDebugSprite.position.set(-0.12, -0.08, -0.4); // tepi KIRI BAWAH — elak kamera depan/notch telefon
-        arDebugSprite.visible = false;
-        mainCamera.add(arDebugSprite);
-
-        function updateARDebugHud() {
-            const active = isARSession && renderer.xr.isPresenting;
-            // dom-overlay BERFUNGSI — lihat nota penuh dlm index.html.
-            arDebugSprite.visible = false;
-            if (arDebugHud.style.display !== (active ? 'block' : 'none')) {
-                arDebugHud.style.display = active ? 'block' : 'none';
-            }
-            if (!active) return;
-
-            const lines = [
-                'AR GRAB DEBUG (build ' + AR_DEBUG_BUILD + ')',
-                'start/sel/end: ' + arDebug.selectStartCount + '/' + arDebug.selectCount + '/' + arDebug.selectEndCount,
-                'rayMode:' + arDebug.lastTargetRayMode + '  hand:' + arDebug.lastHandedness,
-                'hit@start: ' + arDebug.lastHitOnSelectStart,
-                'hit@click: ' + arDebug.lastHitOnSelect,
-                'pending: ' + (vrPendingGrabCandidate ? arDebug.pendingMode : (arDebug.pendingMode || '-')),
-                'maxAngle: ' + arDebug.pendingMaxAngleDeg.toFixed(1) + 'deg  maxDist: ' + arDebug.pendingMaxDist.toFixed(3) + 'm',
-                'grabbed: ' + (grabbedObject ? (grabbedObject.name || '(unnamed)') : '-') + '  commit: ' + (arDebug.lastCommitMode || '-'),
-                'proxy jump:' + arDebug.proxyJump.toFixed(3) + 'm  ' + arDebug.proxyReject,
-                'grabDistance: ' + (grabStartState && grabStartState.arRawController ? grabStartState.arGrabDistance.toFixed(3) + 'm' : '-'),
-                'camVsController: ' + arDebug.camControllerDist.toFixed(3) + 'm',
-                'obj@commit: ' + (arDebug.commitObjPos ? arDebug.commitObjPos.x.toFixed(2) + ',' + arDebug.commitObjPos.y.toFixed(2) + ',' + arDebug.commitObjPos.z.toFixed(2) : '-'),
-                'ctrl@commit: ' + (arDebug.commitCtrlPos ? arDebug.commitCtrlPos.x.toFixed(2) + ',' + arDebug.commitCtrlPos.y.toFixed(2) + ',' + arDebug.commitCtrlPos.z.toFixed(2) : '-'),
-                'objLocal: ' + (arDebug.commitObjLocalPos ? arDebug.commitObjLocalPos.x.toFixed(2) + ',' + arDebug.commitObjLocalPos.y.toFixed(2) + ',' + arDebug.commitObjLocalPos.z.toFixed(2) : '-'),
-                'rootPos: ' + (arDebug.commitContentRootPos ? arDebug.commitContentRootPos.x.toFixed(2) + ',' + arDebug.commitContentRootPos.y.toFixed(2) + ',' + arDebug.commitContentRootPos.z.toFixed(2) : '-'),
-                'rootRotDeg: ' + (arDebug.commitContentRootRotDeg ? arDebug.commitContentRootRotDeg.x.toFixed(0) + ',' + arDebug.commitContentRootRotDeg.y.toFixed(0) + ',' + arDebug.commitContentRootRotDeg.z.toFixed(0) : '-')
-            ];
-
-            arDebugHud.textContent = lines.join('\n');
-
-            const ctx = arDebugCtx;
-            ctx.clearRect(0, 0, arDebugCanvas.width, arDebugCanvas.height);
-            ctx.fillStyle = 'rgba(0,0,0,0.78)';
-            ctx.fillRect(0, 0, arDebugCanvas.width, arDebugCanvas.height);
-            ctx.fillStyle = '#00ff66';
-            ctx.font = '20px monospace';
-            lines.forEach((line, i) => ctx.fillText(line, 10, 28 + i * 26));
-            arDebugTexture.needsUpdate = true;
-        }
-
-        function onControllerSelect(event) {
-            if (isARSession) arDebug.selectCount++;
-
-            // Jgn andaikan 'selectend' SEMESTINYA cetus dahulu drpd 'select' — utk
-            // transient-pointer (tap skrin AR) susunan tu tak konsisten antara
-            // pelaksanaan. Semak grabbedObject SEKARANG (masih di-set kalau 'select'
-            // tiba dulu) SERTA justReleasedGrab (di-set kalau 'selectend' dah pun
-            // jalan) — dua-dua perlu disemak utk redam onClick lepas drag/genggam,
-            // tanpa kira urutan sebenar event ni ditembak oleh runtime WebXR.
-            // Hadkan semakan ni pada controller yg SEDANG genggam shj (bandingkan
-            // event.target) — supaya controller LAIN (tangan sebelah, VR dua-tangan)
-            // masih boleh onClick objek lain macam biasa walaupun satu tangan tengah
-            // drag sesuatu.
-            if (grabbedObject && grabStartState &&
-                (event.target === grabStartState.controller || event.target === grabStartState.arRawController)) {
-                return;
-            }
-            if (justReleasedGrab) {
-                justReleasedGrab = false;
-                return;
-            }
-
-            if (isARSession && !isPlaced) {
-                if (reticle.visible) placeContentAtReticle();
-                return;
-            }
-
-            const hitModel = getControllerRaycastHit(event.target);
-            if (isARSession) arDebug.lastHitOnSelect = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(none)';
-            if (hitModel) triggerInteraction(hitModel, 'onClick');
-        }
-        controller1.addEventListener('select', onControllerSelect);
-        controller2.addEventListener('select', onControllerSelect);
-
-        // ---- PICK & PLACE (genggam & alih objek "Boleh Diambil" guna controller) ----
-        // Controller KANAN = gerakkan (translate ikut controller, putaran objek dikekalkan)
-        // Controller KIRI  = pusingkan (rotate secara local, kedudukan objek dikekalkan)
-        let grabbedObject = null;
-        let grabStartState = null;
-        const _grabTmpVec = new THREE.Vector3();
-        const _grabTmpQuat = new THREE.Quaternion();
-        const _grabTmpQuat2 = new THREE.Quaternion();
-
-        // GENGGAM + FIZIK — objek "Boleh Diambil" kekal sebagai badan dinamik cannon.js
-        // semasa digenggam; mod gerak halakan velocity badan ke sasaran (P-controller
-        // dipotong had laju) supaya cuba tarik menembusi objek "Pepejal" disekat oleh
-        // pelanggaran fizik sebenar. Bila dilepas, graviti + pelanggaran + bounce
-        // (cannon.js) ambil alih terus.
-        // Had 20 (bukan 6) — terbukti perlu utk VR, lihat index.html utk nota penuh.
-        const GRAB_MAX_SPEED = 20;
-        // Nisbah gerak ikut saiz objek (VR, mod 'move' sahaja) — lihat nota penuh dlm
-        // index.html. GRAB_GAIN_GRADIENT ialah satu-satunya nombor utk dilaras; kuasa
-        // lengkung (1m..CURVE_END) dikira automatik drpd situ supaya sambungan licin.
-        const GRAB_GAIN_REFERENCE_SIZE = 1;
-        const GRAB_GAIN_CURVE_END = 4;
-        const GRAB_GAIN_GRADIENT = 12;
-        const GRAB_GAIN_MAX = 300;
-        const GRAB_GAIN_CURVE_POWER = Math.log(GRAB_GAIN_GRADIENT * GRAB_GAIN_CURVE_END) / Math.log(GRAB_GAIN_CURVE_END);
-
-        function computeMoveGain(maxDim) {
-            if (maxDim <= GRAB_GAIN_REFERENCE_SIZE) return 1;
-            const gain = (maxDim <= GRAB_GAIN_CURVE_END) ? Math.pow(maxDim, GRAB_GAIN_CURVE_POWER) : GRAB_GAIN_GRADIENT * maxDim;
-            return Math.min(gain, GRAB_GAIN_MAX);
-        }
-        // blend < 1 kekalkan velocity LAMA (utk jurang yg dah lapuk) bersama yg baru —
-        // lepas dtSafe jadi tepat (lihat index.html), ni buat badan overshoot sasaran lalu
-        // "patah balik" tiap bingkai (ringing), dirasai sbg "trail"/goyang. Dibuktikan guna
-        // replika fizik berasingan. blend=1 (tiada baki momentum lama) hapuskan overshoot.
-        const GRAB_VELOCITY_BLEND = 1;
-        // AR tap skrin SAHAJA — lihat nota penuh dlm index.html. JANGAN ubah
-        // GRAB_VELOCITY_BLEND sendiri (shared dgn VR/desktop).
-        const AR_GRAB_VELOCITY_BLEND = 0.3;
-        function updateGrabbedObjectTransform(delta) {
-            const obj = grabbedObject;
-            const st = grabStartState;
-            if (!obj || !st) return;
-            const controller = st.controller;
-            const body = obj.userData._physicsBody;
-
-            if (st.mode === 'rotate') {
-                controller.getWorldQuaternion(_grabTmpQuat);
-                const deltaQuat = st.controllerWorldQuatInvStart.clone().multiply(_grabTmpQuat);
-                const newWorldQuat = st.objWorldQuatStart.clone().multiply(deltaQuat);
-
-                obj.parent.getWorldQuaternion(_grabTmpQuat2);
-                obj.quaternion.copy(_grabTmpQuat2.invert().multiply(newWorldQuat));
-
-                if (body) {
-                    body.quaternion.set(obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w);
-                    body.velocity.set(0, 0, 0);
-                    body.angularVelocity.set(0, 0, 0);
-                }
-            } else {
-                controller.getWorldPosition(_grabTmpVec);
-                const moveGain = st.moveGain || 1;
-                const deltaPos = _grabTmpVec.clone().sub(st.controllerWorldPosStart).multiplyScalar(moveGain);
-                const newWorldPos = st.objWorldPosStart.clone().add(deltaPos);
-                obj.parent.worldToLocal(newWorldPos);
-
-                // EKSPERIMEN (cadangan Gemini) — lihat amaran penuh dlm index.html.
-                if (body && st.arRawController) {
-                    body.position.set(newWorldPos.x, newWorldPos.y, newWorldPos.z);
-                    body.velocity.set(0, 0, 0);
-                    body.angularVelocity.set(0, 0, 0);
-                    obj.position.copy(newWorldPos);
-                    return;
-                }
-
-                if (body) {
-                    // Guna delta BINGKAI SEBENAR (bukan floor ke 1/60) — lihat index.html
-                    // utk nota penuh (floor lama underestimate kelajuan sasaran di VR ~90Hz).
-                    const dtSafe = Math.min(Math.max(delta || 1 / 60, 1 / 240), 1 / 20);
-                    const vx = (newWorldPos.x - body.position.x) / dtSafe;
-                    const vy = (newWorldPos.y - body.position.y) / dtSafe;
-                    const vz = (newWorldPos.z - body.position.z) / dtSafe;
-                    const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-                    // Had kelajuan digandakan sama dgn moveGain — lihat nota index.html.
-                    const effMaxSpeed = GRAB_MAX_SPEED * moveGain;
-                    const scale = speed > effMaxSpeed ? effMaxSpeed / speed : 1;
-                    const velocityBlend = st.arRawController ? AR_GRAB_VELOCITY_BLEND : GRAB_VELOCITY_BLEND;
-                    body.velocity.set(
-                        THREE.MathUtils.lerp(body.velocity.x, vx * scale, velocityBlend),
-                        THREE.MathUtils.lerp(body.velocity.y, vy * scale, velocityBlend),
-                        THREE.MathUtils.lerp(body.velocity.z, vz * scale, velocityBlend)
-                    );
-                    body.angularVelocity.set(0, 0, 0);
-                    // Tangkis graviti SEPENUHNYA utk langkah fizik ni selagi digenggam —
-                    // lihat index.html untuk nota penuh (objek berehat atas Pepejal rasa
-                    // "berat"/x boleh diangkat sebab graviti dibah setiap bingkai hampir
-                    // sama magnitud dgn velocity sasaran P-controller bila angkat perlahan).
-                    body.applyForce(new CANNON.Vec3(0, -physicsWorld.gravity.y * body.mass, 0), body.position);
-                } else {
-                    obj.position.copy(newWorldPos);
-                }
-            }
-        }
-
-        // KLIK lwn GENGGAM — lihat nota penuh dlm index.html.
-        let vrPendingGrabCandidate = null;
-        const VR_GRAB_POS_THRESHOLD = 0.03;
-        const VR_GRAB_ANGLE_THRESHOLD = 0.08;
-        // AR tap skrin (mod 'move'): threshold jauh lebih kecil drpd VR wrist-rotation —
-        // lihat nota penuh dlm index.html.
-        const AR_SCREEN_GRAB_ANGLE_THRESHOLD = 0.0175;
-        // Ambang MASA minimum (ms) — lihat nota penuh dlm index.html.
-        const AR_SCREEN_GRAB_MIN_HOLD_MS = 180;
-
-        // AR (tap skrin telefon): proksi JARAK-TETAP KHUSUS utk mod 'move' — lihat nota
-        // penuh dlm index.html. (Pendekatan ray-plane asal dibuang selepas 7 percubaan
-        // #21-#27 gagal dapatkan bacaan arah kamera yang boleh dipercayai setiap bingkai —
-        // teknik jarak-tetap ni cuma guna ray controller sendiri, terbukti betul via laser.)
-        function computeARGrabDistance(rawController, objWorldPos) {
-            const rayOrigin = new THREE.Vector3();
-            rawController.getWorldPosition(rayOrigin);
-            const proxy = new THREE.Object3D();
-            proxy.position.copy(objWorldPos);
-            // EKSPERIMEN (cadangan Gemini) — lihat nota penuh dlm index.html.
-            const dist = Math.max(rayOrigin.distanceTo(objWorldPos), 0.3);
-            return { proxy, distance: dist };
-        }
-
-        // Tapis gegaran — lihat nota penuh dlm index.html.
-        const AR_GRAB_PROXY_SMOOTHING = 0.35;
-        const AR_GRAB_MAX_JUMP_PER_FRAME = 1.5;
-        const _arRayOrigin = new THREE.Vector3();
-        const _arRayDir = new THREE.Vector3();
-        const _arHitPoint = new THREE.Vector3();
-        const _arCamPos = new THREE.Vector3();
-        const _arMat = new THREE.Matrix4();
-        function updateARGrabProxy(st) {
-            st.arRawController.getWorldPosition(_arRayOrigin);
-            // EKSPERIMEN (cadangan Gemini) — lihat nota penuh dlm index.html.
-            _arMat.identity().extractRotation(st.arRawController.matrixWorld);
-            _arRayDir.set(0, 0, -1).applyMatrix4(_arMat).normalize();
-            _arHitPoint.copy(_arRayOrigin).addScaledVector(_arRayDir, st.arGrabDistance);
-
-            // DIAGNOSTIK — lihat nota penuh dlm index.html.
-            mainCamera.getWorldPosition(_arCamPos);
-            arDebug.camControllerDist = _arCamPos.distanceTo(_arRayOrigin);
-
-            const jump = _arHitPoint.distanceTo(st.controller.position);
-            arDebug.proxyJump = jump;
-            // EKSPERIMEN (cadangan Gemini) — snap terus, bukan tolak. Lihat amaran penuh
-            // dlm index.html: grabDistance masih DISAHKAN salah (~7-8m).
-            if (jump > AR_GRAB_MAX_JUMP_PER_FRAME) {
-                st.controller.position.copy(_arHitPoint);
-                arDebug.proxyReject = 'snap';
-                return;
-            }
-            arDebug.proxyReject = 'ok';
-            st.controller.position.lerp(_arHitPoint, AR_GRAB_PROXY_SMOOTHING);
-        }
-
-        function commitVRGrab(pending) {
-            const { hitModel, controller, mode } = pending;
-            grabbedObject = hitModel;
-
-            const bodyToWake = hitModel.userData._physicsBody;
-            if (bodyToWake && bodyToWake.type === CANNON.Body.STATIC) {
-                bodyToWake.type = CANNON.Body.DYNAMIC;
-                bodyToWake.mass = 1;
-                bodyToWake.updateMassProperties();
-                bodyToWake.velocity.set(0, 0, 0);
-                bodyToWake.angularVelocity.set(0, 0, 0);
-            }
-
-            // Lumpuhkan damping sementara semasa digenggam — lihat nota penuh dlm index.html
-            // (damping 0.2/0.4 terpakai setiap sub-langkah fizik dalaman, bukan setiap
-            // bingkai render; di VR ~90Hz ia boleh termampat 2x antara kemaskini kita,
-            // punca "berat/bergerak sikit" dlm semua arah). Pulih bila lepas (selectEnd).
-            let prevLinearDamping = null, prevAngularDamping = null;
-            if (bodyToWake) {
-                prevLinearDamping = bodyToWake.linearDamping;
-                prevAngularDamping = bodyToWake.angularDamping;
-                bodyToWake.linearDamping = 0;
-                bodyToWake.angularDamping = 0;
-            }
-
-            const objWorldPosStart = new THREE.Vector3();
-            const objWorldQuatStart = new THREE.Quaternion();
-            hitModel.getWorldPosition(objWorldPosStart);
-            hitModel.getWorldQuaternion(objWorldQuatStart);
-
-            // Kotak sempadan SEBENAR (bukan pivot Object3D) — lihat nota penuh dlm index.html.
-            const objBox = new THREE.Box3().setFromObject(hitModel);
-            const objVisualCenter = objBox.getCenter(new THREE.Vector3());
-            const objSize = objBox.getSize(new THREE.Vector3());
-
-            // AR mod 'move' — lihat nota penuh dlm index.html.
-            let arGrabDistance = null, arRawController = null;
-            let effectiveController = controller;
-            // HANYA utk 'screen' (tap tanpa jejak kedudukan) — lihat index.html.
-            if (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen') {
-                const { proxy, distance } = computeARGrabDistance(controller, objVisualCenter);
-                arGrabDistance = distance;
-                arRawController = controller;
-                effectiveController = proxy;
-                // DIAGNOSTIK — lihat nota penuh dlm index.html.
-                const ctrlPosNow = new THREE.Vector3();
-                controller.getWorldPosition(ctrlPosNow);
-                arDebug.commitObjPos = objVisualCenter.clone();
-                arDebug.commitCtrlPos = ctrlPosNow;
-                // DIAGNOSTIK — lihat nota penuh dlm index.html.
-                arDebug.commitObjLocalPos = hitModel.position.clone();
-                arDebug.commitContentRootPos = contentRoot.position.clone();
-                arDebug.commitContentRootRotDeg = new THREE.Vector3(
-                    THREE.MathUtils.radToDeg(contentRoot.rotation.x),
-                    THREE.MathUtils.radToDeg(contentRoot.rotation.y),
-                    THREE.MathUtils.radToDeg(contentRoot.rotation.z)
-                );
-            }
-
-            const controllerWorldPosStart = new THREE.Vector3();
-            const controllerWorldQuatInvStart = new THREE.Quaternion();
-            effectiveController.getWorldPosition(controllerWorldPosStart);
-            effectiveController.getWorldQuaternion(controllerWorldQuatInvStart).invert();
-
-            const moveGain = arGrabDistance !== null ? 1 : computeMoveGain(Math.max(objSize.x, objSize.y, objSize.z));
-
-            grabStartState = {
-                mode,
-                controller: effectiveController,
-                objWorldPosStart,
-                objWorldQuatStart,
-                controllerWorldPosStart,
-                controllerWorldQuatInvStart,
-                prevLinearDamping,
-                prevAngularDamping,
-                moveGain,
-                arGrabDistance,
-                arRawController
-            };
-        }
-
-        // Lihat nota penuh dlm index.html.
-        function tryCreateGrabCandidate(controller) {
-            if (grabbedObject || vrPendingGrabCandidate) return false;
-
-            const hitModel = getControllerGrabRaycastHit(controller);
-            if (isARSession) arDebug.lastHitOnSelectStart = hitModel ? (hitModel.name || hitModel.userData.id || '(unnamed)') : '(tiada hit grabbable)';
-            if (!hitModel) return false;
-
-            const mode = controller.userData.handedness === 'left' ? 'rotate' : 'move';
-            const startWorldPos = new THREE.Vector3();
-            const startWorldQuat = new THREE.Quaternion();
-            controller.getWorldPosition(startWorldPos);
-            controller.getWorldQuaternion(startWorldQuat);
-
-            if (isARSession) { arDebug.pendingMode = mode; arDebug.pendingMaxAngleDeg = 0; arDebug.pendingMaxDist = 0; }
-            vrPendingGrabCandidate = { hitModel, controller, mode, startWorldPos, startWorldQuat, startTime: performance.now() };
-            return true;
-        }
-
-        function onControllerSelectStart(event) {
-            if (isARSession) {
-                arDebug.selectStartCount++;
-                arDebug.lastTargetRayMode = event.target.userData.targetRayMode;
-                arDebug.lastHandedness = event.target.userData.handedness;
-            }
-            if (grabbedObject || vrPendingGrabCandidate) {
-                if (isARSession) arDebug.lastHitOnSelectStart = '(skip: ' + (grabbedObject ? 'dah genggam' : 'dah pending') + ')';
-                return;
-            }
-            if (isARSession && !isPlaced) {
-                arDebug.lastHitOnSelectStart = '(skip: belum placed)';
-                return;
-            }
-
-            const controller = event.target;
-            const created = tryCreateGrabCandidate(controller);
-            if (!created && isARSession && controller.userData.targetRayMode === 'screen') {
-                controller.userData.arTouchAwaitingHit = true;
-            }
-        }
-
-        // Lihat nota penuh dlm index.html.
-        function checkARTouchAwaitingGrab() {
-            if (!isARSession || grabbedObject || vrPendingGrabCandidate) return;
-            [controller1, controller2].forEach(ctrl => {
-                if (!ctrl.userData.arTouchAwaitingHit) return;
-                if (grabbedObject || vrPendingGrabCandidate) return;
-                if (tryCreateGrabCandidate(ctrl)) ctrl.userData.arTouchAwaitingHit = false;
-            });
-        }
-
-        function checkVRPendingGrabCommit() {
-            const pending = vrPendingGrabCandidate;
-            if (!pending) return;
-            const { controller, mode, startWorldPos, startWorldQuat } = pending;
-
-            // AR tap skrin — guna threshold SUDUT gantian threshold jarak; lihat nota
-            // penuh dlm index.html.
-            const useAngleThreshold = mode === 'rotate' ||
-                (isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen');
-
-            if (isARSession) {
-                const qDbg = new THREE.Quaternion();
-                controller.getWorldQuaternion(qDbg);
-                const angleDbg = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(qDbg)), -1, 1));
-                arDebug.pendingMaxAngleDeg = Math.max(arDebug.pendingMaxAngleDeg, angleDbg * 180 / Math.PI);
-                const pDbg = new THREE.Vector3();
-                controller.getWorldPosition(pDbg);
-                arDebug.pendingMaxDist = Math.max(arDebug.pendingMaxDist, pDbg.distanceTo(startWorldPos));
-            }
-
-            if (useAngleThreshold) {
-                const isARScreenMove = isARSession && mode === 'move' && controller.userData.targetRayMode === 'screen';
-                const angleThreshold = isARScreenMove ? AR_SCREEN_GRAB_ANGLE_THRESHOLD : VR_GRAB_ANGLE_THRESHOLD;
-                const q = new THREE.Quaternion();
-                controller.getWorldQuaternion(q);
-                const angle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(startWorldQuat.dot(q)), -1, 1));
-                if (angle < angleThreshold) return;
-                // Ambang masa minimum SERTA dgn sudut — lihat nota penuh dlm index.html.
-                if (isARScreenMove && (performance.now() - pending.startTime) < AR_SCREEN_GRAB_MIN_HOLD_MS) return;
-            } else {
-                const p = new THREE.Vector3();
-                controller.getWorldPosition(p);
-                if (p.distanceTo(startWorldPos) < VR_GRAB_POS_THRESHOLD) return;
-            }
-
-            vrPendingGrabCandidate = null;
-            if (isARSession) { arDebug.lastCommitMode = mode; arDebug.lastCommitAt = performance.now(); }
-            commitVRGrab(pending);
-        }
-
         // ZON SASARAN — semak sama ada objek yang baru dilepas jatuh dalam mana-mana
         // zon yang memantaunya (zon & objek sama-sama anak terus contentRoot, jadi
         // position/quaternion boleh dibanding terus, tak perlu tukar ruang koordinat).
@@ -2414,112 +1057,91 @@
             });
         }
 
-        function onControllerSelectEnd(event) {
-            if (isARSession) arDebug.selectEndCount++;
-            if (event && event.target) event.target.userData.arTouchAwaitingHit = false;
+        // ---------------------------------------------------------------
+        // INPUT: CONTROLLER VR/AR (laser pointer) — js/ui/controller-visuals.js, fail yang
+        // SAMA dipakai index.html.
+        // ---------------------------------------------------------------
+        const controller1 = renderer.xr.getController(0);
+        const controller2 = renderer.xr.getController(1);
+        // Controller MESTI jadi anak cameraRig (sama macam mainCamera), bukan scene
+        // terus — kalau tidak, bila cameraRig "teleport" (ikut Kedudukan Awal Kamera
+        // scene semasa), pandangan berpindah tapi controller kekal di kedudukan asal
+        // (dekat origin dunia) — tangan/laser jadi terputus & salah trajektori
+        // berbanding apa yang pengguna nampak/rasa.
+        cameraRig.add(controller1);
+        cameraRig.add(controller2);
 
-            if (vrPendingGrabCandidate && (!event || vrPendingGrabCandidate.controller === event.target)) {
-                if (isARSession) arDebug.pendingMode = '(klik — threshold x tercapai)';
-                vrPendingGrabCandidate = null;
-                return;
-            }
-            if (!grabbedObject) return;
+        const { setupControllerLaserVisuals, flashControllerTrigger, getControllerRaycastHit, getControllerGrabRaycastHit } =
+            createControllerVisuals({ THREE, mainCamera, scene, contentRoot, getLoadedModelsList: () => loadedModelsList });
+        setupControllerLaserVisuals(controller1);
+        setupControllerLaserVisuals(controller2);
+        controller1.addEventListener('selectstart', flashControllerTrigger);
+        controller2.addEventListener('selectstart', flashControllerTrigger);
 
-            const obj = grabbedObject;
-            const mode = grabStartState ? grabStartState.mode : 'move';
+        // HUD diagnostik AR (js/ui/ar-debug-hud.js) — fail yang SAMA dipakai index.html.
+        const { updateARDebugHud } = createArDebugHud({ THREE, mainCamera, arDebugHud });
 
-            const releasedBody = obj.userData._physicsBody;
-            if (releasedBody && grabStartState && grabStartState.prevLinearDamping !== null) {
-                releasedBody.linearDamping = grabStartState.prevLinearDamping;
-                releasedBody.angularDamping = grabStartState.prevAngularDamping;
-            }
+        // ---- PICK & PLACE (genggam & alih objek "Boleh Diambil") ----
+        // Logik penuh (constants, computeMoveGain, updateGrabbedObjectTransform,
+        // computeARGrabDistance, updateARGrabProxy, dan seluruh sistem klik/hover/genggam
+        // tetikus+controller) kini di js/interactions/grab-core.js, grab-ar.js,
+        // pointer-grab.js — fail yang SAMA dipakai index.html (bukan kopi berasingan yang
+        // boleh drift drpd sejarah bug grab yang panjang/fragile ni).
+        const { updateGrabbedObjectTransform } = createGrabCore({ THREE });
+        const { computeARGrabDistance, updateARGrabProxy } = createArGrab({ THREE });
 
-            let docked = false;
-            if (mode === 'move') {
-                docked = checkPlacementZones(obj);
-            }
-
-            if (!docked && obj.userData.returnToOriginalOnRelease) {
-                returnObjectToOriginalTransform(obj);
-            }
-
-            grabbedObject = null;
-            grabStartState = null;
-            justReleasedGrab = true;
-        }
-
-        controller1.addEventListener('selectstart', onControllerSelectStart);
-        controller1.addEventListener('selectend', onControllerSelectEnd);
-        controller2.addEventListener('selectstart', onControllerSelectStart);
-        controller2.addEventListener('selectend', onControllerSelectEnd);
-
-        // GENGGAM GUNA MOUSE (desktop/bukan sesi XR — termasuk fallback "View tanpa AR/VR"
-        // bila peranti tak sokong WebXR, sebab mod tu pun guna laluan mouse yang sama).
-        // AR (tap di skrin telefon): laluan onControllerSelectStart/End di atas, TAPI guna
-        // proksi jarak-tetap (computeARGrabDistance/updateARGrabProxy) utk mod 'move' —
-        // lihat nota penuh dlm index.html (kedudukan controller "transient-pointer" tak
-        // boleh dipercayai utk translate terus macam VR hand controller).
-        const mouseGrabProxy = new THREE.Object3D();
-        const mouseGrabPlane = new THREE.Plane();
-        const mouseGrabPlaneNormal = new THREE.Vector3();
+        let vrPendingGrabCandidate = null;
         let isMouseGrabbing = false;
-        let pendingGrabCandidate = null; // {hitModel, point} — ditetapkan di pointerdown, disahkan di pointermove
 
-        function startMouseGrab(hitModel, grabPoint) {
-            grabbedObject = hitModel;
-            controls.enabled = false;
+        const {
+            setupPointerInteraction,
+            checkARTouchAwaitingGrab, checkVRPendingGrabCommit, onControllerSelectEnd, onControllerSelect
+        } = createPointerGrab({
+            THREE,
+            getRenderer: () => renderer,
+            getMainCamera: () => mainCamera,
+            getControls: () => controls,
+            getScene: () => scene,
+            getContentRoot: () => contentRoot,
+            getCameraRig: () => cameraRig,
+            // previewCameraMarker/gizmo/selectObject-deselectObject — konsep editor-only,
+            // viewer baca-sahaja (isPreviewMode sentiasa true) jadi laluan yg guna ia
+            // (cawangan "bukan Pratonton" dalam pointer-grab.js) tak pernah tercapai.
+            getPreviewCameraMarker: () => null,
+            getReticle: () => reticle,
+            getLoadedModelsList: () => loadedModelsList,
+            getHoveredModel: () => hoveredModel,
+            setHoveredModel: (v) => { hoveredModel = v; },
+            getIsPreviewMode: () => true,
+            getIsARSession: () => isARSession,
+            getIsPlaced: () => isPlaced,
+            getIsDraggingGizmo: () => false,
+            getIsMouseGrabbing: () => isMouseGrabbing,
+            setIsMouseGrabbing: (v) => { isMouseGrabbing = v; },
+            getVrPendingGrabCandidate: () => vrPendingGrabCandidate,
+            setVrPendingGrabCandidate: (v) => { vrPendingGrabCandidate = v; },
+            getInfoPopup: () => infoPopup,
+            clearPopupHideTimer,
+            triggerInteraction,
+            selectObject: () => {}, deselectObject: () => {},
+            checkPlacementZones, returnObjectToOriginalTransform,
+            placeContentAtReticle,
+            getControllerRaycastHit, getControllerGrabRaycastHit,
+            computeARGrabDistance, computeMoveGain, buildGrabStartState,
+            AR_SCREEN_GRAB_ANGLE_THRESHOLD, AR_SCREEN_GRAB_MIN_HOLD_MS, VR_GRAB_ANGLE_THRESHOLD, VR_GRAB_POS_THRESHOLD,
+            // viewer baca-sahaja — tiada auto-save.
+            scheduleAutoSave: () => {}
+        });
+        setupPointerInteraction();
 
-            const bodyToWake = hitModel.userData._physicsBody;
-            if (bodyToWake && bodyToWake.type === CANNON.Body.STATIC) {
-                bodyToWake.type = CANNON.Body.DYNAMIC;
-                bodyToWake.mass = 1;
-                bodyToWake.updateMassProperties();
-                bodyToWake.velocity.set(0, 0, 0);
-                bodyToWake.angularVelocity.set(0, 0, 0);
-            }
-
-            // Lumpuhkan damping sementara semasa digenggam — lihat nota dlm index.html.
-            let prevLinearDamping = null, prevAngularDamping = null;
-            if (bodyToWake) {
-                prevLinearDamping = bodyToWake.linearDamping;
-                prevAngularDamping = bodyToWake.angularDamping;
-                bodyToWake.linearDamping = 0;
-                bodyToWake.angularDamping = 0;
-            }
-
-            mainCamera.getWorldDirection(mouseGrabPlaneNormal);
-            mouseGrabPlane.setFromNormalAndCoplanarPoint(mouseGrabPlaneNormal, grabPoint);
-            mouseGrabProxy.position.copy(grabPoint);
-            mouseGrabProxy.quaternion.identity();
-
-            const objWorldPosStart = new THREE.Vector3();
-            const objWorldQuatStart = new THREE.Quaternion();
-            hitModel.getWorldPosition(objWorldPosStart);
-            hitModel.getWorldQuaternion(objWorldQuatStart);
-
-            const controllerWorldPosStart = new THREE.Vector3();
-            const controllerWorldQuatInvStart = new THREE.Quaternion();
-            mouseGrabProxy.getWorldPosition(controllerWorldPosStart);
-            mouseGrabProxy.getWorldQuaternion(controllerWorldQuatInvStart).invert();
-
-            grabStartState = {
-                mode: 'move',
-                controller: mouseGrabProxy,
-                objWorldPosStart,
-                objWorldQuatStart,
-                controllerWorldPosStart,
-                controllerWorldQuatInvStart,
-                prevLinearDamping,
-                prevAngularDamping,
-                // SENGAJA eksplisit null — lihat nota penuh dlm index.html (bug sebenar
-                // 2026-10-29: undefined !== null jadi TRUE, updateARGrabProxy terpanggil
-                // utk mouse-grab & crash — app "hang").
-                arGrabDistance: null,
-                arRawController: null
-            };
-
-            isMouseGrabbing = true;
-        }
+        controller1.addEventListener('select', onControllerSelect);
+        controller2.addEventListener('select', onControllerSelect);
+        controller1.addEventListener('selectstart', (e) => pointerGrabSelectStart(e));
+        controller1.addEventListener('selectend', onControllerSelectEnd);
+        controller2.addEventListener('selectstart', (e) => pointerGrabSelectStart(e));
+        controller2.addEventListener('selectend', onControllerSelectEnd);
+        // onControllerSelectStart sengaja tak di-destructure terus di atas (ESLint-style
+        // bypass tak diperlukan di sini) — lihat wiring sebenar di bawah pointerGrabSelectStart.
 
         // ---------------------------------------------------------------
         // SESI WEBXR (VR/AR) — reposisi kamera & urus latar passthrough
@@ -2582,7 +1204,7 @@
 
             // ALIRAN ANAK PANAH LALUAN WAYPOINT
             if (waypointPathMeshes.length > 0) {
-                waypointArrowTexture.offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
+                getWaypointArrowTexture().offset.x -= delta * WAYPOINT_PATH_SCROLL_SPEED;
             }
 
             // "Pengguna masuk zon" cuma bermakna bila kamera = kedudukan sebenar
@@ -2638,19 +1260,23 @@
                 reticle.visible = false;
             }
 
-            checkARTouchAwaitingGrab();
+            checkARTouchAwaitingGrab(controller1, controller2);
             checkVRPendingGrabCommit();
 
             // HUD DIAGNOSTIK SEMENTARA — lihat nota penuh dekat deklarasi `arDebug`/
-            // `updateARDebugHud` di atas. BUANG lepas bug AR grab ni disahkan selesai.
-            updateARDebugHud();
+            // `updateARDebugHud` di js/ui/ar-debug-hud.js. BUANG lepas bug AR grab ni
+            // disahkan selesai. isPreviewMode sentiasa true di viewer.
+            updateARDebugHud({
+                isPreviewMode: true, isARSession, isPresenting: renderer.xr.isPresenting,
+                vrPendingGrabCandidate, grabbedObject: appState.grabbedObject, grabStartState: appState.grabStartState
+            });
 
-            if (grabbedObject && grabStartState && grabStartState.arRawController) {
-                updateARGrabProxy(grabStartState);
+            if (appState.grabbedObject && appState.grabStartState && appState.grabStartState.arRawController) {
+                updateARGrabProxy(appState.grabStartState, { mainCamera, arDebug });
             }
 
-            if (grabbedObject) {
-                updateGrabbedObjectTransform(delta);
+            if (appState.grabbedObject) {
+                updateGrabbedObjectTransform(appState.grabbedObject, appState.grabStartState, delta, { physicsWorld, arVelocityBlend: AR_GRAB_VELOCITY_BLEND });
             } else if (renderer.xr.isPresenting) {
                 const vrHit1 = getControllerRaycastHit(controller1);
                 const vrHit2 = getControllerRaycastHit(controller2);
@@ -2662,10 +1288,10 @@
             }
 
             // FIZIK (graviti/pelanggaran/bounce) — tunggu content diletak dulu dalam AR.
-            if (physicsActive && (!isARSession || isPlaced)) {
+            if (appState.physicsActive && (!isARSession || isPlaced)) {
                 updateCutoutCameraGating();
                 syncPhysicsBodiesWithVisibility();
-                if (grabbedObject) {
+                if (appState.grabbedObject) {
                     // Semasa genggam, guna delta bingkai SEBENAR (satu langkah tepat, tiada
                     // accumulator/skip) supaya objek 1:1 ikut kelajuan kursor/controller —
                     // lihat nota penuh dlm index.html.
@@ -2673,7 +1299,7 @@
                 } else {
                     physicsWorld.step(1 / 60, delta, 10);
                 }
-                physicsBodies.forEach(pb => {
+                appState.physicsBodies.forEach(pb => {
                     if (!pb.inWorld) return;
                     if (pb.body.type !== CANNON.Body.STATIC) {
                         pb.mesh.position.copy(pb.body.position);
