@@ -3,6 +3,8 @@
 // (selectedModel, loadedModelsList, uploadedAudios, hideCameraHelperPref, activeAudioElement)
 // dan setiap baris ada butang yang panggil balik ke sistem lain (selectObject, deleteObject,
 // scheduleAutoSave, updateAudioDropdown) — index.html kekal punca kebenaran utk semua tu.
+import { peekAssetUrl } from '../services/asset-url.js';
+
 export function createHierarchy({
     getSelectedModel, getPreviewCameraMarker, getLoadedModelsList, getUploadedAudios,
     getHideCameraHelperPref, setHideCameraHelperPref, getIsPreviewMode, getCameraHelper,
@@ -119,7 +121,7 @@ export function createHierarchy({
                 if (activeAudioElement) {
                     activeAudioElement.pause();
                 }
-                setActiveAudioElement(new Audio(uploadedAudios[fileName]));
+                setActiveAudioElement(new Audio(peekAssetUrl(uploadedAudios[fileName])));
                 getActiveAudioElement().play();
             });
 

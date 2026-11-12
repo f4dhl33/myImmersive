@@ -1,9 +1,12 @@
 // Cipta/padam/duplicate objek (primitif, imej 2D, teks) — diekstrak dari index.html.
 // restoreModelFromUrl/restorePrimitiveFromData (model GLB/FBX & primitif projek tersimpan)
 // dihantar sebagai callback — belum/tak diekstrak ke modul berasingan, kekal index.html.
+import { fixModelMaterialLighting as fixModelMaterialLightingShared } from '../core/model-utils.js';
+import { resolveAssetUrl } from '../services/asset-url.js';
+
 export function createObjectFactory({
     THREE, contentRoot, getLoadedModelsList,
-    getCurrentUser, uploadAssetToStorage,
+    getCurrentUser, getActiveProjectId, uploadAssetToStorage,
     getSelectedModel, getPreviewCameraMarker, getIsPreviewMode,
     deselectObject, selectObject, renderObjectsList,
     recenterOrbitPivot, rebuildWaypointPath, refreshCutterEditVisuals,
@@ -129,7 +132,9 @@ export function createObjectFactory({
         return new Promise((resolve) => {
             const loader = new THREE.TextureLoader();
 
-            loader.load(url, (texture) => {
+            // `url` = pengecam yg disimpan (sourceUrl di bawah KEKAL pengecam, bukan signed URL
+            // yg luput) — bucket privat, muat lalu signed URL sahaja.
+            resolveAssetUrl(url).then((loadUrl) => loader.load(loadUrl, (texture) => {
                 texture.encoding = THREE.sRGBEncoding;
 
                 const imgW = texture.image ? texture.image.width : 0;
@@ -186,13 +191,13 @@ export function createObjectFactory({
             }, undefined, (err) => {
                 console.error('Ralat memuat gambar:', err);
                 resolve(null);
-            });
+            }));
         });
     }
 
     // Upload gambar BAHARU ke Supabase Storage dahulu, kemudian papar.
     async function addImagePlane(file, options) {
-        const url = await uploadAssetToStorage(getCurrentUser().id, file);
+        const url = await uploadAssetToStorage(getCurrentUser().id, file, getActiveProjectId());
         const fileExt = (file.name.split('.').pop() || 'png').toLowerCase();
         return buildImagePlaneMesh(url, '🖼️ ' + file.name, fileExt, options);
     }
@@ -237,6 +242,13 @@ export function createObjectFactory({
             deselectObject();
         }
         contentRoot.remove(model);
+
+        // Henti & nyahcache AnimationMixer — tanpa ni mixer terus hidup memegang seluruh
+        // graf mesh/skeleton model yg dah dibuang (bocor memori setiap padam/tukar babak).
+        if (model.userData.mixer) {
+            model.userData.mixer.stopAllAction();
+            model.userData.mixer.uncacheRoot(model);
+        }
 
         model.traverse((child) => {
             if (child.isMesh) {
@@ -339,38 +351,9 @@ export function createObjectFactory({
         }
     }
 
-    // BETULKAN COLOR SPACE TEKSTUR MODEL DIMUAT NAIK (ELAK TERLALU TERANG/PUDAR)
+    // Dikongsi dgn view.html — lihat js/core/model-utils.js.
     function fixModelMaterialLighting(root) {
-        root.traverse((child) => {
-            if (!child.isMesh || !child.material) return;
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach(mat => {
-                if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
-                if (mat.emissiveMap) mat.emissiveMap.encoding = THREE.sRGBEncoding;
-                if (mat.envMapIntensity !== undefined) mat.envMapIntensity = 0.8;
-
-                // Material VFX (api/glow/asap): alpha SANGAT rendah + emissive kuat
-                // (contoh diffuse alpha 0.07, emissiveFactor putih penuh) — shader
-                // piawai darab KESELURUHAN piksel (termasuk glow terang) dengan
-                // alpha rendah tu, jadi glow yang patut terang jadi hampir tak
-                // nampak. Tukar jadi additive blending supaya glow terbit penuh
-                // tanpa terikat alpha asap (macam software/viewer asal render dia).
-                const hasEmissiveGlow = mat.emissiveMap && mat.emissive &&
-                    (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0);
-                if (mat.transparent && mat.opacity < 0.2 && hasEmissiveGlow) {
-                    mat.blending = THREE.AdditiveBlending;
-                    mat.depthWrite = false;
-                }
-
-                // Tone mapping ACES mampatkan bahagian terang — material additive
-                // (glow/particle) patut "terbit" penuh tanpa kena mampatan ni.
-                if (mat.blending === THREE.AdditiveBlending) {
-                    mat.toneMapped = false;
-                }
-
-                mat.needsUpdate = true;
-            });
-        });
+        return fixModelMaterialLightingShared(THREE, root);
     }
 
     return {

@@ -1,3 +1,5 @@
+import * as CANNON from 'cannon-es';
+
 // Logik genggam KONGSI — dipakai VR controller, AR tap skrin, DAN mouse desktop (ketiga-tiga
 // laluan commit grab berbeza di index.html panggil fungsi SAMA di sini). Diekstrak dari
 // index.html. JANGAN import grab-ar.js dari sini (elak circular — lihat js/core/state.js);
@@ -216,7 +218,11 @@ export function createGrabCore({ THREE }) {
                 // quaternion terus, tak pernah lalui integrasi fizik langsung). Cuma
                 // tangkis DAYA LUAR (graviti) — respons pelanggaran dgn objek Pepejal
                 // lain (sekatan tembus) KEKAL terpakai sebab jenis/jisim badan tak ubah.
-                body.applyForce(new CANNON.Vec3(0, -physicsWorld.gravity.y * body.mass, 0), body.position);
+                // TIADA hujah ke-2: dalam cannon-es ia ialah titik RELATIF pusat jisim
+                // (cannon.js lama: titik DUNIA, ditolak posisi dalaman) — hantar
+                // body.position macam dulu = torque palsu posisi×daya setiap frame
+                // (objek genggam berputar sendiri).
+                body.applyForce(new CANNON.Vec3(0, -physicsWorld.gravity.y * body.mass, 0));
             } else {
                 obj.position.copy(newWorldPos);
             }

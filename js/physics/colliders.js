@@ -8,6 +8,7 @@
 // import apa-apa, jadi colliders.js -> world.js adalah satu hala sahaja.
 import { physicsWorld, getPhysicsMaterialForBounciness } from './world.js';
 import { appState } from '../core/state.js';
+import * as CANNON from 'cannon-es';
 
 // getShowCollidersChecked/getIsPreviewMode MESTI getter (bukan nilai terus) — dua sebab:
 // (1) chkShowColliders (elemen DOM) diisytiharkan LEWAT dalam index.html (selepas titik

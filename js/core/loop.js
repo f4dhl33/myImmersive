@@ -8,6 +8,7 @@ import { physicsWorld } from '../physics/world.js';
 import { AR_GRAB_VELOCITY_BLEND } from '../interactions/grab-ar.js';
 import { appState } from './state.js';
 import { arDebug } from '../ui/ar-debug-hud.js';
+import * as CANNON from 'cannon-es';
 
 export function createLoop({
     THREE,

@@ -9,6 +9,12 @@ const SUPABASE_URL = 'https://jmuraizgowqwmpmetupu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_DZ8vjKrIJhXM34D7ddS6dw_nlIL18YD';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Utk asset-url.js tandatangan URL aset dgn sesi log masuk yg SAMA (fail projek
+// persendirian hanya boleh ditandatangan oleh pemiliknya).
+export function getSupabaseClient() {
+    return supabaseClient;
+}
+
 // ---- AUTH ----
 export async function signUpUser(email, password) {
     const { data, error } = await supabaseClient.auth.signUp({ email, password });
@@ -46,10 +52,16 @@ export async function updateUserPassword(newPassword) {
 }
 
 // ---- STORAGE (fail model/gambar/audio) ----
-export async function uploadAssetToStorage(userId, file) {
+// Path `userId/projectId/fail` — segmen projectId bagi polisi RLS storan skop baca
+// PER-PROJEK tepat (lihat supabase/rls_policies.sql). Nilai pulangan kekal format URL
+// /object/public/... walaupun bucket kini PRIVAT — ia PENGECAM yg disimpan dlm
+// projects.data, bukan URL boleh-ambil; semua titik muat lalu resolveAssetUrl()
+// (js/services/asset-url.js) utk dapat signed URL.
+export async function uploadAssetToStorage(userId, file, projectId) {
     if (!userId) throw new Error('Please sign in first.');
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
+    const folder = projectId ? `${userId}/${projectId}` : userId;
+    const path = `${folder}/${Date.now()}_${Math.random().toString(36).slice(2)}_${safeName}`;
 
     const { error } = await supabaseClient.storage.from('project-assets').upload(path, file, {
         cacheControl: '3600',
@@ -62,12 +74,23 @@ export async function uploadAssetToStorage(userId, file) {
 }
 
 export async function deleteAllUserStorageFiles(userId) {
-    const { data: files, error } = await supabaseClient.storage.from('project-assets').list(userId);
+    const bucket = supabaseClient.storage.from('project-assets');
+    const { data: entries, error } = await bucket.list(userId);
     if (error) { console.error('Gagal senaraikan fail Storage:', error); return; }
-    if (!files || files.length === 0) return;
+    if (!entries || entries.length === 0) return;
 
-    const paths = files.map(f => `${userId}/${f.name}`);
-    const { error: removeError } = await supabaseClient.storage.from('project-assets').remove(paths);
+    // list() tak rekursif — sub-folder projectId (path baharu) muncul sbg entri tanpa
+    // `id`; senaraikan isinya sekali lagi supaya fail dlm tu turut dipadam.
+    const paths = [];
+    for (const e of entries) {
+        if (e.id) { paths.push(`${userId}/${e.name}`); continue; }
+        const { data: sub, error: subErr } = await bucket.list(`${userId}/${e.name}`);
+        if (subErr) { console.error('Gagal senaraikan sub-folder Storage:', subErr); continue; }
+        (sub || []).forEach(f => { if (f.id) paths.push(`${userId}/${e.name}/${f.name}`); });
+    }
+    if (paths.length === 0) return;
+
+    const { error: removeError } = await bucket.remove(paths);
     if (removeError) console.error('Gagal padam fail Storage:', removeError);
 }
 

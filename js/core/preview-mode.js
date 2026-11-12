@@ -150,7 +150,10 @@ export function createPreviewMode({
 
             // Tangkap kedudukan/putaran/saiz SEMUA objek SEBELUM apa-apa simulasi
             // fizik/interaksi berlaku — ni yang dipulihkan semula bila keluar Pratonton.
-            capturePreviewObjectSnapshot();
+            // HANYA kalau belum ada: 'sessionstart' (VR/AR) panggil setPreviewMode(true)
+            // walaupun Pratonton dah aktif — tanpa gari ni, posisi yg DAH jatuh/berubah
+            // ditangkap sbg "asal", dipulihkan & di-autosave bila keluar (data loss).
+            if (!getPreviewObjectSnapshot()) capturePreviewObjectSnapshot();
 
             // Reset status "pengguna dalam zon" supaya trigger onUserEnterZone boleh
             // tercetus semula dari awal setiap kali Pratonton dimasuki.

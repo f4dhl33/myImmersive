@@ -8,6 +8,9 @@
 // fungsi yang tulis `data` projek ke Supabase). JANGAN alih keluar/kurangkan sekatan ni —
 // insiden kehilangan data 2026-10-27 punca laluan simpan TANPA sekatan ni. Lihat nota penuh
 // pada fungsi tu.
+import { setupAnimationMixerFor as setupAnimationMixerForShared } from '../core/model-utils.js';
+import { resolveAssetUrl, resolveAssetUrls } from './asset-url.js';
+
 export function createProjectStore({
     THREE, contentRoot,
     getScene, getRenderer, getPreviewCameraMarker, getCameraHelper,
@@ -153,30 +156,9 @@ export function createProjectStore({
         }
     }
 
+    // Dikongsi dgn view.html — lihat js/core/model-utils.js.
     function setupAnimationMixerFor(object3D, animations) {
-        let mixer = null, animAction = null;
-        if (animations && animations.length > 0) {
-            mixer = new THREE.AnimationMixer(object3D);
-            animAction = mixer.clipAction(animations[0]);
-
-            mixer.addEventListener('finished', function (e) {
-                if (e.action === animAction) {
-                    if (object3D.userData.interactions) {
-                        const animAct = object3D.userData.interactions.find(a => a.action === 'toggleModelAnim');
-                        if (animAct && animAct.animMode === 'toggleReverse') {
-                            if (object3D.userData.animState === 'playing_fwd') {
-                                object3D.userData.animState = 'atEnd';
-                            } else if (object3D.userData.animState === 'playing_rev') {
-                                object3D.userData.animState = 'atStart';
-                            }
-                        } else {
-                            object3D.userData.animState = 'stopped';
-                        }
-                    }
-                }
-            });
-        }
-        return { mixer, animAction };
+        return setupAnimationMixerForShared(THREE, object3D, animations);
     }
 
     function restoreModelFromUrl(objData) {
@@ -232,27 +214,21 @@ export function createProjectStore({
                 resolve(null);
             };
 
-            if (ext === 'fbx') {
-                getFbxLoader().load(url, (fbx) => onLoaded(fbx, fbx.animations), undefined, onErr);
-            } else {
-                getGltfLoader().load(url, (gltf) => onLoaded(gltf.scene, gltf.animations), undefined, onErr);
-            }
+            // url = pengecam (format /object/public/...) — bucket privat, kena signed URL dulu.
+            resolveAssetUrl(url).then((loadUrl) => {
+                if (ext === 'fbx') {
+                    getFbxLoader().load(loadUrl, (fbx) => onLoaded(fbx, fbx.animations), undefined, onErr);
+                } else {
+                    getGltfLoader().load(loadUrl, (gltf) => onLoaded(gltf.scene, gltf.animations), undefined, onErr);
+                }
+            });
         });
     }
 
     function clearViewportObjects() {
-        // Henti & nyahcache AnimationMixer SEBELUM objek dipadam — deleteObject() lupus
-        // geometry/material tapi tak pernah uruskan mixer, jadi tanpa ni mixer animasi
-        // (THREE.AnimationMixer) terus hidup memegang rujukan ke root model yg dah
-        // dibuang dari scene bila tukar babak, punca kebocoran memori senyap.
-        const modelsSnapshot = [...getLoadedModelsList()];
-        modelsSnapshot.forEach(m => {
-            if (m.userData.mixer) {
-                m.userData.mixer.stopAllAction();
-                m.userData.mixer.uncacheRoot(m);
-            }
-        });
-        modelsSnapshot.forEach(m => deleteObject(m));
+        // Mixer animasi dibersihkan dalam deleteObject() (object-factory.js) — satu laluan
+        // utk padam tunggal & tukar babak.
+        [...getLoadedModelsList()].forEach(m => deleteObject(m));
         setHoveredModel(null);
         setUndoStack([]);
         setRedoStack([]);
@@ -347,14 +323,14 @@ export function createProjectStore({
                 }
                 if (objData.customTextureUrl) {
                     mesh.userData.customTextureUrl = objData.customTextureUrl;
-                    getShapeTextureLoader().load(objData.customTextureUrl, (tex) => {
+                    resolveAssetUrl(objData.customTextureUrl).then((loadUrl) => getShapeTextureLoader().load(loadUrl, (tex) => {
                         mesh.material.map = tex;
                         mesh.material.needsUpdate = true;
                         finish();
                     }, undefined, (err) => {
                         console.error('Ralat memuat texture bentuk:', err);
                         finish();
-                    });
+                    }));
                     return;
                 }
             }
@@ -400,13 +376,16 @@ export function createProjectStore({
             (data.audios || []).forEach(a => {
                 uploadedAudios[a.fileName] = a.url;
             });
+            // Prefetch signed URL audio — "Play Sound" guna new Audio() segerak dlm handler
+            // klik (peekAssetUrl), jadi tandatangan kena dah sedia dlm cache sebelum tu.
+            resolveAssetUrls(Object.values(uploadedAudios)).catch(() => {});
             updateAudioDropdown();
             renderMediaList();
 
             projectScenesMeta = data.scenes.map(s => ({ id: s.id, name: s.name || 'Scene' }));
             setProjectScenesMeta(projectScenesMeta);
             data.scenes.forEach(s => {
-                sceneDataCache[s.id] = { bgColor: s.bgColor, camera: s.camera, objects: s.objects || [] };
+                sceneDataCache[s.id] = { bgColor: s.bgColor, arAutoPlace: !!s.arAutoPlace, camera: s.camera, objects: s.objects || [] };
             });
 
             const resolvedActiveSceneId = (data.activeSceneId && projectScenesMeta.some(s => s.id === data.activeSceneId))

@@ -1,3 +1,6 @@
+import * as CANNON from 'cannon-es';
+import { peekAssetUrl } from '../services/asset-url.js';
+
 // Sistem trigger/interaksi (onClick, onHover, onStart, zon) — diekstrak dari index.html.
 // changeSceneDuringInteraction/getTargetObjects dihantar sebagai CALLBACK (bukan import
 // terus) sebab fungsi tu sendiri belum (atau tak akan) diekstrak ke modul berasingan —
@@ -131,7 +134,9 @@ export function createTriggers({
             }
             else if (config.action === 'playSound') {
                 if (config.audioFile && uploadedAudios[config.audioFile]) {
-                    const audio = new Audio(uploadedAudios[config.audioFile]);
+                    // peekAssetUrl (segerak): signed URL diprefetch masa projek dimuat/audio
+                    // dimuat naik — await di sini akan hilangkan user-gesture autoplay.
+                    const audio = new Audio(peekAssetUrl(uploadedAudios[config.audioFile]));
                     audio.play();
                 }
             }

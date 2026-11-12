@@ -7,6 +7,7 @@
 // peranti WebXR sebenar), jadi sebarang perubahan di sini kena diuji manual.
 import { appState } from '../core/state.js';
 import { arDebug } from '../ui/ar-debug-hud.js';
+import * as CANNON from 'cannon-es';
 
 export function createPointerGrab({
     THREE,

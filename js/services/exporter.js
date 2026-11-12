@@ -21,6 +21,8 @@
 // diuji dgn rangkaian browser DIMATIKAN SEPENUHNYA (bukan sekadar "tiada ralat fetch" pasif).
 // CDN (jsdelivr) HANYA diperlukan SEKALI, di MESIN YANG EKSPORT (import.meta masa klik
 // "Export HTML") — bukan di mesin yang buka fail eksport nanti.
+import { resolveAssetUrl } from './asset-url.js';
+
 export function getViewerUrl(activeProjectId) {
     const base = window.location.href.replace(/index\.html.*$/, '').replace(/\/?$/, '/');
     return base + 'view.html?project=' + encodeURIComponent(activeProjectId);
@@ -37,7 +39,9 @@ export function guessMimeFromUrl(url) {
 }
 
 export async function urlToDataUri(url) {
-    const resp = await fetch(url);
+    // Bucket privat — pengecam /object/public/... kena ditukar kpd signed URL dulu
+    // (pengeksport = pemilik yg log masuk, jadi fail projek persendirian pun lulus).
+    const resp = await fetch(await resolveAssetUrl(url));
     if (!resp.ok) throw new Error('HTTP ' + resp.status + ' fetching ' + url);
     const blob = await resp.blob();
     const mime = guessMimeFromUrl(url) || blob.type || 'application/octet-stream';
@@ -86,11 +90,26 @@ function resolveSpecifier(spec, ownUrl, importMap) {
 async function discoverModuleGraph(entrySrc, entryUrl, importMap) {
     const sources = new Map(); // kanonikal -> teks sumber mentah
     const urlOf = new Map();   // kanonikal -> URL penuh (utk selesaikan import anaknya)
+    const inflight = new Map(); // kanonikal -> Promise teks (elak fetch berganda bila 2 modul import fail sama serentak)
 
     function canonicalOf(url) {
         return new URL(url).pathname.replace(/^\//, '');
     }
 
+    function fetchModule(depUrl) {
+        const depKey = canonicalOf(depUrl);
+        if (!inflight.has(depKey)) {
+            inflight.set(depKey, fetch(depUrl, { cache: 'no-store' }).then(r => {
+                if (!r.ok) throw new Error('Gagal muat modul (' + depUrl + ') semasa eksport: HTTP ' + r.status);
+                return r.text();
+            }));
+        }
+        return inflight.get(depKey);
+    }
+
+    // Fetch SEMUA import satu modul SERENTAK (sibling tak bergantung sesama sendiri),
+    // tapi `visit` anak-anak IKUT URUTAN specifier asal — supaya susunan `sources`
+    // (depth-first, ikut urutan import) kekal deterministik & sama macam versi bersiri dulu.
     async function visit(src, url) {
         const key = canonicalOf(url);
         if (sources.has(key)) return;
@@ -98,15 +117,12 @@ async function discoverModuleGraph(entrySrc, entryUrl, importMap) {
         urlOf.set(key, url);
 
         const specifiers = [...src.matchAll(/from\s+'([^']+)'/g)].map(m => m[1]);
-        for (const spec of specifiers) {
-            const depUrl = resolveSpecifier(spec, url, importMap);
-            const depKey = canonicalOf(depUrl);
-            if (sources.has(depKey)) continue;
-            const depSrc = await fetch(depUrl, { cache: 'no-store' }).then(r => {
-                if (!r.ok) throw new Error('Gagal muat modul (' + depUrl + ') semasa eksport: HTTP ' + r.status);
-                return r.text();
-            });
-            await visit(depSrc, depUrl);
+        const deps = specifiers
+            .map(spec => resolveSpecifier(spec, url, importMap))
+            .filter(depUrl => !sources.has(canonicalOf(depUrl)));
+        const depSrcs = await Promise.all(deps.map(fetchModule));
+        for (let i = 0; i < deps.length; i++) {
+            await visit(depSrcs[i], deps[i]);
         }
     }
 
@@ -206,11 +222,17 @@ export async function exportProjectAsStandaloneHtml({ activeProjectId, activePro
         (projectJson.audios || []).forEach(a => { if (a.url) urlSet.add(a.url); });
 
         const urlList = [...urlSet];
-        const dataUriMap = new Map();
-        for (let i = 0; i < urlList.length; i++) {
-            setSaveStatusText(`⏳ Exporting... asset ${i + 1}/${urlList.length}`);
-            dataUriMap.set(urlList[i], await urlToDataUri(urlList[i]));
-        }
+        // Muat turun semua asset SERENTAK (bebas antara satu sama lain); kiraan progress ikut
+        // yang SIAP, bukan indeks. Map diisi ikut urutan urlList supaya output deterministik.
+        let assetsDone = 0;
+        setSaveStatusText(`⏳ Exporting... asset 0/${urlList.length}`);
+        const dataUris = await Promise.all(urlList.map(async (url) => {
+            const dataUri = await urlToDataUri(url);
+            assetsDone++;
+            setSaveStatusText(`⏳ Exporting... asset ${assetsDone}/${urlList.length}`);
+            return dataUri;
+        }));
+        const dataUriMap = new Map(urlList.map((url, i) => [url, dataUris[i]]));
 
         projectJson.scenes.forEach(scene => {
             (scene.objects || []).forEach(obj => {
@@ -267,6 +289,11 @@ export async function exportProjectAsStandaloneHtml({ activeProjectId, activePro
             "const SUPABASE_URL = 'https://jmuraizgowqwmpmetupu.supabase.co';\n        const SUPABASE_ANON_KEY = 'sb_publishable_DZ8vjKrIJhXM34D7ddS6dw_nlIL18YD';\n        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);",
             () => `window.__EMBEDDED_PROJECT__ = ${safeEmbeddedJson};`
         );
+        // Padanan string tepat di atas rapuh (indentasi/nama diubah = tak jumpa) — gagal
+        // KUAT di sini, bukan hasilkan fail "berjaya" yg masih panggil Supabase.
+        if (!tpl.includes('window.__EMBEDDED_PROJECT__ =')) {
+            throw new Error('view.html template changed: Supabase client block not found, project could not be embedded.');
+        }
 
         // Keluarkan importmap SEBELUM apa-apa lain — perlukan kandungannya (JSON) utk
         // selesaikan specifier bare ('three', 'cannon-es', 'three/addons/...') semasa

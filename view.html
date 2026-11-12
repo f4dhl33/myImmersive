@@ -105,7 +105,7 @@
 
     <script type="module">
         import * as THREE_NS from 'three';
-        import * as CANNON_NS from 'cannon-es';
+        import * as CANNON from 'cannon-es';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
@@ -128,18 +128,21 @@
             createArGrab
         } from './js/interactions/grab-ar.js';
         import { createPointerGrab } from './js/interactions/pointer-grab.js';
+        import { createPopups } from './js/ui/popup.js';
+        // Bucket aset PRIVAT: semua URL storan ditukar kpd signed URL masa muat. Fail eksport
+        // (semua aset data: URI) lalu terus tanpa sentuh SDK Supabase — lihat asset-url.js.
+        import { resolveAssetUrl, resolveAssetUrls, peekAssetUrl } from './js/services/asset-url.js';
+        import {
+            fixModelMaterialLighting as fixModelMaterialLightingShared,
+            setupAnimationMixerFor as setupAnimationMixerForShared
+        } from './js/core/model-utils.js';
 
         // Jambatan ESM -> gaya THREE.XXX sedia ada (sama pattern dgn index.html). view.html
         // tak perlukan TransformControls (editor-only, tiada gizmo di sini).
         const THREE = { ...THREE_NS, OrbitControls, GLTFLoader, FBXLoader, RoomEnvironment };
         window.THREE = THREE;
-
-        // Jambatan sama utk CANNON (cannon-es) — colliders.js/grab-core.js/pointer-grab.js
-        // dan fungsi trigger/grab inline bawah ni rujuk `CANNON.xxx` sbg GLOBAL (bukan
-        // parameter factory), warisan dari <script src=".../cannon.min.js"> klasik dulu.
-        // Selamat dari segi timing (lihat nota penuh dlm index.html) — js/physics/world.js
-        // sendiri import terus 'cannon-es', tak bergantung pada jambatan ni.
-        window.CANNON = CANNON_NS;
+        // CANNON (cannon-es) diimport terus di atas utk kod inline fail ni; modul js/ yg guna
+        // CANNON import 'cannon-es' sendiri — tiada jambatan window.CANNON.
 
         // ---------------------------------------------------------------
         // SUPABASE (baca sahaja — projek awam)
@@ -217,32 +220,13 @@
         dirLight.position.set(5, 10, 7);
         scene.add(dirLight);
 
+        // Dikongsi dgn editor — js/core/model-utils.js (fungsi deklarasi: hoisted, selamat
+        // dipanggil dari mana-mana).
         function fixModelMaterialLighting(root) {
-            root.traverse((child) => {
-                if (!child.isMesh || !child.material) return;
-                const materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.forEach(mat => {
-                    if (mat.map) mat.map.encoding = THREE.sRGBEncoding;
-                    if (mat.emissiveMap) mat.emissiveMap.encoding = THREE.sRGBEncoding;
-                    if (mat.envMapIntensity !== undefined) mat.envMapIntensity = 0.8;
-
-                    // Material VFX (api/glow/asap): alpha SANGAT rendah + emissive kuat — shader
-                    // piawai darab KESELURUHAN piksel dgn alpha rendah tu, jadi glow terang jadi
-                    // hampir tak nampak. Tukar jadi additive blending supaya glow terbit penuh.
-                    const hasEmissiveGlow = mat.emissiveMap && mat.emissive &&
-                        (mat.emissive.r > 0 || mat.emissive.g > 0 || mat.emissive.b > 0);
-                    if (mat.transparent && mat.opacity < 0.2 && hasEmissiveGlow) {
-                        mat.blending = THREE.AdditiveBlending;
-                        mat.depthWrite = false;
-                    }
-
-                    if (mat.blending === THREE.AdditiveBlending) {
-                        mat.toneMapped = false;
-                    }
-
-                    mat.needsUpdate = true;
-                });
-            });
+            return fixModelMaterialLightingShared(THREE, root);
+        }
+        function setupAnimationMixerFor(object3D, animations) {
+            return setupAnimationMixerForShared(THREE, object3D, animations);
         }
 
         // ---------------------------------------------------------------
@@ -328,85 +312,16 @@
         const clock = new THREE.Clock();
         const infoPopup = document.getElementById('info-popup');
         const arDebugHud = document.getElementById('ar-debug-hud'); // HUD diagnostik sementara — lihat index.html
-        let infoPopupHideTimer = null;
-        function clearPopupHideTimer() { clearTimeout(infoPopupHideTimer); }
+        // Popup dikongsi dgn editor (js/ui/popup.js) — const, bukan function: semua pemanggil
+        // (trigger/hover/grab) jalan lepas module-eval, bukan di atas baris ni.
+        const { showPopupMessage, showInfoPopupAtPointer, clearPopupHideTimer } = createPopups({ infoPopup, container });
 
         const gltfLoader = new THREE.GLTFLoader();
         const fbxLoader = new THREE.FBXLoader();
 
-        function showPopupMessage(message, duration) {
-            infoPopup.innerText = message;
-            infoPopup.style.left = '50%';
-            infoPopup.style.top = 'auto';
-            infoPopup.style.bottom = '30px';
-            infoPopup.style.transform = 'translateX(-50%)';
-            infoPopup.style.display = 'block';
-
-            clearTimeout(infoPopupHideTimer);
-            infoPopupHideTimer = setTimeout(() => { infoPopup.style.display = 'none'; }, duration);
-        }
-
-        function showInfoPopupAtPointer(title, content, duration, clientX, clientY) {
-            infoPopup.innerHTML = '';
-            if (title) {
-                const elTitle = document.createElement('div');
-                elTitle.className = 'info-popup-title';
-                elTitle.textContent = title;
-                infoPopup.appendChild(elTitle);
-            }
-            const elContent = document.createElement('div');
-            elContent.className = 'info-popup-content';
-            elContent.textContent = content || '';
-            infoPopup.appendChild(elContent);
-
-            infoPopup.style.bottom = 'auto';
-            infoPopup.style.transform = 'none';
-            infoPopup.style.display = 'block';
-
-            const containerRect = container.getBoundingClientRect();
-            let left = clientX - containerRect.left + 16;
-            let top = clientY - containerRect.top + 16;
-
-            const maxLeft = container.clientWidth - infoPopup.offsetWidth - 10;
-            const maxTop = container.clientHeight - infoPopup.offsetHeight - 10;
-            left = Math.max(10, Math.min(left, Math.max(10, maxLeft)));
-            top = Math.max(10, Math.min(top, Math.max(10, maxTop)));
-
-            infoPopup.style.left = left + 'px';
-            infoPopup.style.top = top + 'px';
-
-            clearTimeout(infoPopupHideTimer);
-            infoPopupHideTimer = setTimeout(() => { infoPopup.style.display = 'none'; }, duration);
-        }
-
         // ---------------------------------------------------------------
         // BINA OBJEK DARI DATA TERSIMPAN
         // ---------------------------------------------------------------
-        function setupAnimationMixerFor(object3D, animations) {
-            let mixer = null, animAction = null;
-            if (animations && animations.length > 0) {
-                mixer = new THREE.AnimationMixer(object3D);
-                animAction = mixer.clipAction(animations[0]);
-
-                mixer.addEventListener('finished', function (e) {
-                    if (e.action === animAction) {
-                        if (object3D.userData.interactions) {
-                            const animAct = object3D.userData.interactions.find(a => a.action === 'toggleModelAnim');
-                            if (animAct && animAct.animMode === 'toggleReverse') {
-                                if (object3D.userData.animState === 'playing_fwd') {
-                                    object3D.userData.animState = 'atEnd';
-                                } else if (object3D.userData.animState === 'playing_rev') {
-                                    object3D.userData.animState = 'atStart';
-                                }
-                            } else {
-                                object3D.userData.animState = 'stopped';
-                            }
-                        }
-                    }
-                });
-            }
-            return { mixer, animAction };
-        }
 
         function createModelFromData(objData) {
             return new Promise((resolve) => {
@@ -459,11 +374,13 @@
 
                 const onErr = (err) => { console.error('Ralat memuat model:', err); resolve(null); };
 
-                if (ext === 'fbx') {
-                    fbxLoader.load(url, (fbx) => onLoaded(fbx, fbx.animations), undefined, onErr);
-                } else {
-                    gltfLoader.load(url, (gltf) => onLoaded(gltf.scene, gltf.animations), undefined, onErr);
-                }
+                resolveAssetUrl(url).then((loadUrl) => {
+                    if (ext === 'fbx') {
+                        fbxLoader.load(loadUrl, (fbx) => onLoaded(fbx, fbx.animations), undefined, onErr);
+                    } else {
+                        gltfLoader.load(loadUrl, (gltf) => onLoaded(gltf.scene, gltf.animations), undefined, onErr);
+                    }
+                });
             });
         }
 
@@ -472,7 +389,7 @@
                 if (!objData.fileUrl) { resolve(null); return; }
                 const loader = new THREE.TextureLoader();
 
-                loader.load(objData.fileUrl, (texture) => {
+                resolveAssetUrl(objData.fileUrl).then((loadUrl) => loader.load(loadUrl, (texture) => {
                     texture.encoding = THREE.sRGBEncoding;
                     const imgW = texture.image ? texture.image.width : 0;
                     const imgH = texture.image ? texture.image.height : 0;
@@ -514,7 +431,7 @@
                     contentRoot.add(mesh);
                     loadedModelsList.push(mesh);
                     resolve(mesh);
-                }, undefined, (err) => { console.error('Ralat memuat gambar:', err); resolve(null); });
+                }, undefined, (err) => { console.error('Ralat memuat gambar:', err); resolve(null); }));
             });
         }
 
@@ -552,7 +469,7 @@
                 geometry = new THREE.PlaneGeometry(2, 2);
             } else if (type === 'zone') {
                 geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-                material = new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true, transparent: true, opacity: 0.8 });
+                material = new THREE.MeshBasicMaterial({ color: 0x61ff33, wireframe: true, transparent: true, opacity: 0.8 });
             } else if (type === 'waypoint') {
                 geometry = new THREE.CircleGeometry(0.15, 24);
                 material = new THREE.MeshBasicMaterial({ color: 0x2196f3, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
@@ -623,14 +540,14 @@
 
             if (['box', 'sphere', 'cylinder', 'plane'].includes(type) && objData.customTextureUrl) {
                 mesh.userData.customTextureUrl = objData.customTextureUrl;
-                new THREE.TextureLoader().load(objData.customTextureUrl, (tex) => {
+                resolveAssetUrl(objData.customTextureUrl).then((loadUrl) => new THREE.TextureLoader().load(loadUrl, (tex) => {
                     material.map = tex;
                     material.needsUpdate = true;
                     resolve(mesh);
                 }, undefined, (err) => {
                     console.error('Ralat memuat texture bentuk:', err);
                     resolve(mesh);
-                });
+                }));
             } else {
                 resolve(mesh);
             }
@@ -957,7 +874,7 @@
                 }
                 else if (config.action === 'playSound') {
                     if (config.audioFile && uploadedAudios[config.audioFile]) {
-                        const audio = new Audio(uploadedAudios[config.audioFile]);
+                        const audio = new Audio(peekAssetUrl(uploadedAudios[config.audioFile]));
                         audio.play();
                     }
                 }
@@ -1095,7 +1012,8 @@
 
         const {
             setupPointerInteraction,
-            checkARTouchAwaitingGrab, checkVRPendingGrabCommit, onControllerSelectEnd, onControllerSelect
+            checkARTouchAwaitingGrab, checkVRPendingGrabCommit,
+            onControllerSelectStart, onControllerSelectEnd, onControllerSelect
         } = createPointerGrab({
             THREE,
             getRenderer: () => renderer,
@@ -1136,12 +1054,10 @@
 
         controller1.addEventListener('select', onControllerSelect);
         controller2.addEventListener('select', onControllerSelect);
-        controller1.addEventListener('selectstart', (e) => pointerGrabSelectStart(e));
+        controller1.addEventListener('selectstart', onControllerSelectStart);
         controller1.addEventListener('selectend', onControllerSelectEnd);
-        controller2.addEventListener('selectstart', (e) => pointerGrabSelectStart(e));
+        controller2.addEventListener('selectstart', onControllerSelectStart);
         controller2.addEventListener('selectend', onControllerSelectEnd);
-        // onControllerSelectStart sengaja tak di-destructure terus di atas (ESLint-style
-        // bypass tak diperlukan di sini) — lihat wiring sebenar di bawah pointerGrabSelectStart.
 
         // ---------------------------------------------------------------
         // SESI WEBXR (VR/AR) — reposisi kamera & urus latar passthrough
@@ -1402,6 +1318,9 @@
             (projectData.audios || []).forEach(a => {
                 uploadedAudios[a.fileName] = a.url;
             });
+            // Prefetch signed URL audio utk peekAssetUrl() dlm handler klik "Play Sound"
+            // (fail eksport: semua data: URI — lalu terus, tiada panggilan rangkaian).
+            resolveAssetUrls(Object.values(uploadedAudios)).catch(() => {});
 
             const badge = document.getElementById('project-badge');
             badge.innerText = '📁 ' + (data.name || 'Project');
@@ -1431,6 +1350,9 @@
             (projectData.audios || []).forEach(a => {
                 uploadedAudios[a.fileName] = a.url;
             });
+            // Prefetch signed URL audio utk peekAssetUrl() dlm handler klik "Play Sound"
+            // (fail eksport: semua data: URI — lalu terus, tiada panggilan rangkaian).
+            resolveAssetUrls(Object.values(uploadedAudios)).catch(() => {});
 
             const badge = document.getElementById('project-badge');
             badge.innerText = '📁 ' + (projectRow.name || 'Project');
