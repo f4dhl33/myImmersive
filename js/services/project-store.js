@@ -280,7 +280,7 @@ export function createProjectStore({
     // texture custom (shapeTextureLoader.load) dimuat secara ASYNC; kalau fungsi ni
     // pulang serta-merta sebelum texture siap muat, applyCutoutEffect() (dipanggil
     // lepas semua objek scene siap dimuat) boleh terus clone material (lihat
-    // ensureCutoutStencilMaterials) SEBELUM texture sempat terpasang — clone material
+    // ensureCutoutMaterials dlm occluder.js) SEBELUM texture sempat terpasang — clone material
     // tu snapshot BEKU, texture yang terpasang LEPAS clone dibuat takkan terpapar pada
     // clone tu langsung, jadi bahagian objek yang kena cutout kekal base color je
     // (texture tak pernah sampai ke situ). Isu ni laporan pengguna: "selepas export,
