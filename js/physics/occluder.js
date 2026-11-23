@@ -25,10 +25,17 @@
 //    Tester) — badan di atas permukaan cutter utuh, cuma bahagian yg TENGGELAM dlm cutter
 //    dipotong; cutter DIPUTAR guna ruang tempatan sendiri (bukan AABB dunia yg kembang).
 //
-// HAD: bentuk potongan ikut bentuk ANALITIK primitif cutter (kotak/sfera/silinder);
-// cutter jenis lain (model GLB, satah, teks) dipotong ikut KOTAK tempatannya. Maksimum
-// CUT_MAX cutter serentak (lebihan diabaikan). Material bukan "built-in" three.js
-// (ShaderMaterial tersuai) tak disuntik → tak dipotong.
+// DUA LALUAN BENTUK CUTTER:
+//  - Primitif kotak/sfera/silinder/satah → ANALITIK (persilangan sinar dlm shader, tepat
+//    & murah). Maksimum CUT_MAX serentak.
+//  - Cutter lain (model GLB, gambar, teks) → DEPTH TEXTURE: proksi berkongsi geometri
+//    sebenar cutter dilukis ke depth texture setiap frame (renderCutterDepth()) dgn
+//    kamera semasa — dlm VR three.js lukis KEDUA-DUA mata ke texture yg sama (viewport
+//    ikut framebuffer XR), jadi gl_FragCoord sepadan. Shader banding jarak linear piksel
+//    vs permukaan depan cutter (toleransi CUT_BIAS — bukan perbandingan depth buffer
+//    terus macam 5a929f8, jadi tiada z-fighting). Bahagian LUTSINAR gambar/teks
+//    diabaikan (alphaTest). Bentuk ANIMASI rangka (skinned) cutter guna pose rehat.
+// Material bukan "built-in" three.js (ShaderMaterial tersuai) tak disuntik → tak dipotong.
 //
 // getLoadedModelsList/getWaypointPathMeshes mesti GETTER (bukan array terus) sebab
 // waypointPathMeshes di index.html di-*reassign* (bukan cuma push/splice) bila scene
@@ -36,10 +43,11 @@
 const CUT_MAX = 8;
 const CUT_BIAS = 0.002; // meter — piksel TEPAT pd permukaan cutter dikira "depan" (stabil, tiada kelip)
 const SHAPE_BOX = 0, SHAPE_SPHERE = 1, SHAPE_CYLINDER = 2;
+const ANALYTIC_PRIM_TYPES = ['box', 'sphere', 'cylinder', 'plane'];
 
-// getMainCamera masih dihantar oleh pemanggil (index.html/view.html) tapi tak diperlukan
-// lagi — shader baca kedudukan kamera terus (cameraPosition, betul per mata dlm VR).
-export function createOccluder({ THREE, getLoadedModelsList, getWaypointPathMeshes }) {
+// getRenderer/getMainCamera hanya utk laluan depth texture (cutter bukan primitif) —
+// laluan analitik baca kamera terus dlm shader (cameraPosition, betul per mata dlm VR).
+export function createOccluder({ THREE, getLoadedModelsList, getWaypointPathMeshes, getMainCamera, getRenderer }) {
     // Cutter dlm Pratonton: tak lukis apa-apa (colorWrite/depthWrite off) — kekal
     // node.visible=true supaya raycast/interaksi pd cutter tak berubah drpd sebelum ni.
     const cutterHiddenMaterial = new THREE.MeshBasicMaterial({
@@ -56,7 +64,12 @@ export function createOccluder({ THREE, getLoadedModelsList, getWaypointPathMesh
         uCutInv: { value: Array.from({ length: CUT_MAX }, () => new THREE.Matrix4()) },
         uCutMin: { value: Array.from({ length: CUT_MAX }, () => new THREE.Vector3()) },
         uCutMax: { value: Array.from({ length: CUT_MAX }, () => new THREE.Vector3()) },
-        uCutShape: { value: new Array(CUT_MAX).fill(SHAPE_BOX) }
+        uCutShape: { value: new Array(CUT_MAX).fill(SHAPE_BOX) },
+        uCutDepthOn: { value: 0 },
+        uCutDepthTex: { value: null },
+        uCutDepthSize: { value: new THREE.Vector2(1, 1) },
+        uCutNear: { value: 0.1 },
+        uCutFar: { value: 1000 }
     };
 
     const CUT_VERTEX_DECL = 'varying vec3 vCutWorldPos;\n';
@@ -69,6 +82,11 @@ uniform mat4 uCutInv[${CUT_MAX}];
 uniform vec3 uCutMin[${CUT_MAX}];
 uniform vec3 uCutMax[${CUT_MAX}];
 uniform int uCutShape[${CUT_MAX}];
+uniform int uCutDepthOn;
+uniform sampler2D uCutDepthTex;
+uniform vec2 uCutDepthSize;
+uniform float uCutNear;
+uniform float uCutFar;
 `;
     // Segmen sinar dlm ruang tempatan cutter: ro + rd*t, t=0 di kamera, t=1 di piksel
     // (transform afin kekalkan parameter t, jadi t sama dlm ruang dunia & tempatan).
@@ -140,6 +158,15 @@ uniform int uCutShape[${CUT_MAX}];
             } else {
                 if (tf > 1.0 + cutBiasT) discard;
             }
+        }
+    }
+    if (uCutDepthOn == 1) {
+        // Kedalaman perspektif [0,1] → jarak linear dari kamera: n*f / (f - d*(f-n)).
+        float cutD = texture2D(uCutDepthTex, gl_FragCoord.xy / uCutDepthSize).x;
+        if (cutD < 1.0) {
+            float cutDist = (uCutNear * uCutFar) / (uCutFar - cutD * (uCutFar - uCutNear));
+            float fragDist = (uCutNear * uCutFar) / (uCutFar - gl_FragCoord.z * (uCutFar - uCutNear));
+            if (fragDist > cutDist + ${CUT_BIAS.toFixed(4)}) discard;
         }
     }
 }
@@ -259,6 +286,98 @@ uniform int uCutShape[${CUT_MAX}];
         cutUniforms.uCutShape.value[i] = p === 'sphere' ? SHAPE_SPHERE : p === 'cylinder' ? SHAPE_CYLINDER : SHAPE_BOX;
     }
 
+    // ---- LALUAN DEPTH TEXTURE (cutter bukan primitif) ----
+    const isAnalyticCutter = (c) => ANALYTIC_PRIM_TYPES.includes(c.userData.primType);
+    const depthScene = new THREE.Scene();
+    depthScene.autoUpdate = true;
+    const proxyByNode = new Map();      // node mesh cutter → proksi dlm depthScene
+    const proxyMatByOrig = new Map();   // material asal → material proksi (depth sahaja)
+    let depthTarget = null;
+    const _depthSize = new THREE.Vector2();
+
+    function proxyMaterialFor(orig) {
+        const key = orig || cutterHiddenMaterial;
+        let m = proxyMatByOrig.get(key);
+        if (m) return m;
+        // Bahagian lutsinar gambar/teks (map dgn alpha) tak patut memotong — alphaTest.
+        const useAlpha = !!(orig && orig.map && orig.transparent);
+        m = new THREE.MeshBasicMaterial({
+            colorWrite: false,
+            map: useAlpha ? orig.map : null,
+            alphaTest: useAlpha ? 0.5 : 0,
+            // Ikut sisi material asal: model tertutup (FrontSide) — kamera DLM cutter tak
+            // nampak muka depan → tak potong; gambar/teks (DoubleSide) potong dari dua arah.
+            side: orig ? orig.side : THREE.FrontSide
+        });
+        proxyMatByOrig.set(key, m);
+        return m;
+    }
+
+    function syncDepthProxies(meshCutters) {
+        const active = new Set();
+        meshCutters.forEach(cutter => {
+            const origMap = cutter.userData._cutoutOrigMaterials;
+            cutter.traverse(node => {
+                if (!node.isMesh || !node.geometry || node.visible === false) return;
+                let proxy = proxyByNode.get(node);
+                if (!proxy) {
+                    const orig = origMap ? origMap.get(node) : node.material;
+                    proxy = new THREE.Mesh(node.geometry, proxyMaterialFor(Array.isArray(orig) ? orig[0] : orig));
+                    proxy.matrixAutoUpdate = false;
+                    proxy.frustumCulled = false;
+                    proxyByNode.set(node, proxy);
+                }
+                proxy.matrix.copy(node.matrixWorld);
+                proxy.matrixWorldNeedsUpdate = true;
+                active.add(proxy);
+            });
+        });
+        depthScene.children.slice().forEach(p => { if (!active.has(p)) depthScene.remove(p); });
+        active.forEach(p => { if (p.parent !== depthScene) depthScene.add(p); });
+        // Buang cache nod yg dah tiada (objek dipadam/scene ditukar) — elak bocor memori.
+        proxyByNode.forEach((p, node) => { if (!active.has(p) && !node.parent) proxyByNode.delete(node); });
+        return active.size > 0;
+    }
+
+    function renderCutterDepth(meshCutters) {
+        const renderer = getRenderer && getRenderer();
+        const camera = getMainCamera && getMainCamera();
+        if (!renderer || !camera || !syncDepthProxies(meshCutters)) {
+            cutUniforms.uCutDepthOn.value = 0;
+            return;
+        }
+        // Saiz MESTI sama dgn framebuffer sebenar (gl_FragCoord dlm shader): dlm XR ia
+        // framebuffer layer sesi (kedua-dua mata), bukan saiz kanvas.
+        const session = renderer.xr && renderer.xr.isPresenting ? renderer.xr.getSession() : null;
+        const layer = session && session.renderState && session.renderState.baseLayer;
+        if (layer) _depthSize.set(layer.framebufferWidth, layer.framebufferHeight);
+        else renderer.getDrawingBufferSize(_depthSize);
+        const w = Math.max(1, Math.floor(_depthSize.x)), h = Math.max(1, Math.floor(_depthSize.y));
+        if (!depthTarget || depthTarget.width !== w || depthTarget.height !== h) {
+            if (depthTarget) { depthTarget.depthTexture.dispose(); depthTarget.dispose(); }
+            const depthTexture = new THREE.DepthTexture(w, h, THREE.UnsignedIntType);
+            depthTexture.minFilter = THREE.NearestFilter;
+            depthTexture.magFilter = THREE.NearestFilter;
+            depthTarget = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true, stencilBuffer: false, depthTexture });
+        }
+        // Kamera utama anak cameraRig (bukan dlm depthScene) — render() tak kemas kini
+        // matrixWorld dia, jadi kemas kini sendiri (OrbitControls dah ubah posisi frame ni).
+        if (!session) camera.updateMatrixWorld(true);
+        const prevTarget = renderer.getRenderTarget();
+        const prevAutoClear = renderer.autoClear;
+        renderer.autoClear = true;
+        renderer.setRenderTarget(depthTarget);
+        renderer.render(depthScene, camera);
+        renderer.setRenderTarget(prevTarget);
+        renderer.autoClear = prevAutoClear;
+
+        cutUniforms.uCutDepthTex.value = depthTarget.depthTexture;
+        cutUniforms.uCutDepthSize.value.set(w, h);
+        cutUniforms.uCutNear.value = camera.near;
+        cutUniforms.uCutFar.value = camera.far;
+        cutUniforms.uCutDepthOn.value = 1;
+    }
+
     let warnedTooManyCutters = false;
 
     // Dipanggil setiap kali buildPhysicsWorldFromScene() jalan (masuk Pratonton/VR/AR,
@@ -270,6 +389,7 @@ uniform int uCutShape[${CUT_MAX}];
         const cutters = loadedModelsList.filter(m => m.userData.isCutter);
         if (cutters.length === 0) {
             cutUniforms.uCutCount.value = 0;
+            cutUniforms.uCutDepthOn.value = 0;
             loadedModelsList.forEach(m => restoreOriginalMaterial(m));
             waypointPathMeshes.forEach(m => restoreOriginalMaterial(m));
             return;
@@ -295,14 +415,21 @@ uniform int uCutShape[${CUT_MAX}];
         const waypointPathMeshes = getWaypointPathMeshes();
         // Cutter TERSEMBUNYI (visible=false, cth belum dimunculkan trigger) tak memotong —
         // sama macam versi stencil dulu (cutter tersembunyi tak tulis stencil).
-        const cutters = loadedModelsList.filter(m => m.userData.isCutter && m.visible !== false);
+        const visibleCutters = loadedModelsList.filter(m => m.userData.isCutter && m.visible !== false);
+        const cutters = visibleCutters.filter(isAnalyticCutter);
         if (cutters.length > CUT_MAX && !warnedTooManyCutters) {
             warnedTooManyCutters = true;
-            console.warn('[Cutout] Lebih ' + CUT_MAX + ' cutter dlm scene — yg berlebihan diabaikan.');
+            console.warn('[Cutout] Lebih ' + CUT_MAX + ' cutter primitif dlm scene — yg berlebihan diabaikan.');
         }
         const count = Math.min(cutters.length, CUT_MAX);
         for (let i = 0; i < count; i++) writeCutterUniforms(cutters[i], i);
         cutUniforms.uCutCount.value = count;
+
+        const meshCutters = visibleCutters.filter(c => !isAnalyticCutter(c));
+        meshCutters.forEach(c => c.updateMatrixWorld(true));
+        if (meshCutters.length > 0) renderCutterDepth(meshCutters);
+        else cutUniforms.uCutDepthOn.value = 0;
+
         if (!loadedModelsList.some(m => m.userData.isCutter)) return;
 
         loadedModelsList.forEach(mesh => {
@@ -322,6 +449,7 @@ uniform int uCutShape[${CUT_MAX}];
     // sepenuhnya, dan pulihkan objek cutter ke paparan kosmetik mod Editing (wireframe).
     function clearCutoutEffect() {
         cutUniforms.uCutCount.value = 0;
+        cutUniforms.uCutDepthOn.value = 0;
         const loadedModelsList = getLoadedModelsList();
         const waypointPathMeshes = getWaypointPathMeshes();
         loadedModelsList.forEach(mesh => {
