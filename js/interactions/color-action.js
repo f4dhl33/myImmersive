@@ -52,7 +52,10 @@ export function applyColorAction(targets, config) {
             rememberOriginal(root, node);
             const origs = originalColors.get(node);
             nodeMaterials(root, node).forEach(m => {
-                if (hex !== null) { m.color.setHex(hex); return; }
+                // Hex dari pemilih warna = sRGB; renderer.outputEncoding = sRGBEncoding, jadi
+                // tukar ke linear (sama spt customColor dlm project-store.js) — tanpa ni warna
+                // gelap (cth. maroon) nampak jauh lebih cerah/pink.
+                if (hex !== null) { m.color.setHex(hex).convertSRGBToLinear(); return; }
                 const o = origs.find(e => e.mat === m) || origs[0];
                 if (o) m.color.setHex(o.hex);
             });
