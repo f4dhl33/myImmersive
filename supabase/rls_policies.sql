@@ -82,6 +82,12 @@ create policy "Owners can delete their own projects"
 --    dlm konteks sambungan storage-api (hak role/RLS-dalam-RLS), bukan
 --    sama spt PostgREST. SECURITY DEFINER lepasi kekangan tu; auth.uid()
 --    tetap baca claim JWT permintaan semasa.
+-- Pastikan bucket wujud & PRIVAT (idempotent). Kalau bucket awam, laluan
+-- /object/public/... memintas SEMUA polisi SELECT di bawah.
+insert into storage.buckets (id, name, public)
+values ('project-assets', 'project-assets', false)
+on conflict (id) do update set public = false;
+
 create or replace function public.asset_folder_is_readable(folder text[])
 returns boolean
 language sql

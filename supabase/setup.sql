@@ -1,6 +1,7 @@
 -- =====================================================================
 -- WebXR PdP Builder — Setup Supabase (Jadual + Storan + Security Rules)
--- Jalankan skrip ni SEKALI SAHAJA dalam Supabase Dashboard > SQL Editor
+-- Jalankan skrip ni SEKALI SAHAJA dalam Supabase Dashboard > SQL Editor,
+-- KEMUDIAN jalankan supabase/rls_policies.sql (konfigurasi RLS utama).
 -- =====================================================================
 
 -- 1. JADUAL PROJECTS
@@ -58,37 +59,16 @@ create trigger set_projects_updated_at
     execute function public.set_updated_at();
 
 -- =====================================================================
--- STORAGE POLICIES untuk bucket 'project-assets'
--- NOTA: Bucket 'project-assets' KENA dicipta dulu melalui Dashboard >
--- Storage > New Bucket (tandakan sebagai "Public bucket") SEBELUM
--- jalankan bahagian ni, kalau tidak akan ada ralat.
+-- STORAGE: bucket 'project-assets' — WAJIB PRIVAT
+-- Aset dibaca melalui signed URL (js/services/asset-url.js) yang menilai
+-- polisi RLS. JANGAN tandakan "Public bucket": laluan /object/public/...
+-- langsung tak menilai RLS, jadi aset projek persendirian akan terdedah.
+--
+-- Blok di bawah mencipta bucket sebagai PRIVAT (atau menukarnya ke privat
+-- kalau dah wujud). Polisi storage (baca/tulis/padam) TIDAK ditakrif di
+-- sini — selepas skrip ni, jalankan supabase/rls_policies.sql (konfigurasi
+-- utama RLS jadual + storan; selamat dijalankan berulang kali).
 -- =====================================================================
-
--- Pemilik fail (folder pertama dalam path = user id mereka) boleh upload
-create policy "Users can upload to their own folder"
-    on storage.objects for insert
-    with check (
-        bucket_id = 'project-assets'
-        and (storage.foldername(name))[1] = auth.uid()::text
-    );
-
--- Pemilik fail boleh kemaskini fail sendiri
-create policy "Users can update their own files"
-    on storage.objects for update
-    using (
-        bucket_id = 'project-assets'
-        and (storage.foldername(name))[1] = auth.uid()::text
-    );
-
--- Pemilik fail boleh padam fail sendiri
-create policy "Users can delete their own files"
-    on storage.objects for delete
-    using (
-        bucket_id = 'project-assets'
-        and (storage.foldername(name))[1] = auth.uid()::text
-    );
-
--- Sesiapa boleh BACA/muat turun fail (perlu untuk viewer AR/VR tanpa login)
-create policy "Public can view files"
-    on storage.objects for select
-    using (bucket_id = 'project-assets');
+insert into storage.buckets (id, name, public)
+values ('project-assets', 'project-assets', false)
+on conflict (id) do update set public = false;

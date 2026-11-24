@@ -4,6 +4,7 @@
 // dan setiap baris ada butang yang panggil balik ke sistem lain (selectObject, deleteObject,
 // scheduleAutoSave, updateAudioDropdown) — index.html kekal punca kebenaran utk semua tu.
 import { peekAssetUrl } from '../services/asset-url.js';
+import { escapeHtml } from '../core/html-escape.js';
 
 export function createHierarchy({
     getSelectedModel, getPreviewCameraMarker, getLoadedModelsList, getUploadedAudios,
@@ -23,7 +24,7 @@ export function createHierarchy({
         liCam.className = `hierarchy-item camera-item ${selectedModel === previewCameraMarker ? 'selected' : ''}`;
         liCam.dataset.id = previewCameraMarker.userData.id;
         liCam.innerHTML = `
-            <span>${previewCameraMarker.userData.fileName}</span>
+            <span>${escapeHtml(previewCameraMarker.userData.fileName)}</span>
             <label class="camera-row-toggle" title="Hide the camera frustum helper (yellow/white lines in the 3D viewport) while editing — doesn't affect the camera object itself.">
                 <input type="checkbox" id="chk-hide-camera-row">📷
             </label>
@@ -54,7 +55,7 @@ export function createHierarchy({
             // Nota: togol "visible/hidden initial" (👁️) sengaja dibuang dari sini — dah
             // ada dalam panel kanan (Physics Settings → Visibility), tak perlu duplikat.
             li.innerHTML = `
-                <span class="media-title-text">${model.userData.fileName} ${model.userData.mixer ? '🎬' : ''}</span>
+                <span class="media-title-text">${escapeHtml(model.userData.fileName)} ${model.userData.mixer ? '🎬' : ''}</span>
                 <div class="hierarchy-item-actions">
                     <button class="btn-rename-obj" title="Rename Object">✏️</button>
                     <button class="btn-delete-obj" title="Delete This Model">✕</button>
@@ -107,7 +108,7 @@ export function createHierarchy({
             li.className = 'hierarchy-item';
 
             li.innerHTML = `
-                <span class="media-title-text">🎵 ${fileName}</span>
+                <span class="media-title-text">🎵 ${escapeHtml(fileName)}</span>
                 <div class="hierarchy-item-actions">
                     <button class="btn-play-audio" title="Test This Sound">▶</button>
                     <button class="btn-delete-obj" title="Delete This Audio">✕</button>

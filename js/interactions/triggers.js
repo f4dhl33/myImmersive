@@ -1,5 +1,6 @@
 import * as CANNON from 'cannon-es';
 import { peekAssetUrl } from '../services/asset-url.js';
+import { escapeHtml } from '../core/html-escape.js';
 
 // Sistem trigger/interaksi (onClick, onHover, onStart, zon) — diekstrak dari index.html.
 // changeSceneDuringInteraction/getTargetObjects dihantar sebagai CALLBACK (bukan import
@@ -212,10 +213,11 @@ export function createTriggers({
                 badgeText = 'START';
             }
 
+            const summary = escapeHtml(getActionSummaryText(act, selectedModel));
             li.innerHTML = `
                 <div style="display:flex; align-items:flex-start; gap:5px; flex:1; min-width:0;">
                     <span class="trigger-badge ${badgeClass}">${badgeText}</span>
-                    <span class="action-item-desc" title="${getActionSummaryText(act, selectedModel)}">${getActionSummaryText(act, selectedModel)}</span>
+                    <span class="action-item-desc" title="${summary}">${summary}</span>
                 </div>
                 <button class="btn-delete-obj" title="Delete This Action">✕</button>
             `;

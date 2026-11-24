@@ -10,6 +10,7 @@
 // pada fungsi tu.
 import { setupAnimationMixerFor as setupAnimationMixerForShared } from '../core/model-utils.js';
 import { resolveAssetUrl, resolveAssetUrls } from './asset-url.js';
+import { escapeHtml } from '../core/html-escape.js';
 
 export function createProjectStore({
     THREE, contentRoot,
@@ -543,7 +544,7 @@ export function createProjectStore({
             const firstBadge = index === 0 ? ' <span class="hint-text" style="color:#ffcc00;">(Default)</span>' : '';
 
             li.innerHTML = `
-                <span class="media-title-text">⠿ 🎬 ${meta.name}${firstBadge}</span>
+                <span class="media-title-text">⠿ 🎬 ${escapeHtml(meta.name)}${firstBadge}</span>
                 <div class="hierarchy-item-actions">
                     <button class="btn-vis-obj" title="Rename Scene">✏️</button>
                     <button class="btn-delete-obj" title="Delete This Scene">✕</button>

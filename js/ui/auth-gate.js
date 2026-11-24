@@ -1,3 +1,4 @@
+import { escapeHtml } from '../core/html-escape.js';
 // Skrin gate (Auth & Senarai Projek) — diekstrak dari index.html. Pendaftaran/log masuk
 // sebenar (signUpUser/signInUser/dll) & wiring borang kekal di index.html (byk rujukan
 // silang dgn currentUser/authMode terus) — fail ni cuma fungsi paparan/navigasi gate.
@@ -63,7 +64,7 @@ export function createAuthGate({
             const li = document.createElement('li');
             const updated = p.updated_at ? new Date(p.updated_at).toLocaleString() : '';
             li.innerHTML = `
-                <span class="media-title-text" style="max-width:180px;">📁 ${p.name}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Updated: ${updated}</span></span>
+                <span class="media-title-text" style="max-width:180px;">📁 ${escapeHtml(p.name)}${p.is_public ? ' 🌐' : ''}<span class="project-meta">Updated: ${escapeHtml(updated)}</span></span>
                 <div class="hierarchy-item-actions">
                     <button class="btn-vis-obj" title="Rename Project">✏️</button>
                     <button class="btn-delete-obj" title="Delete Project">✕</button>
