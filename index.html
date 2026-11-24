@@ -840,6 +840,19 @@
                     </select>
                 </div>
 
+                <!-- KAWALAN TUKAR WARNA (CHANGE MATERIAL COLOR) -->
+                <div id="color-change-container" class="display-none">
+                    <label for="input-change-color">New Color:</label>
+                    <input type="color" id="input-change-color" value="#ff3333">
+
+                    <label for="select-color-mode" style="margin-top: 5px;">Color Mode:</label>
+                    <select id="select-color-mode">
+                        <option value="toggle">Click 1: Change Color / Click 2: Back to Original</option>
+                        <option value="once">Change Once Only (Stays This Color)</option>
+                        <option value="random">Random Color Every Time</option>
+                    </select>
+                </div>
+
                 <div id="audio-select-container" class="display-none">
                     <label for="select-audio-file">Select Audio File:</label>
                     <select id="select-audio-file">
@@ -2268,6 +2281,11 @@
         const inputStepZ = document.getElementById('input-step-z');
         const selectStepMode = document.getElementById('select-step-mode');
 
+        // TUKAR WARNA INPUTS
+        const colorChangeContainer = document.getElementById('color-change-container');
+        const inputChangeColor = document.getElementById('input-change-color');
+        const selectColorMode = document.getElementById('select-color-mode');
+
         // TARGET OBJECTS MULTI-SELECT INPUT
         const targetObjContainer = document.getElementById('target-obj-container');
         const selectTargetObjects = document.getElementById('select-target-objects');
@@ -2350,6 +2368,7 @@
             stepMoveContainer.style.display = 'none';
             targetObjContainer.style.display = 'none';
             sceneSelectContainer.style.display = 'none';
+            colorChangeContainer.style.display = 'none';
 
             const val = selectAction.value;
             if (val === 'playSound') {
@@ -2368,6 +2387,7 @@
                 targetObjContainer.style.display = 'block';
                 updateTargetObjectDropdown();
             } else if (val === 'changeColor' || val === 'rotateAnim') {
+                if (val === 'changeColor') colorChangeContainer.style.display = 'block';
                 targetObjContainer.style.display = 'block';
                 updateTargetObjectDropdown();
             } else if (val === 'changeScene') {
@@ -2648,6 +2668,7 @@
             let aEndTime = 0;
             let sX = 0, sY = 0, sZ = 0, sMode = "accumulate";
             let targetSceneId = null;
+            let colorHex = null, colorMode = null;
 
             const selectedTargets = Array.from(selectTargetObjects.selectedOptions).map(opt => opt.value);
             const selectedWatchObjects = Array.from(selectWatchObjects.selectedOptions).map(opt => opt.value).filter(v => v !== "");
@@ -2681,6 +2702,10 @@
                 sY = parseFloat(inputStepY.value) || 0;
                 sZ = parseFloat(inputStepZ.value) || 0;
                 sMode = selectStepMode.value;
+            } else if (action === 'changeColor') {
+                // colorHex null = mod rawak (sama spt action lama sebelum pilihan warna wujud)
+                colorMode = selectColorMode.value;
+                colorHex = colorMode === 'random' ? null : inputChangeColor.value;
             } else if (action === 'changeScene') {
                 targetSceneId = selectTargetScene.value;
                 if (!targetSceneId) {
@@ -2705,6 +2730,8 @@
                 stepZ: sZ,
                 stepMode: sMode,
                 targetSceneId: targetSceneId,
+                colorHex: colorHex,
+                colorMode: colorMode,
                 targetObjectIds: selectedTargets.length > 0 ? selectedTargets : ['self'],
                 watchObjectIds: trigger === 'onPlaceInZone' ? selectedWatchObjects : [],
                 zoneTriggerMode: trigger === 'onPlaceInZone' ? document.getElementById('select-zone-trigger-mode').value : 'collision'

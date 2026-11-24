@@ -119,6 +119,7 @@
         import { createControllerVisuals } from './js/ui/controller-visuals.js';
         import { createArDebugHud, arDebug } from './js/ui/ar-debug-hud.js';
         import { createWaypoint } from './js/interactions/waypoint.js';
+        import { applyColorAction } from './js/interactions/color-action.js';
         import {
             VR_GRAB_POS_THRESHOLD, VR_GRAB_ANGLE_THRESHOLD,
             computeMoveGain, buildGrabStartState, createGrabCore
@@ -853,13 +854,7 @@
                     });
                 }
                 else if (config.action === 'changeColor') {
-                    targets.forEach(targetObj => {
-                        targetObj.traverse((child) => {
-                            if (child.isMesh && child.material && child.material.color) {
-                                child.material.color.setHex(Math.random() * 0xffffff);
-                            }
-                        });
-                    });
+                    applyColorAction(targets, config);
                 }
                 else if (config.action === 'rotateAnim') {
                     targets.forEach(targetObj => {

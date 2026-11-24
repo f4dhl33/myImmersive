@@ -1,6 +1,7 @@
 import * as CANNON from 'cannon-es';
 import { peekAssetUrl } from '../services/asset-url.js';
 import { escapeHtml } from '../core/html-escape.js';
+import { applyColorAction } from './color-action.js';
 
 // Sistem trigger/interaksi (onClick, onHover, onStart, zon) — diekstrak dari index.html.
 // changeSceneDuringInteraction/getTargetObjects dihantar sebagai CALLBACK (bukan import
@@ -111,13 +112,7 @@ export function createTriggers({
                 });
             }
             else if (config.action === 'changeColor') {
-                targets.forEach(targetObj => {
-                    targetObj.traverse((child) => {
-                        if (child.isMesh && child.material && child.material.color) {
-                            child.material.color.setHex(Math.random() * 0xffffff);
-                        }
-                    });
-                });
+                applyColorAction(targets, config);
             }
             else if (config.action === 'rotateAnim') {
                 targets.forEach(targetObj => {
@@ -161,6 +156,8 @@ export function createTriggers({
         }
         const loadedModelsList = getLoadedModelsList();
         const names = targetObjectIds.map(id => {
+            // 'self' = objek pencetus sendiri (nilai lalai bila tiada sasaran dipilih masa simpan)
+            if (id === 'self') return `${sourceModel ? sourceModel.userData.fileName : 'This Object'} (self)`;
             if (previewCameraMarker && id == previewCameraMarker.userData.id) {
                 return previewCameraMarker.userData.fileName + (sourceModel && id == sourceModel.userData.id ? ' (self)' : '');
             }
@@ -177,7 +174,10 @@ export function createTriggers({
         if (act.action === 'stepMove') return `🚗 Step Move (${act.stepX}, ${act.stepY}, ${act.stepZ}) → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
         if (act.action === 'toggleTargetVisibility') return `👁️ Toggle Visibility → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
         if (act.action === 'playSound') return `🎵 Audio: ${act.audioFile}`;
-        if (act.action === 'changeColor') return `🎨 Change Color → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
+        if (act.action === 'changeColor') {
+            const how = !act.colorHex ? 'Random' : `${act.colorHex}${act.colorMode === 'once' ? ' (once)' : ' (toggle ↔ original)'}`;
+            return `🎨 Change Color ${how} → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
+        }
         if (act.action === 'rotateAnim') return `↻ Manual Rotation → ${resolveTargetNamesText(sourceModel, act.targetObjectIds)}`;
         if (act.action === 'changeScene') {
             const projectScenesMeta = getProjectScenesMeta();

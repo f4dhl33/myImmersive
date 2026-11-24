@@ -3,6 +3,7 @@
 // kamera, hierarchy, grab) — byk getter/setter sebab kebanyakan state yang disentuh
 // diisytiharkan LEWAT berbanding titik asal fungsi-fungsi ni dalam index.html.
 import { appState } from './state.js';
+import { resetColorAction } from '../interactions/color-action.js';
 
 export function createPreviewMode({
     THREE, gridHelper, originCross, cameraRig, editorCameraState,
@@ -43,6 +44,7 @@ export function createPreviewMode({
             m.scale.copy(snap.scale);
             m.userData.stepStateToggle = false;
             m.userData.isRotating = false;
+            resetColorAction(m);
         });
         setPreviewObjectSnapshot(null);
     }
